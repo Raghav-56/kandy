@@ -55,6 +55,17 @@ in the `system`/`init` event. `--resume <uuid>`, and `--session-id` can pre-assi
 `-s read-only|workspace-write|danger-full-access` for its own sandboxing. Session id cannot be
 pre-assigned; capture it from the stream. Resume via `codex exec resume <id>`.
 
+The `codex exec --json` event vocabulary:
+
+- `thread.started` carries `thread_id`, the session id used for
+  `codex exec resume <thread_id>`.
+- `turn.completed` carries a `usage` object with `input_tokens`,
+  `cached_input_tokens`, and `output_tokens`.
+- Items arrive as `item.started` / `item.completed`, with `item.type` of
+  `agent_message`, `command_execution`, `file_change`, `reasoning`, or `error`.
+
+Codex reports tokens but no dollar cost.
+
 **Cursor** — `cursor-agent -p --output-format stream-json`, `--stream-partial-output` for text
 deltas. Events: `system`, `assistant`, `tool_call`, `result`. `--resume <chatId>`.
 
