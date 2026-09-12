@@ -17,6 +17,7 @@ import { AgentMark, agentLabel } from "./AgentMark"
 import { DiffView } from "./DiffView"
 import { PrBadge } from "./PrBadge"
 import { Stat } from "./Stat"
+import { InlineEdit } from "./InlineEdit"
 import { Transcript } from "./Transcript"
 import { STYLES } from "./status"
 
@@ -26,6 +27,7 @@ type Props = {
   agents: AgentInfo[]
   frames: TranscriptFrame[]
   activity: ActivityFrame | undefined
+  onEdit: (patch: { title?: string; body?: string }) => Promise<boolean>
   onClose: () => void
   onRun: (agent?: AgentId) => void
   onCancel: (runId: string) => void
@@ -106,7 +108,14 @@ export function Inspector(p: Props) {
               )}
             </div>
             <h2 className="mt-2.5 text-[17px] font-medium leading-snug tracking-[-0.015em]">
-              {p.note.title}
+              <InlineEdit
+                key={p.note.id}
+                value={p.note.title}
+                label="Edit title"
+                required
+                rows={2}
+                onSave={(title) => p.onEdit({ title })}
+              />
             </h2>
           </div>
           <button
@@ -237,7 +246,12 @@ export function Inspector(p: Props) {
       </nav>
 
       {tab === "stream" ? (
-        <Transcript frames={p.frames} prompt={p.note.body} />
+        <Transcript
+          key={p.note.id}
+          frames={p.frames}
+          prompt={p.note.body}
+          onEditPrompt={(body) => p.onEdit({ body })}
+        />
       ) : diff === null ? (
         <p className="flex-1 px-5 py-6 text-center text-[12px] text-faint">Loading…</p>
       ) : (

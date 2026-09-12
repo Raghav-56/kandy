@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import type { TranscriptFrame } from "@kandy/core"
+import { InlineEdit } from "./InlineEdit"
 import { cn } from "@/lib/utils"
 
 /**
@@ -10,7 +11,11 @@ import { cn } from "@/lib/utils"
  * *said* gets room; what it *ran* gets a line; what it was *refused* gets a
  * callout, because that's the part a person has to act on.
  */
-export function Transcript({ frames, prompt }: { frames: TranscriptFrame[]; prompt: string }) {
+export function Transcript({ frames, prompt, onEditPrompt }: {
+  frames: TranscriptFrame[]
+  prompt: string
+  onEditPrompt?: (body: string) => Promise<boolean>
+}) {
   const end = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = useState(true)
@@ -30,12 +35,22 @@ export function Transcript({ frames, prompt }: { frames: TranscriptFrame[]; prom
       }}
       className="flex-1 space-y-2.5 overflow-y-auto overflow-x-hidden px-5 py-4"
     >
-      {prompt && (
+      {(prompt || onEditPrompt) && (
         <div className="rounded-xl border border-line-soft bg-panel-2 px-3.5 py-3">
           <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
             Prompt
           </div>
-          <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-[1.6] text-dim">{prompt}</p>
+          <div className="mt-1.5 whitespace-pre-wrap text-[13px] leading-[1.6] text-dim">
+            {onEditPrompt ? (
+              <InlineEdit
+                value={prompt}
+                label="Edit prompt"
+                placeholder="Add a prompt…"
+                rows={4}
+                onSave={onEditPrompt}
+              />
+            ) : prompt}
+          </div>
         </div>
       )}
 
