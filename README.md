@@ -75,6 +75,9 @@ pnpm --filter @kandy/tui dev            # or watch it from the terminal
 ```
 
 `serve` takes `--port N` and `--slots N` (how many agents may run at once).
+Pass `--json` to print a single JSON object once the daemon is listening, with
+`port`, `dbPath`, and `slots` fields, for example:
+`{"port":4477,"dbPath":"/home/user/.local/state/kandy/kandy.db","slots":4}`.
 
 Then open the board, create one against a repo, and write a note.
 

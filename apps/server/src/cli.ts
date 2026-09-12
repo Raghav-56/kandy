@@ -26,12 +26,13 @@ function main(): void {
   const cmd = args[0] ?? "serve"
 
   if (cmd !== "serve") {
-    console.error(`usage: kandy serve [--port N] [--slots N]\n\nunknown command: ${cmd}`)
+    console.error(`usage: kandy serve [--port N] [--slots N] [--json]\n\nunknown command: ${cmd}`)
     process.exit(1)
   }
 
   const port = intFlag(args, "--port", DEFAULT_PORT)
   const slots = intFlag(args, "--slots", DEFAULT_SLOTS)
+  const json = args.includes("--json")
 
   const store = new Store()
   const bus = new Bus()
@@ -46,13 +47,18 @@ function main(): void {
 
   const server = createHttpServer({ store, bus, runner })
   server.listen(port, "127.0.0.1", () => {
+    if (json) {
+      console.log(JSON.stringify({ port, dbPath: DB_PATH, slots }))
+      return
+    }
     console.log(`kandy server  http://127.0.0.1:${port}`)
     console.log(`state         ${DB_PATH}`)
     console.log(`slots         ${slots}`)
   })
 
   const shutdown = () => {
-    console.log("\nshutting down…")
+    if (json) console.error("\nshutting down…")
+    else console.log("\nshutting down…")
     runner.shutdown()
     server.close()
     store.close()
