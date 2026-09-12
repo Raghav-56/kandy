@@ -355,8 +355,38 @@ function leave(): void {
 }
 process.on("exit", leave)
 
+/**
+ * Node reports a refused connection as a bare `TypeError: fetch failed`, with
+ * the real reason buried in a `cause` chain (and sometimes an AggregateError,
+ * one entry per address it tried). Dumping that at someone whose only mistake
+ * was not starting the daemon is noise, so recognise it and say the fix.
+ */
+const OFFLINE_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ETIMEDOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_SOCKET",
+])
+
+function isOffline(err: unknown, depth = 0): boolean {
+  if (depth > 4 || typeof err !== "object" || err === null) return false
+  const e = err as { code?: unknown; cause?: unknown; errors?: unknown }
+  if (typeof e.code === "string" && OFFLINE_CODES.has(e.code)) return true
+  if (Array.isArray(e.errors) && e.errors.some((inner) => isOffline(inner, depth + 1))) return true
+  return isOffline(e.cause, depth + 1)
+}
+
 main().catch((err: unknown) => {
   leave()
-  console.error(err instanceof Error ? err.message : err)
+  if (isOffline(err)) {
+    console.error(`no kandy server at ${BASE} — start it with \`kandy serve\``)
+  } else {
+    console.error(err instanceof Error ? err.message : err)
+  }
   process.exit(1)
 })
