@@ -8,7 +8,11 @@ import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
  * their anti-drift mechanism; this is ours.
  */
 export type Commands = {
-  "POST /boards": { req: { name: string; repoPath: string }; res: { board: Board } }
+  "POST /boards": {
+    req: { name?: string; repoPath: string; setup?: string | null; carry?: string[] }
+    res: { board: Board }
+  }
+  "POST /boards/:id/setup": { req: { setup: string | null; carry?: string[] }; res: {} }
   "POST /notes": {
     req: { boardId: BoardId; columnId: ColumnId; title: string; body?: string }
     res: { noteId: NoteId }
@@ -74,6 +78,10 @@ export type Ok<T> = { ok: true; seq: number } & T
 export type Err = { ok: false; error: { code: ErrorCode; message: string; detail?: unknown } }
 
 export type RepoCheck = {
+  /** A sensible setup command guessed from the repo's lockfiles. */
+  suggestedSetup: string | null
+  /** Gitignored paths worth carrying into a worktree, found in the repo. */
+  suggestedCarry: string[]
   path: string
   exists: boolean
   isRepo: boolean

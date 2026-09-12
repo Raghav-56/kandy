@@ -1,4 +1,4 @@
-import type { AgentId, Lane, NoteStatus, Policy, RunStatus } from "./domain.js"
+import type { AgentId, DiffStat, Lane, NoteStatus, Policy, RunStatus } from "./domain.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
 /** Envelope fields the server stamps on every event. */
@@ -8,7 +8,14 @@ export type EventMeta = {
 }
 
 export type KandyEventMap = {
-  "board.created": { boardId: BoardId; name: string; repoPath: string }
+  "board.created": {
+    boardId: BoardId
+    name: string
+    repoPath: string
+    setup?: string | null
+    carry?: string[]
+  }
+  "board.setup": { boardId: BoardId; setup: string | null; carry?: string[] }
 
   "column.created": {
     columnId: ColumnId
@@ -56,7 +63,8 @@ export type KandyEventMap = {
     error: string | null
   }
 
-  "review.opened": { noteId: NoteId; runId: RunId; branch: string; stat: string }
+  "review.opened": { noteId: NoteId; runId: RunId; branch: string; stat: DiffStat }
+  "run.metrics": { runId: RunId; costUsd: number | null; tokens: number | null; turns: number | null }
   "review.decided": {
     noteId: NoteId
     decision: "merge" | "discard" | "revise"
@@ -91,10 +99,35 @@ export type TranscriptFrame = {
   meta?: string
 }
 
-export type StreamFrame = KandyEvent | TranscriptFrame
+/**
+ * What a run is doing *right now*.
+ *
+ * Deliberately ephemeral: not logged, not persisted, no SSE id. A tool call a
+ * second would bloat the domain log for information that is worthless ten
+ * seconds later. Clients hold it in memory and lose it on reconnect, which is
+ * correct — "currently doing X" has no meaning for a run you weren't watching.
+ */
+export type ActivityFrame = {
+  kind: "activity"
+  runId: RunId
+  ts: number
+  tool: string
+  detail: string
+}
+
+export type StreamFrame = KandyEvent | TranscriptFrame | ActivityFrame
 
 export function isTranscript(f: StreamFrame): f is TranscriptFrame {
   return "kind" in f && f.kind === "transcript"
+}
+
+export function isActivity(f: StreamFrame): f is ActivityFrame {
+  return "kind" in f && f.kind === "activity"
+}
+
+/** True for frames that are live-only and must not carry an SSE id. */
+export function isEphemeral(f: StreamFrame): f is TranscriptFrame | ActivityFrame {
+  return "kind" in f
 }
 
 export type KandyEvent<T extends KandyEventType = KandyEventType> = {

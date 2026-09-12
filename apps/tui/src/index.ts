@@ -283,9 +283,8 @@ async function main(): Promise<void> {
   enter()
   draw()
 
-  const close = client.events(
-    frame.view.seq,
-    (e) => {
+  const close = client.events(frame.view.seq, {
+    onEvent: (e) => {
       // The stream replays from Last-Event-ID after a reconnect; anything the
       // snapshot already folded in is a no-op we can skip outright.
       if (e.seq <= frame.view.seq) return
@@ -293,12 +292,12 @@ async function main(): Promise<void> {
       frame.view = reduce(frame.view, e)
       draw()
     },
-    () => {
+    onError: () => {
       // EventSource reconnects on its own; say so rather than exiting.
       frame.connected = false
       draw()
     },
-  )
+  })
 
   // Motion is how a terminal shows liveness. Only spin when something is live.
   const beat = setInterval(() => {

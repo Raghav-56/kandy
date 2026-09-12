@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { KandyClient } from "@kandy/client"
-import { reduce, type BoardView, type TranscriptFrame } from "@kandy/core"
+import { reduce, type ActivityFrame, type BoardView, type TranscriptFrame } from "@kandy/core"
 
 /**
  * Snapshot, then stream. The reducer is the one in @kandy/core — the same code
@@ -13,6 +13,8 @@ export function useBoard(boardId: string | null) {
   const [error, setError] = useState<string | null>(null)
   /** Live transcript, keyed by run. Bounded — see below. */
   const [transcript, setTranscript] = useState<Record<string, TranscriptFrame[]>>({})
+  /** What each run is doing right now. Live-only; empty after a reconnect. */
+  const [activity, setActivity] = useState<Record<string, ActivityFrame>>({})
 
   // The stream must not be torn down and rebuilt every time the view updates,
   // so the live seq lives in a ref rather than the effect's dependencies.
@@ -24,6 +26,7 @@ export function useBoard(boardId: string | null) {
     let close: (() => void) | undefined
 
     setTranscript({})
+    setActivity({})
     client
       .view(boardId)
       .then((snapshot) => {
@@ -32,16 +35,15 @@ export function useBoard(boardId: string | null) {
         seq.current = snapshot.seq
         setError(null)
 
-        close = client.events(
-          snapshot.seq,
-          (e) => {
+        close = client.events(snapshot.seq, {
+          onEvent: (e) => {
             // Skip anything already folded into the snapshot.
             if (e.seq <= seq.current) return
             seq.current = e.seq
             setView((v) => (v ? reduce(v, e) : v))
           },
-          () => setConnected(false),
-          (frame) => {
+          onError: () => setConnected(false),
+          onTranscript: (frame) => {
             setTranscript((t) => {
               const prev = t[frame.runId] ?? []
               if (prev.some((f) => f.seq === frame.seq)) return t
@@ -50,7 +52,8 @@ export function useBoard(boardId: string | null) {
               return { ...t, [frame.runId]: [...prev, frame].slice(-400) }
             })
           },
-        )
+          onActivity: (frame) => setActivity((a) => ({ ...a, [frame.runId]: frame })),
+        })
         setConnected(true)
       })
       .catch((err: Error) => !cancelled && setError(err.message))
@@ -103,6 +106,7 @@ export function useBoard(boardId: string | null) {
     error,
     act,
     transcript,
+    activity,
     loadTranscript,
     clearError: () => setError(null),
   }

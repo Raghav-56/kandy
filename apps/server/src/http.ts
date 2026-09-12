@@ -5,17 +5,15 @@ import {
   between,
   event,
   id,
-  isTranscript,
+  isEphemeral,
   notesIn,
   type AgentId,
   type BoardView,
   type ErrorCode,
   type StreamFrame,
 } from "@kandy/core"
-import type { Store } from "./store.js"
-import type { Bus } from "./bus.js"
 import type { Runner } from "./runner.js"
-import { listBoards, projectBoard } from "./projection.js"
+import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
 import {
   checkRepo,
@@ -29,7 +27,7 @@ import {
 const VERSION = "0.0.0"
 const STARTED = Date.now()
 
-export type ServerDeps = { store: Store; bus: Bus; runner: Runner }
+export type ServerDeps = { engine: Engine; runner: Runner }
 
 export function createHttpServer(deps: ServerDeps) {
   return createServer((req, res) => {
@@ -67,11 +65,16 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   }
 
   if (req.method === "GET" && url.pathname === "/boards") {
-    return send(res, 200, { boards: listBoards(deps.store) })
+    return send(res, 200, { boards: deps.engine.projections.boards() })
   }
 
   if (req.method === "POST" && url.pathname === "/boards") {
-    const body = await json<{ name?: string; repoPath: string }>(req)
+    const body = await json<{
+      name?: string
+      repoPath: string
+      setup?: string | null
+      carry?: string[]
+    }>(req)
     if (!body?.repoPath) return fail(res, 400, "bad_request", "repoPath required")
 
     // Validate here rather than at first run. A board pointed at a
@@ -83,7 +86,18 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
 
     const boardId = id("board")
     const name = body.name?.trim() || check.name || "board"
-    emit(deps, event("board.created", { boardId, name, repoPath: check.path }))
+    emit(
+      deps,
+      event("board.created", {
+        boardId,
+        name,
+        repoPath: check.path,
+        // Default to what the repo's lockfiles imply, so a board works on
+        // first run without anyone having to know this setting exists.
+        setup: body.setup === undefined ? check.suggestedSetup : body.setup,
+        carry: body.carry ?? check.suggestedCarry,
+      }),
+    )
     // Seed the lifecycle lanes. Each declares the lane it represents, so the
     // server can move notes between them as their status changes.
     const LANES = [
@@ -105,13 +119,28 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
         }),
       )
     }
-    const view = projectBoard(deps.store, boardId)!
+    const view = deps.engine.view(boardId)!
     return send(res, 200, { ok: true, seq: view.seq, board: view.board })
+  }
+
+  // POST /boards/:id/setup
+  if (req.method === "POST" && parts[0] === "boards" && parts[2] === "setup") {
+    const body = await json<{ setup: string | null; carry?: string[] }>(req)
+    if (!deps.engine.view(parts[1]!)) return fail(res, 404, "board_not_found", "no such board")
+    const e = emit(
+      deps,
+      event("board.setup", {
+        boardId: parts[1]!,
+        setup: body?.setup ?? null,
+        ...(body?.carry ? { carry: body.carry } : {}),
+      }),
+    )
+    return send(res, 200, { ok: true, seq: e.seq })
   }
 
   // GET /boards/:id/view
   if (req.method === "GET" && parts[0] === "boards" && parts[2] === "view") {
-    const view = projectBoard(deps.store, parts[1]!)
+    const view = deps.engine.view(parts[1]!)
     if (!view) return fail(res, 404, "board_not_found", `no board ${parts[1]}`)
     return send(res, 200, view)
   }
@@ -121,7 +150,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     if (!body?.boardId || !body?.columnId || !body?.title)
       return fail(res, 400, "bad_request", "boardId, columnId and title required")
 
-    const view = projectBoard(deps.store, body.boardId)
+    const view = deps.engine.view(body.boardId)
     if (!view) return fail(res, 404, "board_not_found", `no board ${body.boardId}`)
 
     const last = notesIn(view, body.columnId).at(-1)
@@ -156,19 +185,19 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   // GET /runs/:id/transcript
   if (req.method === "GET" && parts[0] === "runs" && parts[2] === "transcript") {
     const after = Number(url.searchParams.get("after") ?? 0)
-    const frames = deps.store.transcriptSince(parts[1]!, after)
+    const frames = deps.engine.store.transcriptSince(parts[1]!, after)
     return send(res, 200, { frames, nextAfter: frames.at(-1)?.seq ?? null })
   }
 
   // POST /runs/:id/cancel
   if (req.method === "POST" && parts[0] === "runs" && parts[2] === "cancel") {
-    return send(res, 200, { ok: true, seq: deps.store.head(), cancelled: deps.runner.cancel(parts[1]!) })
+    return send(res, 200, { ok: true, seq: deps.engine.head(), cancelled: deps.runner.cancel(parts[1]!) })
   }
 
   // GET /runs/:id/output
   if (req.method === "GET" && parts[0] === "runs" && parts[2] === "output") {
     const after = Number(url.searchParams.get("after") ?? 0)
-    const lines = deps.store.outputSince(parts[1]!, after)
+    const lines = deps.engine.store.outputSince(parts[1]!, after)
     return send(res, 200, { lines, nextAfter: lines.at(-1)?.seq ?? null })
   }
 
@@ -182,9 +211,10 @@ async function noteAction(
   action: string,
   req: IncomingMessage,
 ) {
-  const view = findBoardOf(deps.store, noteId)
+  const view = deps.engine.boardOf(noteId)
   if (!view) return fail(res, 404, "note_not_found", `no note ${noteId}`)
-  const note = view.notes.find((n) => n.id === noteId)!
+  const note = view.notes.find((n) => n.id === noteId)
+  if (!note) return fail(res, 404, "note_not_found", `no note ${noteId}`)
 
   switch (action) {
     case "edit": {
@@ -232,14 +262,14 @@ async function noteAction(
         return fail(res, 409, "invalid_transition", `note is already ${note.status}`)
 
       const runId = deps.runner.request(view.board.id, noteId, agent)
-      return send(res, 200, { ok: true, seq: deps.store.head(), runId })
+      return send(res, 200, { ok: true, seq: deps.engine.head(), runId })
     }
     case "message": {
       const b = await json<{ text: string }>(req)
       if (!b?.text?.trim()) return fail(res, 400, "bad_request", "text required")
       try {
         const delivery = deps.runner.steer(view.board.id, noteId, b.text.trim())
-        return send(res, 200, { ok: true, seq: deps.store.head(), delivery })
+        return send(res, 200, { ok: true, seq: deps.engine.head(), delivery })
       } catch (err) {
         return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))
       }
@@ -301,9 +331,9 @@ function sse(deps: ServerDeps, req: IncomingMessage, res: ServerResponse, after:
     "x-accel-buffering": "no",
   })
 
-  for (const e of deps.store.since(after)) write(res, e)
+  for (const e of deps.engine.store.since(after)) write(res, e)
 
-  const unsubscribe = deps.bus.subscribe((f) => write(res, f))
+  const unsubscribe = deps.engine.bus.subscribe((f) => write(res, f))
   const beat = setInterval(() => res.write(":\n\n"), 15_000)
 
   req.on("close", () => {
@@ -316,8 +346,8 @@ function write(res: ServerResponse, f: StreamFrame) {
   // Transcript frames deliberately carry no `id:`. Per the SSE spec that
   // leaves the client's Last-Event-ID untouched, so a reconnect resumes the
   // domain log exactly where it left off instead of replaying agent chatter.
-  if (isTranscript(f)) {
-    res.write(`event: transcript\ndata: ${JSON.stringify(f)}\n\n`)
+  if (isEphemeral(f)) {
+    res.write(`event: ${f.kind}\ndata: ${JSON.stringify(f)}\n\n`)
     return
   }
   res.write(`id: ${f.seq}\nevent: ${f.type}\ndata: ${JSON.stringify(f)}\n\n`)
@@ -328,18 +358,8 @@ function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(homedir(), p.slice(1)) : p
 }
 
-function findBoardOf(store: Store, noteId: string): BoardView | null {
-  for (const b of listBoards(store)) {
-    const view = projectBoard(store, b.id)
-    if (view?.notes.some((n) => n.id === noteId)) return view
-  }
-  return null
-}
-
-function emit(deps: ServerDeps, pending: Parameters<Store["append"]>[0]) {
-  const e = deps.store.append(pending)
-  deps.bus.publish(e)
-  return e
+function emit(deps: ServerDeps, pending: Parameters<Engine["emit"]>[0]) {
+  return deps.engine.emit(pending)
 }
 
 async function json<T>(req: IncomingMessage): Promise<T | null> {

@@ -46,6 +46,23 @@ export type Board = {
   id: BoardId
   name: string
   repoPath: string
+  /**
+   * Shell run in a fresh worktree before the agent starts.
+   *
+   * A new worktree has no node_modules, no .env, no build cache — so an agent
+   * can write a test and then be unable to run it. This is how a board says
+   * what "ready to work" means for its repo.
+   */
+  setup: string | null
+  /**
+   * Gitignored paths cloned into each new worktree — `.env`, build caches.
+   *
+   * pnpm already handles node_modules cheaply (its store clones by reference
+   * on APFS, which is why a fresh install is sub-second), but nothing handles
+   * the secrets and caches git deliberately doesn't track. Copied by reference
+   * where the filesystem supports it, so this is close to free.
+   */
+  carry: string[]
   createdAt: number
 }
 
@@ -95,8 +112,17 @@ export type Note = {
   /** Set when a run starts; the deliverable. */
   branch: string | null
   worktree: string | null
+  /** What this note changed. Survives review, unlike the worktree. */
+  stat: DiffStat | null
   createdAt: number
   updatedAt: number
+}
+
+/** Parsed `git diff --shortstat`, so the UI can draw it rather than print it. */
+export type DiffStat = {
+  files: number
+  insertions: number
+  deletions: number
 }
 
 export type Run = {
@@ -112,6 +138,10 @@ export type Run = {
   endedAt: number | null
   exitCode: number | null
   error: string | null
+  /** What the turn cost, as reported by the agent. Null if it doesn't say. */
+  costUsd: number | null
+  tokens: number | null
+  turns: number | null
 }
 
 /** What a client renders. A projection of the event log, never written directly. */

@@ -17,7 +17,7 @@ export function App() {
   const [composeIn, setComposeIn] = useState<string | null>(null)
   const [newBoard, setNewBoard] = useState(false)
 
-  const { client, view, connected, error, act, transcript, loadTranscript, clearError } =
+  const { view, connected, error, act, transcript, activity, loadTranscript, clearError } =
     useBoard(boardId)
 
   const bootstrap = useMemo(() => new KandyClient({ baseUrl: "/api" }), [])
@@ -31,8 +31,6 @@ export function App() {
   }, [bootstrap])
 
   const note = view?.notes.find((n) => n.id === selected) ?? null
-  const running = view?.notes.filter((n) => n.status === "running").length ?? 0
-  const blocked = view?.notes.filter((n) => n.status === "blocked").length ?? 0
   const defaultAgent = agents.find((a) => a.installed && a.authed)?.id ?? null
 
   // Pull a note's history from disk when it's opened — the live stream only
@@ -63,16 +61,14 @@ export function App() {
       <TopBar
         boards={boards}
         boardId={boardId}
+        view={view}
         onBoardChange={(id) => {
           setBoardId(id)
           setSelected(null)
         }}
         onNewBoard={() => setNewBoard(true)}
-        repoPath={view?.board.repoPath}
         agents={agents}
         connected={connected}
-        running={running}
-        blocked={blocked}
       />
 
       {error && (
@@ -89,6 +85,7 @@ export function App() {
           {view ? (
             <BoardGrid
               view={view}
+              activity={activity}
               selectedId={selected}
               onSelect={setSelected}
               onMove={(noteId, columnId, afterId) =>
@@ -109,6 +106,7 @@ export function App() {
             view={view}
             agents={agents}
             frames={note.runId ? (transcript[note.runId] ?? []) : []}
+            activity={note.runId ? activity[note.runId] : undefined}
             onClose={() => setSelected(null)}
             onRun={(agent) => void act((c) => c.runNote(note.id, agent))}
             onCancel={(runId) => void act((c) => c.cancelRun(runId))}

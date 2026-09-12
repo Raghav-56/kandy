@@ -9,15 +9,17 @@ import {
   type AgentId,
   type BoardView,
   type Delivery,
+  type DiffStat,
 } from "@kandy/core"
-import type { Store } from "./store.js"
-import type { Bus } from "./bus.js"
+import type { Engine } from "./engine.js"
 import { adapter } from "./agents/index.js"
 import {
+  carryInto,
   commitLeftovers,
   createWorktree,
-  diffStat,
+  diffNumbers,
   isDirty,
+  runSetup,
   type Worktree,
 } from "./worktree.js"
 
@@ -56,14 +58,16 @@ export class Runner {
   private worktrees = new Map<string, Worktree>()
 
   constructor(
-    private store: Store,
-    private bus: Bus,
-    private getView: (boardId: string) => BoardView | null,
+    private engine: Engine,
     private slots = 4,
   ) {}
 
-  private emit(pending: Parameters<Store["append"]>[0]): void {
-    this.bus.publish(this.store.append(pending))
+  private emit(pending: Parameters<Engine["emit"]>[0]): void {
+    this.engine.emit(pending)
+  }
+
+  private getView(boardId: string): BoardView | null {
+    return this.engine.view(boardId)
   }
 
   /**
@@ -98,7 +102,7 @@ export class Runner {
     text: string,
     meta?: string,
   ): void {
-    this.bus.publish(this.store.appendTranscript(runId, role, text, meta))
+    this.engine.say(runId, role, text, meta)
   }
 
   request(boardId: string, noteId: string, agent: AgentId): string {
@@ -179,8 +183,34 @@ export class Runner {
     const note = view?.notes.find((n) => n.id === q.noteId)
     if (!view || !note) throw new Error(`note ${q.noteId} not found`)
 
+    const fresh = !q.worktree
     const worktree = q.worktree ?? (await createWorktree(view.board.repoPath, q.noteId, note.title))
     this.worktrees.set(q.noteId, worktree)
+
+    // A fresh worktree has no dependencies, no .env, no caches. Prepare it
+    // before the agent arrives, or it will write a test it cannot run.
+    if (fresh && view.board.carry?.length) {
+      const carried = await carryInto(view.board.repoPath, worktree.path, view.board.carry)
+      if (carried.length) this.say(q.runId, "system", `carried in ${carried.join(", ")}`)
+    }
+
+    if (fresh && view.board.setup) {
+      this.engine.activity(q.runId, "setup", view.board.setup)
+      this.say(q.runId, "system", `preparing workspace: ${view.board.setup}`)
+
+      const started = Date.now()
+      const result = await runSetup(worktree.path, view.board.setup, (line) => {
+        this.engine.activity(q.runId, "setup", line)
+      })
+      const secs = ((Date.now() - started) / 1000).toFixed(1)
+
+      if (!result.ok) {
+        // Better to stop here than hand the agent a broken workspace and let
+        // it spend ten minutes discovering that itself.
+        throw new Error(`setup failed after ${secs}s (exit ${result.code}): ${view.board.setup}`)
+      }
+      this.say(q.runId, "system", `workspace ready in ${secs}s`)
+    }
 
     // Resume the agent's session only when continuing in an existing worktree.
     // A fresh worktree means a fresh filesystem, and an agent whose memory
@@ -245,9 +275,15 @@ export class Runner {
       )
     }
 
-    // Agents whose prompt travels over stdin get it now. The pipe stays open:
-    // it is the same channel steering messages use later.
+    // Agents whose prompt travels over stdin get it now, and the pipe stays
+    // open because it is the same channel steering messages use later.
+    //
+    // For everyone else the pipe must be closed immediately. Codex takes its
+    // prompt as an argument and then blocks on an open stdin forever —
+    // "Reading additional input from stdin..." and nothing else, ever. An
+    // agent that cannot be steered must not be handed a stdin to wait on.
     if (spec.stdin && child.stdin?.writable) child.stdin.write(spec.stdin)
+    if (!a.live) child.stdin?.end()
 
     this.syncColumn(q.boardId, q.noteId)
     this.consume(q.runId, child, (line) => a.parse(line))
@@ -274,7 +310,7 @@ export class Runner {
           parsed = parse(line)
         } catch (err) {
           // A parser bug must not kill a run that is otherwise working.
-          this.store.appendOutput(runId, "stdout", line)
+          this.engine.store.appendOutput(runId, "stdout", line)
           this.say(runId, "error", `adapter failed to parse output: ${String(err)}`)
           return
         }
@@ -288,13 +324,29 @@ export class Runner {
               if (ev.text.trim()) this.say(runId, "assistant", ev.text)
               break
             case "tool":
-              this.say(runId, "tool", ev.detail, ev.tool)
+              // One line per call, written when it starts. Adapters that
+              // report completion separately would otherwise print every tool
+              // twice, which reads like the agent did the work twice.
+              if (ev.status !== "completed") {
+                this.say(runId, "tool", ev.detail, ev.tool)
+                // Also push it as live activity so every card on the board can
+                // show what its agent is doing without opening the note.
+                this.engine.activity(runId, ev.tool, ev.detail)
+              }
               if (ev.status !== "started") {
                 this.emit(event("run.tool", { runId, tool: ev.tool, status: ev.status }))
               }
               break
             case "usage":
               this.say(runId, "system", ev.text)
+              this.emit(
+                event("run.metrics", {
+                  runId,
+                  costUsd: ev.costUsd,
+                  tokens: ev.tokens,
+                  turns: ev.turns,
+                }),
+              )
               break
             case "turn_end":
               // One run is one turn. Closing stdin lets the agent exit, which
@@ -332,7 +384,7 @@ export class Runner {
         // Raw stderr is kept for debugging but stays out of the transcript —
         // agent CLIs write progress spinners and deprecation notices there,
         // and a transcript full of noise is a transcript nobody reads.
-        if (line.trim()) this.store.appendOutput(runId, "stderr", line)
+        if (line.trim()) this.engine.store.appendOutput(runId, "stderr", line)
       }
     })
   }
@@ -347,11 +399,11 @@ export class Runner {
     this.live.delete(runId)
 
     let error: string | null = null
-    let stat = ""
+    let stat: DiffStat = { files: 0, insertions: 0, deletions: 0 }
     if (l) {
       try {
         await commitLeftovers(l.worktree, `kandy: ${noteId}`)
-        stat = await diffStat(l.worktree)
+        stat = await diffNumbers(l.worktree)
       } catch (err) {
         error = `failed to capture agent output: ${err instanceof Error ? err.message : err}`
         this.say(runId, "error", error)

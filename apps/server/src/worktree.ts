@@ -1,7 +1,8 @@
-import { execFile } from "node:child_process"
+import { execFile, spawn } from "node:child_process"
 import { promisify } from "node:util"
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import path from "node:path"
+import type { DiffStat } from "@kandy/core"
 import { worktreeRoot } from "./paths.js"
 
 const exec = promisify(execFile)
@@ -88,6 +89,21 @@ export async function diffStat(wt: Worktree): Promise<string> {
   return git(wt.path, "diff", "--stat", `${wt.baseRef}...HEAD`)
 }
 
+/**
+ * Structured diff size, so the UI can draw a bar instead of printing a
+ * sentence. Parsed from --shortstat, e.g.
+ *   " 2 files changed, 105 insertions(+), 1 deletion(-)"
+ */
+export async function diffNumbers(wt: Worktree): Promise<DiffStat> {
+  const line = await git(wt.path, "diff", "--shortstat", `${wt.baseRef}...HEAD`).catch(() => "")
+  const num = (re: RegExp) => Number(line.match(re)?.[1] ?? 0)
+  return {
+    files: num(/(\d+) files? changed/),
+    insertions: num(/(\d+) insertions?\(\+\)/),
+    deletions: num(/(\d+) deletions?\(-\)/),
+  }
+}
+
 export async function diff(wt: Worktree): Promise<string> {
   return git(wt.path, "diff", `${wt.baseRef}...HEAD`)
 }
@@ -123,6 +139,115 @@ export async function deleteBranch(repoPath: string, branch: string): Promise<vo
   await git(repoPath, "branch", "-D", branch).catch(() => {})
 }
 
+/**
+ * Copy gitignored paths into a fresh worktree, by reference where possible.
+ *
+ * `cp -c` asks APFS for a clonefile(2) — the data blocks are shared until
+ * something writes, so this costs metadata rather than bytes. Linux gets the
+ * same via `--reflink=auto` on btrfs/XFS, which silently degrades to a real
+ * copy elsewhere. Both fall back to a plain copy, because a slow worktree
+ * beats a broken one.
+ *
+ * Note this is for `.env` files and build caches — NOT node_modules. pnpm's
+ * store already clones packages by reference, so a fresh `pnpm install` is
+ * sub-second; copying the tree ourselves would be slower and would hand two
+ * agents the same resolved dependency graph even when their lockfiles differ.
+ */
+export async function carryInto(
+  repoPath: string,
+  worktree: string,
+  paths: readonly string[],
+): Promise<string[]> {
+  const carried: string[] = []
+  const reflink = process.platform === "darwin" ? ["-c"] : ["--reflink=auto"]
+
+  for (const rel of paths) {
+    // Never let a board config escape the repo it belongs to.
+    const from = path.resolve(repoPath, rel)
+    if (!from.startsWith(path.resolve(repoPath) + path.sep)) continue
+    if (!existsSync(from)) continue
+
+    const to = path.join(worktree, rel)
+    try {
+      mkdirSync(path.dirname(to), { recursive: true })
+      await exec("cp", [...reflink, "-R", from, to])
+      carried.push(rel)
+    } catch {
+      try {
+        await exec("cp", ["-R", from, to])
+        carried.push(rel)
+      } catch {
+        // A missing cache is a slower run, not a failed one.
+      }
+    }
+  }
+  return carried
+}
+
+/**
+ * Run a board's setup command in a fresh worktree.
+ *
+ * Streamed line by line so the user watches it happen rather than staring at a
+ * card that says "running" for ninety seconds with nothing behind it.
+ */
+export function runSetup(
+  cwd: string,
+  command: string,
+  onLine: (line: string) => void,
+): Promise<{ ok: boolean; code: number | null }> {
+  return new Promise((resolve) => {
+    const child = spawn(command, {
+      cwd,
+      shell: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+    const read = (stream: NodeJS.ReadableStream | null) => {
+      let buf = ""
+      stream?.on("data", (c: Buffer) => {
+        buf += c.toString()
+        const lines = buf.split("\n")
+        buf = lines.pop() ?? ""
+        for (const l of lines) if (l.trim()) onLine(l.trim())
+      })
+    }
+    read(child.stdout)
+    read(child.stderr)
+    child.on("error", (err) => {
+      onLine(err.message)
+      resolve({ ok: false, code: null })
+    })
+    child.on("exit", (code) => resolve({ ok: code === 0, code }))
+  })
+}
+
+/** Gitignored paths worth carrying, if the repo actually has them. */
+function guessCarry(root: string): string[] {
+  const candidates = [
+    ".env",
+    ".env.local",
+    ".env.development",
+    ".env.development.local",
+    ".turbo",
+    ".nx",
+  ]
+  return candidates.filter((c) => existsSync(path.join(root, c)))
+}
+
+/** What "ready to work" probably means for this repo, guessed from lockfiles. */
+function guessSetup(root: string): string | null {
+  if (existsSync(path.join(root, "pnpm-lock.yaml"))) return "pnpm install --prefer-offline"
+  if (existsSync(path.join(root, "yarn.lock"))) return "yarn install --prefer-offline"
+  if (existsSync(path.join(root, "bun.lockb")) || existsSync(path.join(root, "bun.lock")))
+    return "bun install"
+  if (existsSync(path.join(root, "package-lock.json"))) return "npm ci --prefer-offline"
+  if (existsSync(path.join(root, "package.json"))) return "npm install"
+  if (existsSync(path.join(root, "uv.lock"))) return "uv sync"
+  if (existsSync(path.join(root, "poetry.lock"))) return "poetry install"
+  if (existsSync(path.join(root, "Cargo.toml"))) return "cargo fetch"
+  if (existsSync(path.join(root, "go.mod"))) return "go mod download"
+  return null
+}
+
 /** Inspect a path before offering to make a board of it. */
 export async function checkRepo(p: string): Promise<{
   path: string
@@ -132,6 +257,8 @@ export async function checkRepo(p: string): Promise<{
   head: string | null
   branch: string | null
   name: string | null
+  suggestedSetup: string | null
+  suggestedCarry: string[]
   error: string | null
 }> {
   const base = {
@@ -142,6 +269,8 @@ export async function checkRepo(p: string): Promise<{
     head: null,
     branch: null,
     name: null,
+    suggestedSetup: null,
+    suggestedCarry: [],
     error: null,
   }
   if (!p.startsWith("/")) return { ...base, error: "path must be absolute" }
@@ -164,6 +293,8 @@ export async function checkRepo(p: string): Promise<{
       head: head || null,
       branch: branch || null,
       name: path.basename(root),
+      suggestedSetup: guessSetup(root),
+      suggestedCarry: guessCarry(root),
       error: null,
     }
   } catch {
