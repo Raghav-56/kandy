@@ -6,22 +6,36 @@ import { listBoards, projectBoard } from "./projection.js"
 import { DB_PATH } from "./paths.js"
 
 const DEFAULT_PORT = 4477
+const DEFAULT_SLOTS = 4
+
+/** Parse a `--flag N` positive integer, or exit with a message the user can act on. */
+function intFlag(args: string[], flag: string, fallback: number): number {
+  const i = args.indexOf(flag)
+  if (i === -1) return fallback
+  const raw = args[i + 1]
+  const n = Number(raw)
+  if (raw === undefined || !Number.isInteger(n) || n < 1) {
+    console.error(`${flag} expects a positive integer, got: ${raw ?? "(nothing)"}`)
+    process.exit(1)
+  }
+  return n
+}
 
 function main(): void {
   const args = process.argv.slice(2)
   const cmd = args[0] ?? "serve"
 
   if (cmd !== "serve") {
-    console.error(`usage: kandy serve [--port N]\n\nunknown command: ${cmd}`)
+    console.error(`usage: kandy serve [--port N] [--slots N]\n\nunknown command: ${cmd}`)
     process.exit(1)
   }
 
-  const portArg = args.indexOf("--port")
-  const port = portArg === -1 ? DEFAULT_PORT : Number(args[portArg + 1])
+  const port = intFlag(args, "--port", DEFAULT_PORT)
+  const slots = intFlag(args, "--slots", DEFAULT_SLOTS)
 
   const store = new Store()
   const bus = new Bus()
-  const runner = new Runner(store, bus, (boardId) => projectBoard(store, boardId))
+  const runner = new Runner(store, bus, (boardId) => projectBoard(store, boardId), slots)
 
   // A daemon that died mid-run leaves notes claiming to be running. They
   // aren't. Fail them loudly rather than showing a board that lies.
@@ -34,6 +48,7 @@ function main(): void {
   server.listen(port, "127.0.0.1", () => {
     console.log(`kandy server  http://127.0.0.1:${port}`)
     console.log(`state         ${DB_PATH}`)
+    console.log(`slots         ${slots}`)
   })
 
   const shutdown = () => {
