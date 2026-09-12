@@ -89,19 +89,25 @@ export function NoteCard({
           {note.title}
         </p>
 
-        {/* What it's doing, right now. Live-only, so absent is fine. */}
+        {/* What it's doing, right now. Live-only, so absent is fine.
+            The shimmer carries liveness so the text can carry meaning — a
+            pulsing dot only ever repeated what the status already said. */}
         {note.status === "running" && activity && (
           <div
             className={cn(
-              "mt-2.5 flex items-center gap-1.5 rounded-md px-2 py-1.5",
+              "relative mt-2.5 overflow-hidden rounded-md px-2 py-1.5",
               onDark ? "bg-panel" : "bg-black/[0.045]",
             )}
           >
-            <span className="h-1 w-1 shrink-0 animate-pulse rounded-full bg-amber" />
-            <span className={cn("shrink-0 text-[11px] font-medium", s.muted)}>{activity.tool}</span>
-            <span className={cn("truncate font-mono text-[10.5px]", s.muted, "opacity-80")}>
-              {activity.detail}
-            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className={cn("shrink-0 text-[11px] font-medium", s.muted)}>
+                {activity.tool}
+              </span>
+              <span className={cn("truncate font-mono text-[10.5px] opacity-80", s.muted)}>
+                {activity.detail}
+              </span>
+            </div>
+            <span className="shimmer pointer-events-none absolute inset-x-0 bottom-0 h-px" />
           </div>
         )}
 

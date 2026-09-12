@@ -79,5 +79,19 @@ body {
   animation: sweep 1.9s ease-in-out infinite;
 }
 
+/* Liveness as motion along a line rather than a blinking dot: it reads as
+   "work is moving" instead of "notice me". */
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--color-amber), transparent);
+  animation: shimmer 1.8s linear infinite;
+}
+
 @keyframes breathe { 50% { opacity: 0.45; } }
 .breathe { animation: breathe 2s ease-in-out infinite; }

@@ -16,7 +16,6 @@ import { useTick } from "@/hooks/useTick"
 import { AgentMark, agentLabel } from "./AgentMark"
 import { DiffView } from "./DiffView"
 import { PrBadge } from "./PrBadge"
-import { Stat } from "./Stat"
 import { InlineEdit } from "./InlineEdit"
 import { Transcript } from "./Transcript"
 import { STYLES } from "./status"
@@ -48,6 +47,10 @@ export function Inspector(p: Props) {
   const [sending, setSending] = useState(false)
   const [delivery, setDelivery] = useState<string | null>(null)
   const [pring, setPring] = useState(false)
+  // Reviewing a diff needs room; watching a stream does not. One toggle rather
+  // than a drag handle, because the two useful widths are the only two anyone
+  // actually wants.
+  const [wide, setWide] = useState(false)
 
   const run = p.view.runs.find((r) => r.id === p.note.runId)
   const live = p.note.status === "running" || p.note.status === "blocked"
@@ -89,7 +92,12 @@ export function Inspector(p: Props) {
   const canOpenPr = Boolean(p.forge?.available && p.note.branch && !p.note.pr)
 
   return (
-    <aside className="flex h-full w-[500px] shrink-0 flex-col border-l border-line-soft bg-panel">
+    <aside
+      className={cn(
+        "flex h-full shrink-0 flex-col border-l border-line-soft bg-panel transition-[width]",
+        wide ? "w-[min(980px,70vw)]" : "w-[560px]",
+      )}
+    >
       <header className="px-5 pb-4 pt-4">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -119,26 +127,50 @@ export function Inspector(p: Props) {
               />
             </h2>
           </div>
-          <button
-            onClick={p.onClose}
-            aria-label="Close"
-            className="-mr-1.5 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-dim transition-colors hover:bg-panel-2 hover:text-ink"
-          >
-            ✕
-          </button>
+          <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
+            <button
+              onClick={() => setWide((w) => !w)}
+              aria-label={wide ? "Narrow panel" : "Widen panel"}
+              title={wide ? "Narrow" : "Widen — for reading diffs"}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-dim transition-colors hover:bg-panel-2 hover:text-ink"
+            >
+              {wide ? "⇥" : "⇤"}
+            </button>
+            <button
+              onClick={p.onClose}
+              aria-label="Close"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-dim transition-colors hover:bg-panel-2 hover:text-ink"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
-        {/* Everything a run cost, in one scannable row. */}
+        {/* Metrics inline. A four-column grid looked considered and cost ~90px
+            of vertical space in a panel whose actual content is below it. */}
         {run && (
-          <div className="mt-4 grid grid-cols-4 gap-3 rounded-xl border border-line-soft bg-panel-2 px-4 py-3">
-            <Stat
-              label="Elapsed"
-              value={duration(run.startedAt, run.endedAt)}
-              tone={live ? "amber" : "default"}
-            />
-            <Stat label="Turns" value={run.turns ? String(run.turns) : "—"} />
-            <Stat label="Tokens" value={compact(run.tokens) ?? "—"} />
-            <Stat label="Cost" value={money(run.costUsd) ?? "—"} />
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-dim">
+            <span className={cn("tabular-nums", live && "text-amber")}>
+              {duration(run.startedAt, run.endedAt)}
+            </span>
+            {run.turns !== null && (
+              <>
+                <Dot />
+                <span className="tabular-nums">{run.turns} turns</span>
+              </>
+            )}
+            {run.tokens !== null && (
+              <>
+                <Dot />
+                <span className="tabular-nums">{compact(run.tokens)} tok</span>
+              </>
+            )}
+            {run.costUsd !== null && (
+              <>
+                <Dot />
+                <span className="tabular-nums">{money(run.costUsd)}</span>
+              </>
+            )}
           </div>
         )}
 
@@ -154,19 +186,6 @@ export function Inspector(p: Props) {
                 <span className="text-coral">−{p.note.stat.deletions}</span>
               </span>
             )}
-          </div>
-        )}
-
-        {/* Live activity, spelled out rather than buried in the stream. */}
-        {live && p.activity && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#3a2f18] bg-[#17130b] px-3 py-2">
-            <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber" />
-            <span className="shrink-0 text-[11.5px] font-medium text-amber">
-              {p.activity.tool}
-            </span>
-            <span className="truncate font-mono text-[11px] text-[#b39456]">
-              {p.activity.detail}
-            </span>
           </div>
         )}
 
@@ -259,6 +278,9 @@ export function Inspector(p: Props) {
         <DiffView diff={diff.text} capturedAt={diff.capturedAt} />
       )}
 
+      {/* What it is doing, pinned just above where you would interrupt it. */}
+      {live && p.activity && <ActivityStrip tool={p.activity.tool} detail={p.activity.detail} />}
+
       {/* Steering: the point of a board you can walk up to mid-run. */}
       <div className="border-t border-line-soft p-3">
         <Textarea
@@ -278,6 +300,34 @@ export function Inspector(p: Props) {
         </div>
       </div>
     </aside>
+  )
+}
+
+function Dot() {
+  return <span className="text-faint">·</span>
+}
+
+/**
+ * Live activity as a strip, not a dot.
+ *
+ * A pulsing dot says "something is happening" and nothing else — which you
+ * already knew from the status. What you actually want is the verb and its
+ * object: which tool, on what. The shimmer carries the liveness so the text
+ * can carry the meaning.
+ */
+function ActivityStrip({ tool, detail }: { tool: string; detail: string }) {
+  return (
+    <div className="relative overflow-hidden border-t border-line-soft bg-[#14110b] px-4 py-2.5">
+      <div className="flex items-baseline gap-2.5">
+        <span className="shrink-0 text-[11px] font-medium uppercase tracking-[0.06em] text-amber">
+          {tool}
+        </span>
+        <span className="truncate font-mono text-[11.5px] text-[#b39456]" title={detail}>
+          {detail}
+        </span>
+      </div>
+      <span className="shimmer pointer-events-none absolute inset-x-0 bottom-0 h-px" />
+    </div>
   )
 }
 
