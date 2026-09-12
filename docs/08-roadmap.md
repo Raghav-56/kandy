@@ -48,7 +48,8 @@ This is the demo. Everything before it is plumbing and everything after it is ex
 
 - Remaining adapters: Claude Code, Cursor, opencode (via ACP), Gemini, Grok.
 - Agent detection: which are installed, which are authed.
-- TUI client (opentui) — status and attach, not a full editor.
+- ✅ TUI client — live, subscribes to the event stream and redraws. Plain ANSI,
+  no dependencies. opentui if and when it earns its place.
 - Board setup command (`pnpm install` after worktree create) and ignored-file allowlist.
 - Worktree GC.
 

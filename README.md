@@ -46,7 +46,7 @@ Clients are thin and interchangeable.
                │                       └─► …
    ┌───────────┴──────┬─────────────────┐
    │                  │                 │
- web (React)      tui (stub)      desktop (later)
+ web (React)       tui (live)      desktop (later)
 ```
 
 Every state change is an append to an immutable log; views are projections.
@@ -59,7 +59,7 @@ Read [`docs/01-architecture.md`](docs/01-architecture.md) for the reasoning, and
 | --- | --- |
 | `apps/server` | The daemon. Owns state, runs agents, serves the API. |
 | `apps/web` | React board. The primary client. |
-| `apps/tui` | Terminal client. A stub today. |
+| `apps/tui` | Terminal client. Live board view over the same SSE stream. |
 | `packages/core` | Domain types, event schemas, and the one reducer everything projects with. |
 | `packages/client` | Typed client for the server API. |
 
@@ -71,7 +71,10 @@ pnpm build
 
 node apps/server/dist/cli.js serve      # the daemon, on :4477
 pnpm --filter @kandy/web dev            # the board, on :5477
+pnpm --filter @kandy/tui dev            # or watch it from the terminal
 ```
+
+`serve` takes `--port N` and `--slots N` (how many agents may run at once).
 
 Then open the board, create one against a repo, and write a note.
 
