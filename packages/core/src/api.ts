@@ -1,4 +1,4 @@
-import type { AgentId, Board, BoardView, Policy } from "./domain.js"
+import type { AgentId, Board, BoardView, Policy, PullRequest } from "./domain.js"
 import type { TranscriptFrame } from "./events.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
@@ -8,7 +8,11 @@ import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
  * their anti-drift mechanism; this is ours.
  */
 export type Commands = {
-  "POST /boards": { req: { name: string; repoPath: string }; res: { board: Board } }
+  "POST /boards": {
+    req: { name?: string; repoPath: string; setup?: string | null; carry?: string[] }
+    res: { board: Board }
+  }
+  "POST /boards/:id/setup": { req: { setup: string | null; carry?: string[] }; res: {} }
   "POST /notes": {
     req: { boardId: BoardId; columnId: ColumnId; title: string; body?: string }
     res: { noteId: NoteId }
@@ -17,6 +21,8 @@ export type Commands = {
   "POST /notes/:id/move": { req: { columnId: ColumnId; before?: NoteId; after?: NoteId }; res: {} }
   "POST /notes/:id/assign": { req: { agent: AgentId }; res: {} }
   "POST /notes/:id/policy": { req: { policy: Policy }; res: {} }
+  /** Push the note's branch and open a PR for it. */
+  "POST /notes/:id/pr": { req: { draft?: boolean }; res: { pr: PullRequest } }
   "POST /notes/:id/delete": { req: {}; res: {} }
   "POST /notes/:id/run": { req: { agent?: AgentId }; res: { runId: RunId } }
   "POST /notes/:id/review": {
@@ -48,6 +54,8 @@ export type Queries = {
   }
   /** Validate a path before offering to make a board of it. */
   "GET /repo/check": { res: RepoCheck }
+  /** Whether this board's repo can open PRs at all, and where. */
+  "GET /boards/:id/forge": { res: Forge }
 }
 
 /**
@@ -80,6 +88,10 @@ export type Ok<T> = { ok: true; seq: number } & T
 export type Err = { ok: false; error: { code: ErrorCode; message: string; detail?: unknown } }
 
 export type RepoCheck = {
+  /** A sensible setup command guessed from the repo's lockfiles. */
+  suggestedSetup: string | null
+  /** Gitignored paths worth carrying into a worktree, found in the repo. */
+  suggestedCarry: string[]
   path: string
   exists: boolean
   isRepo: boolean
@@ -91,6 +103,16 @@ export type RepoCheck = {
   error: string | null
 }
 
+/** What we know about the repo's hosting, for the PR affordances. */
+export type Forge = {
+  /** gh is installed and authenticated. */
+  available: boolean
+  /** e.g. "hiteshbandhu/kandy". */
+  repo: string | null
+  defaultBranch: string | null
+  reason: string | null
+}
+
 export const ERROR_CODES = [
   "bad_request",
   "board_not_found",
@@ -100,6 +122,8 @@ export const ERROR_CODES = [
   "repo_dirty",
   "worktree_failed",
   "not_a_repo",
+  "no_forge",
+  "no_branch",
   "run_not_live",
   "invalid_transition",
   "internal",

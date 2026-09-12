@@ -1,12 +1,15 @@
 import type {
+  ActivityFrame,
   AgentId,
   AgentInfo,
   Board,
   BoardView,
   Delivery,
+  Forge,
   KandyEvent,
   OutputLine,
   Policy,
+  PullRequest,
   RepoCheck,
   StreamFrame,
   TranscriptFrame,
@@ -70,8 +73,16 @@ export class KandyClient {
   checkRepo(path: string) {
     return this.req<RepoCheck>("GET", `/repo/check?path=${encodeURIComponent(path)}`)
   }
-  createBoard(name: string, repoPath: string) {
-    return this.req<{ board: Board; seq: number }>("POST", "/boards", { name, repoPath })
+  createBoard(name: string, repoPath: string, setup?: string | null, carry?: string[]) {
+    return this.req<{ board: Board; seq: number }>("POST", "/boards", {
+      name,
+      repoPath,
+      setup,
+      carry,
+    })
+  }
+  setBoardSetup(boardId: string, setup: string | null, carry?: string[]) {
+    return this.req<{ seq: number }>("POST", `/boards/${boardId}/setup`, { setup, carry })
   }
   view(boardId: string) {
     return this.req<BoardView>("GET", `/boards/${boardId}/view`)
@@ -94,6 +105,12 @@ export class KandyClient {
   }
   assignNote(noteId: string, agent: AgentId) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/assign`, { agent })
+  }
+  forge(boardId: string) {
+    return this.req<Forge>("GET", `/boards/${boardId}/forge`)
+  }
+  openPr(noteId: string, draft = false) {
+    return this.req<{ pr: PullRequest; seq: number }>("POST", `/notes/${noteId}/pr`, { draft })
   }
   setPolicy(noteId: string, policy: Policy) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/policy`, { policy })
@@ -149,9 +166,12 @@ export class KandyClient {
    */
   events(
     after: number,
-    onEvent: (e: KandyEvent) => void,
-    onError?: (e: Event) => void,
-    onTranscript?: (f: TranscriptFrame) => void,
+    handlers: {
+      onEvent: (e: KandyEvent) => void
+      onError?: (e: Event) => void
+      onTranscript?: (f: TranscriptFrame) => void
+      onActivity?: (f: ActivityFrame) => void
+    },
   ): () => void {
     // baseUrl may be relative ("/api" behind a dev proxy), which `new URL`
     // rejects without a base. Resolve against the page origin when there is
@@ -167,17 +187,18 @@ export class KandyClient {
     const handler = (ev: MessageEvent) => {
       try {
         const frame = JSON.parse(ev.data) as StreamFrame
-        if ("kind" in frame && frame.kind === "transcript") onTranscript?.(frame)
-        else onEvent(frame as KandyEvent)
+        if (!("kind" in frame)) handlers.onEvent(frame)
+        else if (frame.kind === "transcript") handlers.onTranscript?.(frame)
+        else if (frame.kind === "activity") handlers.onActivity?.(frame)
       } catch (err) {
         console.error("[kandy] bad event payload", err)
       }
     }
     // Named SSE events don't fire onmessage, so bind each type explicitly.
-    for (const type of [...EVENT_TYPES, "transcript"]) {
+    for (const type of [...EVENT_TYPES, "transcript", "activity"]) {
       es.addEventListener(type, handler as EventListener)
     }
-    if (onError) es.onerror = onError
+    if (handlers.onError) es.onerror = handlers.onError
 
     return () => es.close()
   }
@@ -197,6 +218,10 @@ const EVENT_TYPES = [
   "run.output",
   "run.tool",
   "run.session",
+  "run.metrics",
+  "note.policy",
+  "note.pr",
+  "board.setup",
   "run.blocked",
   "run.unblocked",
   "run.finished",

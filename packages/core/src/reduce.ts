@@ -1,4 +1,12 @@
-import { LANE_OF, type BoardView, type Column, type Note, type NoteStatus, type Run } from "./domain.js"
+import {
+  LANE_OF,
+  type BoardView,
+  type Column,
+  type DiffStat,
+  type Note,
+  type NoteStatus,
+  type Run,
+} from "./domain.js"
 import type { KandyEvent } from "./events.js"
 
 /**
@@ -25,6 +33,14 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
     case "board.created":
       return view
 
+    case "board.setup": {
+      if (e.data.boardId !== view.board.id) return view
+      return {
+        ...view,
+        board: { ...view.board, setup: e.data.setup, carry: e.data.carry ?? view.board.carry },
+      }
+    }
+
     case "column.created": {
       if (e.data.boardId !== view.board.id) return view
       const { columnId, boardId, name, pos, lane } = e.data
@@ -49,6 +65,8 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         runId: null,
         branch: null,
         worktree: null,
+        stat: null,
+        pr: null,
         createdAt: e.ts,
         updatedAt: e.ts,
       }
@@ -71,6 +89,9 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
 
     case "note.assigned":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, agent: e.data.agent }))
+
+    case "note.pr":
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, pr: e.data.pr }))
 
     case "note.policy":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, policy: e.data.policy }))
@@ -96,6 +117,9 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         endedAt: null,
         exitCode: null,
         error: null,
+        costUsd: null,
+        tokens: null,
+        turns: null,
       }
       const withRun = { ...view, runs: [...view.runs, run] }
       return patchNote(withRun, e.data.noteId, e.ts, (n) => ({
@@ -119,6 +143,15 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         worktree: e.data.worktree,
       }))
     }
+
+    case "run.metrics":
+      return patchRun(view, e.data.runId, (r) => ({
+        ...r,
+        // Costs accumulate across turns of the same run.
+        costUsd: sum(r.costUsd, e.data.costUsd),
+        tokens: sum(r.tokens, e.data.tokens),
+        turns: e.data.turns ?? r.turns,
+      }))
 
     case "run.session":
       return patchRun(view, e.data.runId, (r) => ({
@@ -154,12 +187,30 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, status }))
     }
 
+    case "review.opened":
+      // Early events stored the stat as git's own printed summary. Normalise
+      // rather than migrate: the log is immutable, so readers absorb history.
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({
+        ...n,
+        stat: asDiffStat(e.data.stat),
+      }))
+
     // Transcript volume is not board state; clients fetch it per note.
     case "run.output":
     case "run.tool":
-    case "review.opened":
       return view
   }
+}
+
+function asDiffStat(v: unknown): DiffStat | null {
+  if (v && typeof v === "object" && "insertions" in v) return v as DiffStat
+  return null
+}
+
+function sum(a: number | null, b: number | null): number | null {
+  if (a === null) return b
+  if (b === null) return a
+  return a + b
 }
 
 function patchNote(

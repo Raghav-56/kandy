@@ -16,15 +16,17 @@ export function Composer({
   agents: AgentInfo[]
   defaultAgent: AgentId | null
   onCancel: () => void
-  onCreate: (title: string, agent: AgentId | null, run: boolean) => void
+  onCreate: (title: string, body: string, agent: AgentId | null, run: boolean) => void
 }) {
   const [text, setText] = useState("")
   const [agent, setAgent] = useState<AgentId | "">(defaultAgent ?? "")
 
   const submit = (run: boolean) => {
-    const title = text.trim()
+    const [firstLine = "", ...lines] = text.trim().split(/\r?\n/)
+    const title = firstLine.trim()
+    const body = lines.join("\n").trim()
     if (!title) return
-    onCreate(title, (agent || null) as AgentId | null, run)
+    onCreate(title, body, (agent || null) as AgentId | null, run)
   }
 
   return (
