@@ -106,3 +106,15 @@ same table as domain events will bloat the log and slow replay.
 `(runId, seq)`, and the domain log carries only a watermark. Replay of the board never touches
 output; opening a note's transcript is a separate paginated query. Getting this wrong is the
 most likely cause of the app feeling slow at month three.
+
+## Diffs outlive their worktrees
+
+A note's diff is computed from its worktree, and the worktree is removed the moment a review is
+decided. So `GET /notes/:id/diff` would go empty exactly when the note reaches `done` — the
+state it spends most of its life in.
+
+**Decision:** when review opens, the full unified diff is snapshotted into a `diffs` table, one
+row per note, replaced if a follow-up run reopens review. The endpoint prefers the live worktree
+(a running note's diff is still growing) and falls back to the snapshot once it's gone. The diff
+stays out of the event log for the same reason output does: it is big, and board replay must not
+pay for it.

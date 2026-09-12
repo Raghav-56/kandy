@@ -5,17 +5,18 @@ import {
   between,
   event,
   id,
-  isTranscript,
+  isEphemeral,
   notesIn,
   type AgentId,
   type BoardView,
   type ErrorCode,
   type StreamFrame,
 } from "@kandy/core"
-import type { Store } from "./store.js"
-import type { Bus } from "./bus.js"
 import type { Runner } from "./runner.js"
-import { listBoards, projectBoard } from "./projection.js"
+import type { PrWatch } from "./prwatch.js"
+import { detectForge, openPr } from "./forge.js"
+import { serveStatic } from "./static.js"
+import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
 import {
   checkRepo,
@@ -29,7 +30,7 @@ import {
 const VERSION = "0.0.0"
 const STARTED = Date.now()
 
-export type ServerDeps = { store: Store; bus: Bus; runner: Runner }
+export type ServerDeps = { engine: Engine; runner: Runner; prs: PrWatch }
 
 export function createHttpServer(deps: ServerDeps) {
   return createServer((req, res) => {
@@ -42,36 +43,51 @@ export function createHttpServer(deps: ServerDeps) {
 
 async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? "/", "http://localhost")
-  const parts = url.pathname.split("/").filter(Boolean)
+
+  // The web client always talks to "/api". In dev that is a Vite proxy; when
+  // the daemon serves the bundle itself it is the same origin. Stripping the
+  // prefix here means the client needs no knowledge of which it is.
+  const apiPath = url.pathname.startsWith("/api/")
+    ? url.pathname.slice(4)
+    : url.pathname === "/api"
+      ? "/"
+      : null
+  const routed = apiPath ?? url.pathname
+  const parts = routed.split("/").filter(Boolean)
 
   // The web client is served from a different origin in dev.
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Headers", "content-type, authorization")
   if (req.method === "OPTIONS") return void res.writeHead(204).end()
 
-  if (req.method === "GET" && url.pathname === "/health") {
+  if (req.method === "GET" && routed === "/health") {
     return send(res, 200, { version: VERSION, uptime: Date.now() - STARTED, pid: process.pid })
   }
 
-  if (req.method === "GET" && url.pathname === "/events") {
+  if (req.method === "GET" && routed === "/events") {
     return sse(deps, req, res, Number(req.headers["last-event-id"] ?? url.searchParams.get("after") ?? 0))
   }
 
-  if (req.method === "GET" && url.pathname === "/agents") {
+  if (req.method === "GET" && routed === "/agents") {
     return send(res, 200, { agents: await detectAll() })
   }
 
-  if (req.method === "GET" && url.pathname === "/repo/check") {
+  if (req.method === "GET" && routed === "/repo/check") {
     const p = url.searchParams.get("path") ?? ""
     return send(res, 200, await checkRepo(expandHome(p)))
   }
 
-  if (req.method === "GET" && url.pathname === "/boards") {
-    return send(res, 200, { boards: listBoards(deps.store) })
+  if (req.method === "GET" && routed === "/boards") {
+    return send(res, 200, { boards: deps.engine.projections.boards() })
   }
 
-  if (req.method === "POST" && url.pathname === "/boards") {
-    const body = await json<{ name?: string; repoPath: string }>(req)
+  if (req.method === "POST" && routed === "/boards") {
+    const body = await json<{
+      name?: string
+      repoPath: string
+      setup?: string | null
+      carry?: string[]
+    }>(req)
     if (!body?.repoPath) return fail(res, 400, "bad_request", "repoPath required")
 
     // Validate here rather than at first run. A board pointed at a
@@ -83,7 +99,18 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
 
     const boardId = id("board")
     const name = body.name?.trim() || check.name || "board"
-    emit(deps, event("board.created", { boardId, name, repoPath: check.path }))
+    emit(
+      deps,
+      event("board.created", {
+        boardId,
+        name,
+        repoPath: check.path,
+        // Default to what the repo's lockfiles imply, so a board works on
+        // first run without anyone having to know this setting exists.
+        setup: body.setup === undefined ? check.suggestedSetup : body.setup,
+        carry: body.carry ?? check.suggestedCarry,
+      }),
+    )
     // Seed the lifecycle lanes. Each declares the lane it represents, so the
     // server can move notes between them as their status changes.
     const LANES = [
@@ -105,23 +132,45 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
         }),
       )
     }
-    const view = projectBoard(deps.store, boardId)!
+    const view = deps.engine.view(boardId)!
     return send(res, 200, { ok: true, seq: view.seq, board: view.board })
+  }
+
+  // GET /boards/:id/forge
+  if (req.method === "GET" && parts[0] === "boards" && parts[2] === "forge") {
+    const view = deps.engine.view(parts[1]!)
+    if (!view) return fail(res, 404, "board_not_found", "no such board")
+    return send(res, 200, await detectForge(view.board.repoPath))
+  }
+
+  // POST /boards/:id/setup
+  if (req.method === "POST" && parts[0] === "boards" && parts[2] === "setup") {
+    const body = await json<{ setup: string | null; carry?: string[] }>(req)
+    if (!deps.engine.view(parts[1]!)) return fail(res, 404, "board_not_found", "no such board")
+    const e = emit(
+      deps,
+      event("board.setup", {
+        boardId: parts[1]!,
+        setup: body?.setup ?? null,
+        ...(body?.carry ? { carry: body.carry } : {}),
+      }),
+    )
+    return send(res, 200, { ok: true, seq: e.seq })
   }
 
   // GET /boards/:id/view
   if (req.method === "GET" && parts[0] === "boards" && parts[2] === "view") {
-    const view = projectBoard(deps.store, parts[1]!)
+    const view = deps.engine.view(parts[1]!)
     if (!view) return fail(res, 404, "board_not_found", `no board ${parts[1]}`)
     return send(res, 200, view)
   }
 
-  if (req.method === "POST" && url.pathname === "/notes") {
+  if (req.method === "POST" && routed === "/notes") {
     const body = await json<{ boardId: string; columnId: string; title: string; body?: string }>(req)
     if (!body?.boardId || !body?.columnId || !body?.title)
       return fail(res, 400, "bad_request", "boardId, columnId and title required")
 
-    const view = projectBoard(deps.store, body.boardId)
+    const view = deps.engine.view(body.boardId)
     if (!view) return fail(res, 404, "board_not_found", `no board ${body.boardId}`)
 
     const last = notesIn(view, body.columnId).at(-1)
@@ -141,11 +190,29 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   }
 
   // GET /notes/:id/diff
+  //
+  // The live worktree is the truth while it exists — a note can still be
+  // running, and its diff grows under us. Once review is decided the worktree
+  // is gone, so we fall back to the snapshot taken when review opened.
   if (req.method === "GET" && parts[0] === "notes" && parts[2] === "diff") {
-    const wt = deps.runner.worktreeOf(parts[1]!)
-    if (!wt) return send(res, 200, { diff: "", stat: "", branch: null })
-    const [diff, stat] = await Promise.all([gitDiff(wt), diffStat(wt)])
-    return send(res, 200, { diff, stat, branch: wt.branch })
+    const noteId = parts[1]!
+    const wt = deps.runner.worktreeOf(noteId)
+    if (wt) {
+      try {
+        const [diff, stat] = await Promise.all([gitDiff(wt), diffStat(wt)])
+        return send(res, 200, { diff, stat, branch: wt.branch, capturedAt: null })
+      } catch {
+        // Worktree remembered but no longer on disk. The snapshot is all we have.
+      }
+    }
+    const saved = deps.engine.store.savedDiff(noteId)
+    if (!saved) return send(res, 200, { diff: "", stat: "", branch: null, capturedAt: null })
+    return send(res, 200, {
+      diff: saved.diff,
+      stat: saved.stat,
+      branch: saved.branch,
+      capturedAt: saved.ts,
+    })
   }
 
   // POST /notes/:id/<action>
@@ -156,21 +223,24 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   // GET /runs/:id/transcript
   if (req.method === "GET" && parts[0] === "runs" && parts[2] === "transcript") {
     const after = Number(url.searchParams.get("after") ?? 0)
-    const frames = deps.store.transcriptSince(parts[1]!, after)
+    const frames = deps.engine.store.transcriptSince(parts[1]!, after)
     return send(res, 200, { frames, nextAfter: frames.at(-1)?.seq ?? null })
   }
 
   // POST /runs/:id/cancel
   if (req.method === "POST" && parts[0] === "runs" && parts[2] === "cancel") {
-    return send(res, 200, { ok: true, seq: deps.store.head(), cancelled: deps.runner.cancel(parts[1]!) })
+    return send(res, 200, { ok: true, seq: deps.engine.head(), cancelled: deps.runner.cancel(parts[1]!) })
   }
 
   // GET /runs/:id/output
   if (req.method === "GET" && parts[0] === "runs" && parts[2] === "output") {
     const after = Number(url.searchParams.get("after") ?? 0)
-    const lines = deps.store.outputSince(parts[1]!, after)
+    const lines = deps.engine.store.outputSince(parts[1]!, after)
     return send(res, 200, { lines, nextAfter: lines.at(-1)?.seq ?? null })
   }
+
+  // Anything that isn't the API is the web client, if one is built.
+  if (req.method === "GET" && apiPath === null && serveStatic(url.pathname, res)) return
 
   return fail(res, 404, "bad_request", `no route for ${req.method} ${url.pathname}`)
 }
@@ -182,9 +252,10 @@ async function noteAction(
   action: string,
   req: IncomingMessage,
 ) {
-  const view = findBoardOf(deps.store, noteId)
+  const view = deps.engine.boardOf(noteId)
   if (!view) return fail(res, 404, "note_not_found", `no note ${noteId}`)
-  const note = view.notes.find((n) => n.id === noteId)!
+  const note = view.notes.find((n) => n.id === noteId)
+  if (!note) return fail(res, 404, "note_not_found", `no note ${noteId}`)
 
   switch (action) {
     case "edit": {
@@ -212,6 +283,34 @@ async function noteAction(
       const e = emit(deps, event("note.assigned", { noteId, agent: b.agent }))
       return send(res, 200, { ok: true, seq: e.seq })
     }
+    case "pr": {
+      if (!note.branch) return fail(res, 409, "no_branch", "this note has not produced a branch yet")
+
+      const forge = await detectForge(view.board.repoPath)
+      if (!forge.available) return fail(res, 409, "no_forge", forge.reason ?? "no forge available")
+
+      const b = await json<{ draft?: boolean }>(req)
+      try {
+        const pr = await openPr(
+          view.board.repoPath,
+          note.branch,
+          note.title,
+          prBody(note),
+          b?.draft ?? false,
+        )
+        const e = emit(deps, event("note.pr", { noteId, pr }))
+        return send(res, 200, { ok: true, seq: e.seq, pr })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        // A PR may already exist for this branch; if so, adopt it rather than
+        // reporting a failure the user can do nothing about.
+        await deps.prs.refresh(view.board.id, noteId)
+        const now = deps.engine.boardOf(noteId)?.notes.find((n) => n.id === noteId)
+        if (now?.pr) return send(res, 200, { ok: true, seq: deps.engine.head(), pr: now.pr })
+        return fail(res, 409, "internal", message)
+      }
+    }
+
     case "policy": {
       const b = await json<{ policy: "repo" | "full" }>(req)
       if (b?.policy !== "repo" && b?.policy !== "full")
@@ -232,14 +331,14 @@ async function noteAction(
         return fail(res, 409, "invalid_transition", `note is already ${note.status}`)
 
       const runId = deps.runner.request(view.board.id, noteId, agent)
-      return send(res, 200, { ok: true, seq: deps.store.head(), runId })
+      return send(res, 200, { ok: true, seq: deps.engine.head(), runId })
     }
     case "message": {
       const b = await json<{ text: string }>(req)
       if (!b?.text?.trim()) return fail(res, 400, "bad_request", "text required")
       try {
         const delivery = deps.runner.steer(view.board.id, noteId, b.text.trim())
-        return send(res, 200, { ok: true, seq: deps.store.head(), delivery })
+        return send(res, 200, { ok: true, seq: deps.engine.head(), delivery })
       } catch (err) {
         return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))
       }
@@ -301,9 +400,9 @@ function sse(deps: ServerDeps, req: IncomingMessage, res: ServerResponse, after:
     "x-accel-buffering": "no",
   })
 
-  for (const e of deps.store.since(after)) write(res, e)
+  for (const e of deps.engine.store.since(after)) write(res, e)
 
-  const unsubscribe = deps.bus.subscribe((f) => write(res, f))
+  const unsubscribe = deps.engine.bus.subscribe((f) => write(res, f))
   const beat = setInterval(() => res.write(":\n\n"), 15_000)
 
   req.on("close", () => {
@@ -316,8 +415,8 @@ function write(res: ServerResponse, f: StreamFrame) {
   // Transcript frames deliberately carry no `id:`. Per the SSE spec that
   // leaves the client's Last-Event-ID untouched, so a reconnect resumes the
   // domain log exactly where it left off instead of replaying agent chatter.
-  if (isTranscript(f)) {
-    res.write(`event: transcript\ndata: ${JSON.stringify(f)}\n\n`)
+  if (isEphemeral(f)) {
+    res.write(`event: ${f.kind}\ndata: ${JSON.stringify(f)}\n\n`)
     return
   }
   res.write(`id: ${f.seq}\nevent: ${f.type}\ndata: ${JSON.stringify(f)}\n\n`)
@@ -328,18 +427,16 @@ function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(homedir(), p.slice(1)) : p
 }
 
-function findBoardOf(store: Store, noteId: string): BoardView | null {
-  for (const b of listBoards(store)) {
-    const view = projectBoard(store, b.id)
-    if (view?.notes.some((n) => n.id === noteId)) return view
-  }
-  return null
+/** The PR description. Says what produced it, because a reviewer will ask. */
+function prBody(note: { body: string; agent: string | null }): string {
+  const lines = [note.body.trim() || "_No description given._", ""]
+  lines.push("---")
+  lines.push(`Opened from a kandy note${note.agent ? `, run by \`${note.agent}\`` : ""}.`)
+  return lines.join("\n")
 }
 
-function emit(deps: ServerDeps, pending: Parameters<Store["append"]>[0]) {
-  const e = deps.store.append(pending)
-  deps.bus.publish(e)
-  return e
+function emit(deps: ServerDeps, pending: Parameters<Engine["emit"]>[0]) {
+  return deps.engine.emit(pending)
 }
 
 async function json<T>(req: IncomingMessage): Promise<T | null> {

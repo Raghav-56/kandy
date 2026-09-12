@@ -1,9 +1,9 @@
-import { Store } from "./store.js"
-import { Bus } from "./bus.js"
+import { Engine } from "./engine.js"
+import { PrWatch } from "./prwatch.js"
 import { Runner } from "./runner.js"
 import { createHttpServer } from "./http.js"
-import { listBoards, projectBoard } from "./projection.js"
 import { DB_PATH } from "./paths.js"
+import { hasWebBuild } from "./static.js"
 
 const DEFAULT_PORT = 4477
 const DEFAULT_SLOTS = 4
@@ -34,25 +34,31 @@ function main(): void {
   const slots = intFlag(args, "--slots", DEFAULT_SLOTS)
   const json = args.includes("--json")
 
-  const store = new Store()
-  const bus = new Bus()
-  const runner = new Runner(store, bus, (boardId) => projectBoard(store, boardId), slots)
+  const engine = new Engine()
+  const prs = new PrWatch(engine)
+  const runner = new Runner(engine, slots, (boardId, noteId) =>
+    void prs.refresh(boardId, noteId).catch(() => {}),
+  )
 
   // A daemon that died mid-run leaves notes claiming to be running. They
   // aren't. Fail them loudly rather than showing a board that lies.
-  for (const b of listBoards(store)) {
-    const view = projectBoard(store, b.id)
+  for (const b of engine.projections.boards()) {
+    const view = engine.view(b.id)
     if (view) runner.reconcile(view)
   }
 
-  const server = createHttpServer({ store, bus, runner })
+  prs.start()
+  const server = createHttpServer({ engine, runner, prs })
   server.listen(port, "127.0.0.1", () => {
     if (json) {
       console.log(JSON.stringify({ port, dbPath: DB_PATH, slots }))
       return
     }
-    console.log(`kandy server  http://127.0.0.1:${port}`)
+    console.log(`kandy         http://127.0.0.1:${port}`)
     console.log(`state         ${DB_PATH}`)
+    if (!hasWebBuild()) {
+      console.log(`board         not built — run \`pnpm build\` to serve the UI from here`)
+    }
     console.log(`slots         ${slots}`)
   })
 
@@ -60,8 +66,9 @@ function main(): void {
     if (json) console.error("\nshutting down…")
     else console.log("\nshutting down…")
     runner.shutdown()
+    prs.stop()
     server.close()
-    store.close()
+    engine.close()
     process.exit(0)
   }
   process.on("SIGINT", shutdown)

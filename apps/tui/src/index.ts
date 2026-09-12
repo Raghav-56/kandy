@@ -283,9 +283,8 @@ async function main(): Promise<void> {
   enter()
   draw()
 
-  const close = client.events(
-    frame.view.seq,
-    (e) => {
+  const close = client.events(frame.view.seq, {
+    onEvent: (e) => {
       // The stream replays from Last-Event-ID after a reconnect; anything the
       // snapshot already folded in is a no-op we can skip outright.
       if (e.seq <= frame.view.seq) return
@@ -293,12 +292,12 @@ async function main(): Promise<void> {
       frame.view = reduce(frame.view, e)
       draw()
     },
-    () => {
+    onError: () => {
       // EventSource reconnects on its own; say so rather than exiting.
       frame.connected = false
       draw()
     },
-  )
+  })
 
   // Motion is how a terminal shows liveness. Only spin when something is live.
   const beat = setInterval(() => {
@@ -355,8 +354,38 @@ function leave(): void {
 }
 process.on("exit", leave)
 
+/**
+ * Node reports a refused connection as a bare `TypeError: fetch failed`, with
+ * the real reason buried in a `cause` chain (and sometimes an AggregateError,
+ * one entry per address it tried). Dumping that at someone whose only mistake
+ * was not starting the daemon is noise, so recognise it and say the fix.
+ */
+const OFFLINE_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ETIMEDOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_SOCKET",
+])
+
+function isOffline(err: unknown, depth = 0): boolean {
+  if (depth > 4 || typeof err !== "object" || err === null) return false
+  const e = err as { code?: unknown; cause?: unknown; errors?: unknown }
+  if (typeof e.code === "string" && OFFLINE_CODES.has(e.code)) return true
+  if (Array.isArray(e.errors) && e.errors.some((inner) => isOffline(inner, depth + 1))) return true
+  return isOffline(e.cause, depth + 1)
+}
+
 main().catch((err: unknown) => {
   leave()
-  console.error(err instanceof Error ? err.message : err)
+  if (isOffline(err)) {
+    console.error(`no kandy server at ${BASE} — start it with \`kandy serve\``)
+  } else {
+    console.error(err instanceof Error ? err.message : err)
+  }
   process.exit(1)
 })

@@ -7,7 +7,13 @@ export type AgentEvent =
   | { kind: "text"; text: string }
   | { kind: "tool"; tool: string; detail: string; status: "started" | "completed" | "failed" }
   | { kind: "blocked"; requestId: string; detail: string }
-  | { kind: "usage"; text: string }
+  | {
+      kind: "usage"
+      text: string
+      costUsd: number | null
+      tokens: number | null
+      turns: number | null
+    }
   /**
    * The agent finished a turn. Agents we hold stdin open for (to steer them)
    * will otherwise sit waiting for more input forever, so this is what tells

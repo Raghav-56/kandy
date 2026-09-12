@@ -1,8 +1,24 @@
-import { useEffect, useRef, useState } from "react"
-import type { AgentId, AgentInfo, BoardView, Note, Policy, TranscriptFrame } from "@kandy/core"
+import { useEffect, useState } from "react"
+import type {
+  ActivityFrame,
+  AgentId,
+  AgentInfo,
+  BoardView,
+  Forge,
+  Note,
+  Policy,
+  TranscriptFrame,
+} from "@kandy/core"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/input"
-import { cn, relTime } from "@/lib/utils"
+import { cn, compact, duration, money } from "@/lib/utils"
+import { useTick } from "@/hooks/useTick"
+import { AgentMark, agentLabel } from "./AgentMark"
+import { DiffView } from "./DiffView"
+import { PrBadge } from "./PrBadge"
+import { Stat } from "./Stat"
+import { InlineEdit } from "./InlineEdit"
+import { Transcript } from "./Transcript"
 import { STYLES } from "./status"
 
 type Props = {
@@ -10,6 +26,8 @@ type Props = {
   view: BoardView
   agents: AgentInfo[]
   frames: TranscriptFrame[]
+  activity: ActivityFrame | undefined
+  onEdit: (patch: { title?: string; body?: string }) => Promise<boolean>
   onClose: () => void
   onRun: (agent?: AgentId) => void
   onCancel: (runId: string) => void
@@ -17,26 +35,42 @@ type Props = {
   onPolicy: (policy: Policy) => void
   onSteer: (text: string) => Promise<"live" | "queued" | undefined>
   onReview: (decision: "merge" | "discard") => void
+  forge: Forge | null
+  onOpenPr: () => Promise<void>
   onDelete: () => void
-  loadDiff: () => Promise<{ diff: string; stat: string } | undefined>
+  loadDiff: () => Promise<{ diff: string; capturedAt: number | null } | undefined>
 }
 
 export function Inspector(p: Props) {
   const [tab, setTab] = useState<"stream" | "diff">("stream")
-  const [diff, setDiff] = useState<{ diff: string; stat: string } | null>(null)
+  const [diff, setDiff] = useState<{ text: string; capturedAt: number | null } | null>(null)
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const [delivery, setDelivery] = useState<string | null>(null)
+  const [pring, setPring] = useState(false)
 
   const run = p.view.runs.find((r) => r.id === p.note.runId)
   const live = p.note.status === "running" || p.note.status === "blocked"
   const reviewable = p.note.status === "review"
   const s = STYLES[p.note.status]
+  useTick(live)
 
   useEffect(() => {
     setDiff(null)
-    if (tab === "diff") void p.loadDiff().then((d) => d && setDiff(d))
+    if (tab === "diff")
+      void p.loadDiff().then((d) => d && setDiff({ text: d.diff, capturedAt: d.capturedAt }))
   }, [tab, p.note.id])
+
+  // Jump to the diff as soon as there is one to judge.
+  useEffect(() => {
+    if (reviewable) setTab("diff")
+  }, [reviewable])
+
+  async function openPr() {
+    setPring(true)
+    await p.onOpenPr()
+    setPring(false)
+  }
 
   async function send() {
     const text = draft.trim()
@@ -46,106 +80,184 @@ export function Inspector(p: Props) {
     setSending(false)
     if (how) {
       setDraft("")
-      setDelivery(how === "live" ? "sent to the running agent" : "queued as a follow-up")
+      setDelivery(how === "live" ? "sent to the running agent" : "queued as a follow-up run")
       setTimeout(() => setDelivery(null), 4000)
     }
   }
 
+  const policy = p.note.policy ?? "repo"
+  const canOpenPr = Boolean(p.forge?.available && p.note.branch && !p.note.pr)
+
   return (
-    <aside className="flex h-full w-[440px] shrink-0 flex-col border-l border-line-soft bg-panel">
-      <header className="border-b border-line-soft px-5 py-4">
+    <aside className="flex h-full w-[500px] shrink-0 flex-col border-l border-line-soft bg-panel">
+      <header className="px-5 pb-4 pt-4">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  s.dot,
-                  p.note.status === "running" && "breathe",
-                )}
+                className={cn("h-1.5 w-1.5 rounded-full", s.dot, live && "breathe")}
               />
-              <span className="label">{s.label}</span>
-              {run && <span className="label">· {relTime(run.startedAt)} ago</span>}
+              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-dim">
+                {s.label}
+              </span>
+              {p.note.agent && (
+                <>
+                  <span className="text-faint">·</span>
+                  <AgentMark agent={p.note.agent} size={12} />
+                  <span className="text-[11.5px] text-dim">{agentLabel(p.note.agent)}</span>
+                </>
+              )}
             </div>
-            <h2 className="mt-2 text-[15px] font-medium leading-snug">{p.note.title}</h2>
+            <h2 className="mt-2.5 text-[17px] font-medium leading-snug tracking-[-0.015em]">
+              <InlineEdit
+                key={p.note.id}
+                value={p.note.title}
+                label="Edit title"
+                required
+                rows={2}
+                onSave={(title) => p.onEdit({ title })}
+              />
+            </h2>
           </div>
           <button
             onClick={p.onClose}
-            className="-mr-1 -mt-1 h-7 w-7 rounded-md text-faint transition-colors hover:bg-panel-2 hover:text-ink"
+            aria-label="Close"
+            className="-mr-1.5 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-dim transition-colors hover:bg-panel-2 hover:text-ink"
           >
             ✕
           </button>
         </div>
 
-        {p.note.branch && (
-          <div className="mt-3 truncate font-mono text-[11px] text-faint">{p.note.branch}</div>
+        {/* Everything a run cost, in one scannable row. */}
+        {run && (
+          <div className="mt-4 grid grid-cols-4 gap-3 rounded-xl border border-line-soft bg-panel-2 px-4 py-3">
+            <Stat
+              label="Elapsed"
+              value={duration(run.startedAt, run.endedAt)}
+              tone={live ? "amber" : "default"}
+            />
+            <Stat label="Turns" value={run.turns ? String(run.turns) : "—"} />
+            <Stat label="Tokens" value={compact(run.tokens) ?? "—"} />
+            <Stat label="Cost" value={money(run.costUsd) ?? "—"} />
+          </div>
         )}
 
-        <div className="mt-3.5 flex flex-wrap items-center gap-2">
+        {p.note.branch && (
+          <div className="mt-3 flex items-center gap-2.5">
+            <span className="min-w-0 truncate font-mono text-[11px] text-faint" title={p.note.branch}>
+              {p.note.branch}
+            </span>
+            {p.note.pr && <PrBadge pr={p.note.pr} onDark size="md" />}
+            {p.note.stat && (
+              <span className="ml-auto shrink-0 text-[11px] tabular-nums">
+                <span className="text-sage">+{p.note.stat.insertions}</span>{" "}
+                <span className="text-coral">−{p.note.stat.deletions}</span>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Live activity, spelled out rather than buried in the stream. */}
+        {live && p.activity && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#3a2f18] bg-[#17130b] px-3 py-2">
+            <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber" />
+            <span className="shrink-0 text-[11.5px] font-medium text-amber">
+              {p.activity.tool}
+            </span>
+            <span className="truncate font-mono text-[11px] text-[#b39456]">
+              {p.activity.detail}
+            </span>
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <select
             value={p.note.agent ?? ""}
             onChange={(e) => p.onAssign(e.target.value as AgentId)}
-            className="h-7 rounded-lg border border-line bg-panel-2 px-2 text-[12px] text-ink"
+            className="h-8 rounded-lg border border-line bg-panel-2 px-2.5 text-[12px] text-ink"
           >
             <option value="" disabled>
               agent
             </option>
             {p.agents.map((a) => (
               <option key={a.id} value={a.id} disabled={!a.installed}>
-                {a.id}
+                {agentLabel(a.id)}
                 {a.installed ? "" : " — not installed"}
               </option>
             ))}
           </select>
 
-          <PolicyToggle value={p.note.policy ?? "repo"} onChange={p.onPolicy} disabled={live} />
+          <PolicyToggle value={policy} onChange={p.onPolicy} disabled={live} />
 
           {!live && !reviewable && (
-            <Button variant="solid" onClick={() => p.onRun()} disabled={!p.note.agent}>
+            <Button variant="solid" size="md" onClick={() => p.onRun()} disabled={!p.note.agent}>
               {p.note.status === "failed" ? "Retry" : "Run"}
             </Button>
           )}
           {live && run && (
-            <Button variant="outline" onClick={() => p.onCancel(run.id)}>
+            <Button variant="outline" size="md" onClick={() => p.onCancel(run.id)}>
               Stop
+            </Button>
+          )}
+          {canOpenPr && !live && (
+            <Button variant="outline" size="md" onClick={() => void openPr()} disabled={pring}>
+              {pring ? "Opening…" : "Open PR"}
             </Button>
           )}
           {reviewable && (
             <>
-              <Button variant="solid" onClick={() => p.onReview("merge")}>
-                Merge
+              <Button variant="solid" size="md" onClick={() => p.onReview("merge")}>
+                {p.note.pr ? "Merge locally" : "Merge"}
               </Button>
-              <Button variant="danger" onClick={() => p.onReview("discard")}>
+              <Button variant="danger" size="md" onClick={() => p.onReview("discard")}>
                 Discard
               </Button>
             </>
           )}
 
-          <button
-            onClick={p.onDelete}
-            className="ml-auto text-[11.5px] text-faint transition-colors hover:text-coral"
-          >
-            Delete
-          </button>
         </div>
       </header>
 
-      <nav className="flex items-center gap-1 border-b border-line-soft px-3 py-1.5">
+      <nav className="flex items-center gap-1 border-y border-line-soft px-4 py-2">
         {(["stream", "diff"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={cn(
-              "rounded-md px-2.5 py-1 text-[12px] capitalize transition-colors",
+              "rounded-lg px-3 py-1.5 text-[12.5px] capitalize transition-colors",
               tab === t ? "bg-panel-2 text-ink" : "text-dim hover:text-ink",
             )}
           >
             {t}
+            {t === "diff" && p.note.stat && p.note.stat.files > 0 && (
+              <span className="ml-1.5 text-[11px] tabular-nums text-faint">
+                {p.note.stat.files}
+              </span>
+            )}
           </button>
         ))}
+
+        {/* Destructive, and never competing with the review verdict. */}
+        <button
+          onClick={p.onDelete}
+          className="ml-auto rounded-lg px-2.5 py-1.5 text-[11.5px] text-faint transition-colors hover:bg-[#1d1312] hover:text-coral"
+        >
+          Delete note
+        </button>
       </nav>
 
-      {tab === "stream" ? <Stream frames={p.frames} body={p.note.body} /> : <Diff diff={diff} />}
+      {tab === "stream" ? (
+        <Transcript
+          key={p.note.id}
+          frames={p.frames}
+          prompt={p.note.body}
+          onEditPrompt={(body) => p.onEdit({ body })}
+        />
+      ) : diff === null ? (
+        <p className="flex-1 px-5 py-6 text-center text-[12px] text-faint">Loading…</p>
+      ) : (
+        <DiffView diff={diff.text} capturedAt={diff.capturedAt} />
+      )}
 
       {/* Steering: the point of a board you can walk up to mid-run. */}
       <div className="border-t border-line-soft p-3">
@@ -190,116 +302,18 @@ function PolicyToggle({
       title={
         full
           ? "Full access: the agent can run any command, including outside this repo. Click to restrict."
-          : "Repo only: the agent can edit files but most shell commands are refused — including running tests. Click to allow everything."
+          : "Repo only: the agent can edit files, but most shell commands are refused — including running tests. Click to allow everything."
       }
       className={cn(
-        "h-7 rounded-lg border px-2.5 text-[11.5px] transition-colors disabled:opacity-40",
+        "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11.5px] transition-colors disabled:opacity-40",
         full
           ? "border-[#4a3a20] bg-[#1f1810] text-amber"
           : "border-line bg-panel-2 text-dim hover:text-ink",
       )}
     >
-      {full ? "full access" : "repo only"}
+      <span className={cn("h-1.5 w-1.5 rounded-full", full ? "bg-amber" : "bg-[#3a3a42]")} />
+      {full ? "Full access" : "Repo only"}
     </button>
   )
 }
 
-function Stream({ frames, body }: { frames: TranscriptFrame[]; body: string }) {
-  const end = useRef<HTMLDivElement>(null)
-  const box = useRef<HTMLDivElement>(null)
-  const [pinned, setPinned] = useState(true)
-
-  useEffect(() => {
-    // Only autoscroll when already at the bottom. Yanking someone back down
-    // while they're reading is the rudest thing a log can do.
-    if (pinned) end.current?.scrollIntoView({ block: "end" })
-  }, [frames.length, pinned])
-
-  return (
-    <div
-      ref={box}
-      onScroll={() => {
-        const el = box.current
-        if (el) setPinned(el.scrollHeight - el.scrollTop - el.clientHeight < 40)
-      }}
-      className="flex-1 space-y-3 overflow-y-auto px-5 py-4"
-    >
-      {body && (
-        <div className="rounded-lg border border-line-soft bg-panel-2 px-3 py-2.5">
-          <div className="label">prompt</div>
-          <p className="mt-1.5 whitespace-pre-wrap text-[12.5px] leading-relaxed text-dim">
-            {body}
-          </p>
-        </div>
-      )}
-
-      {frames.length === 0 && <p className="text-[12px] text-faint">Nothing yet.</p>}
-
-      {frames.map((f) => {
-        const denied = f.meta === "permission"
-        return (
-          <div key={`${f.runId}-${f.seq}`} className="space-y-1">
-            {f.role !== "assistant" && (
-              <div
-                className={cn(
-                  "label",
-                  f.role === "error" && "text-coral",
-                  denied && "text-coral",
-                  f.role === "user" && "text-azure",
-                )}
-              >
-                {f.role === "tool" ? (f.meta ?? "tool") : denied ? "denied" : f.role}
-              </div>
-            )}
-            <p
-              className={cn(
-                "whitespace-pre-wrap break-words text-[12.5px] leading-relaxed",
-                f.role === "assistant" && "text-ink",
-                f.role === "user" && "rounded-lg border border-[#22304d] bg-[#141a26] px-2.5 py-2 text-[#c7d6f5]",
-                // Clamp rather than truncate: tool arguments are often long
-                // paths, and one line of a path tells you nothing.
-                f.role === "tool" && "line-clamp-2 font-mono text-[11.5px] text-faint",
-                f.role === "system" && "text-dim",
-                (f.role === "error" || denied) &&
-                  "rounded-lg border border-[#3d2621] bg-[#1d1312] px-2.5 py-2 text-[#e8b3a8]",
-              )}
-            >
-              {f.text}
-            </p>
-          </div>
-        )
-      })}
-      <div ref={end} />
-    </div>
-  )
-}
-
-function Diff({ diff }: { diff: { diff: string; stat: string } | null }) {
-  if (!diff) return <p className="flex-1 px-5 py-4 text-[12px] text-faint">Loading…</p>
-  if (!diff.diff.trim())
-    return <p className="flex-1 px-5 py-4 text-[12px] text-faint">No changes yet.</p>
-
-  return (
-    <div className="flex-1 overflow-auto px-5 py-4">
-      <pre className="mb-3 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-dim">
-        {diff.stat}
-      </pre>
-      <pre className="font-mono text-[11px] leading-[1.55]">
-        {diff.diff.split("\n").map((l, i) => (
-          <div
-            key={i}
-            className={cn(
-              "whitespace-pre-wrap break-all px-1",
-              l.startsWith("+") && !l.startsWith("+++") && "bg-[#12210f] text-[#a5d68f]",
-              l.startsWith("-") && !l.startsWith("---") && "bg-[#22100f] text-[#e0918a]",
-              l.startsWith("@@") && "mt-2 text-azure",
-              l.startsWith("diff ") && "mt-3 font-semibold text-ink",
-            )}
-          >
-            {l || " "}
-          </div>
-        ))}
-      </pre>
-    </div>
-  )
-}

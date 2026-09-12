@@ -40,6 +40,15 @@ export class Store {
         PRIMARY KEY (run_id, seq)
       );
 
+      CREATE TABLE IF NOT EXISTS diffs (
+        note_id TEXT    PRIMARY KEY,
+        run_id  TEXT    NOT NULL,
+        ts      INTEGER NOT NULL,
+        branch  TEXT    NOT NULL,
+        stat    TEXT    NOT NULL,
+        diff    TEXT    NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS output (
         run_id  TEXT    NOT NULL,
         seq     INTEGER NOT NULL,
@@ -128,6 +137,43 @@ export class Store {
       text: r.text,
       ...(r.meta ? { meta: r.meta } : {}),
     }))
+  }
+
+  /**
+   * Snapshot the review diff for a note.
+   *
+   * The worktree is deleted the moment a review is decided, and a branch can
+   * be deleted too — so the only moment the diff is guaranteed to exist is
+   * when review opens. It lives in its own table for the same reason output
+   * does: a full unified diff is far too big to replay through the event log.
+   *
+   * One row per note; a follow-up run that reopens review replaces it.
+   */
+  saveDiff(
+    noteId: string,
+    snapshot: { runId: string; branch: string; stat: string; diff: string },
+  ): void {
+    this.db
+      .prepare(
+        `INSERT INTO diffs (note_id, run_id, ts, branch, stat, diff) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(note_id) DO UPDATE SET
+           run_id = excluded.run_id,
+           ts     = excluded.ts,
+           branch = excluded.branch,
+           stat   = excluded.stat,
+           diff   = excluded.diff`,
+      )
+      .run(noteId, snapshot.runId, Date.now(), snapshot.branch, snapshot.stat, snapshot.diff)
+  }
+
+  savedDiff(noteId: string) {
+    return (
+      (this.db
+        .prepare("SELECT run_id, ts, branch, stat, diff FROM diffs WHERE note_id = ?")
+        .get(noteId) as
+        | { run_id: string; ts: number; branch: string; stat: string; diff: string }
+        | undefined) ?? null
+    )
   }
 
   appendOutput(runId: string, channel: "stdout" | "stderr", text: string): number {

@@ -127,6 +127,9 @@ export const claude: AgentAdapter = {
           out.push({
             kind: "usage",
             text: `${msg["num_turns"] ?? 1} turn(s) · ${tokens} tokens · $${cost.toFixed(4)}`,
+            costUsd: cost,
+            tokens,
+            turns: typeof msg["num_turns"] === "number" ? msg["num_turns"] : null,
           })
         }
         if (msg["is_error"]) {
