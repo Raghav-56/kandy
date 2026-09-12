@@ -274,9 +274,12 @@ async function noteAction(
             )
           }
         }
-        // Both verdicts end the same way: the worktree has served its purpose.
+        // Both verdicts end the same way: the worktree and the branch have
+        // served their purpose. A merged branch is safe to delete — the
+        // --no-ff merge commit names it, so the history stays readable — and a
+        // branch per note piles up fast if we keep them.
         await removeWorktree(view.board.repoPath, wt.path, true).catch(() => {})
-        if (b.decision === "discard") await deleteBranch(view.board.repoPath, wt.branch)
+        await deleteBranch(view.board.repoPath, wt.branch)
         deps.runner.forget(noteId)
       }
 
