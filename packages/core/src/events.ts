@@ -49,7 +49,7 @@ export type KandyEventMap = {
     error: string | null
   }
 
-  "review.opened": { noteId: NoteId; runId: RunId; branch: string }
+  "review.opened": { noteId: NoteId; runId: RunId; branch: string; stat: string }
   "review.decided": {
     noteId: NoteId
     decision: "merge" | "discard" | "revise"
@@ -58,6 +58,37 @@ export type KandyEventMap = {
 }
 
 export type KandyEventType = keyof KandyEventMap
+
+/**
+ * Transcript frames: what the agent is saying and doing, right now.
+ *
+ * These are deliberately NOT domain events. They are high volume, they are
+ * persisted in their own table, and putting them in the log would make board
+ * replay proportional to how chatty the agents were.
+ *
+ * They stream over the same SSE connection but carry no `id:` field, so they
+ * never move the client's Last-Event-ID. A reconnect resumes the domain log
+ * exactly where it left off and refetches the transcript of whatever note is
+ * open — which is the only place transcript is ever displayed.
+ */
+export type TranscriptRole = "assistant" | "user" | "tool" | "system" | "error"
+
+export type TranscriptFrame = {
+  kind: "transcript"
+  runId: RunId
+  seq: number
+  ts: number
+  role: TranscriptRole
+  text: string
+  /** Tool name for `tool` frames; agent-specific detail otherwise. */
+  meta?: string
+}
+
+export type StreamFrame = KandyEvent | TranscriptFrame
+
+export function isTranscript(f: StreamFrame): f is TranscriptFrame {
+  return "kind" in f && f.kind === "transcript"
+}
 
 export type KandyEvent<T extends KandyEventType = KandyEventType> = {
   [K in T]: EventMeta & { type: K; data: KandyEventMap[K] }

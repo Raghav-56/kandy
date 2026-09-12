@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { worktreeRoot } from "./paths.js"
 
@@ -94,6 +94,81 @@ export async function diff(wt: Worktree): Promise<string> {
 
 export async function removeWorktree(repoPath: string, dir: string, force = false): Promise<void> {
   await git(repoPath, "worktree", "remove", ...(force ? ["--force"] : []), dir)
+}
+
+/**
+ * Land a note's branch on the base branch it came from.
+ *
+ * Merged with --no-ff so a note is always one identifiable thing in history —
+ * "what did kandy do here" stays answerable a month later. A conflict is
+ * reported rather than resolved; the user has a worktree and an editor, and
+ * guessing at a merge on their behalf is how trust dies.
+ */
+export async function mergeBranch(
+  repoPath: string,
+  branch: string,
+): Promise<{ merged: boolean; conflict?: string }> {
+  try {
+    await git(repoPath, "merge", "--no-ff", "-m", `kandy: merge ${branch}`, branch)
+    return { merged: true }
+  } catch (err) {
+    // Leave the repo clean rather than parked in a half-merge the user has to
+    // discover on their own.
+    await git(repoPath, "merge", "--abort").catch(() => {})
+    return { merged: false, conflict: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+export async function deleteBranch(repoPath: string, branch: string): Promise<void> {
+  await git(repoPath, "branch", "-D", branch).catch(() => {})
+}
+
+/** Inspect a path before offering to make a board of it. */
+export async function checkRepo(p: string): Promise<{
+  path: string
+  exists: boolean
+  isRepo: boolean
+  dirty: boolean
+  head: string | null
+  branch: string | null
+  name: string | null
+  error: string | null
+}> {
+  const base = {
+    path: p,
+    exists: false,
+    isRepo: false,
+    dirty: false,
+    head: null,
+    branch: null,
+    name: null,
+    error: null,
+  }
+  if (!p.startsWith("/")) return { ...base, error: "path must be absolute" }
+  if (!existsSync(p)) return { ...base, error: "no such directory" }
+
+  try {
+    // --show-toplevel rather than a .git check: a path *inside* a repo should
+    // resolve to the repo, not be rejected.
+    const root = await git(p, "rev-parse", "--show-toplevel")
+    const [head, branch, status] = await Promise.all([
+      git(root, "rev-parse", "--short", "HEAD").catch(() => ""),
+      git(root, "rev-parse", "--abbrev-ref", "HEAD").catch(() => ""),
+      git(root, "status", "--porcelain"),
+    ])
+    return {
+      path: root,
+      exists: true,
+      isRepo: true,
+      dirty: status !== "",
+      head: head || null,
+      branch: branch || null,
+      name: path.basename(root),
+      error: null,
+    }
+  } catch {
+    return { ...base, exists: true, error: "not a git repository" }
+  }
 }
 
 /** True if the user has uncommitted work. Notes branch from HEAD and won't see

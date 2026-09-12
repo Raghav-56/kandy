@@ -1,0 +1,166 @@
+import { homedir } from "node:os"
+import path from "node:path"
+import type { AgentAdapter, AgentEvent } from "./types.js"
+
+/**
+ * Claude Code adapter.
+ *
+ * Written against real captured output from `claude -p --output-format
+ * stream-json --verbose` (v2.1.269), not from docs.
+ *
+ * Two decisions worth knowing:
+ *
+ * 1. The prompt goes over stdin, not argv, because `--input-format stream-json`
+ *    is what makes steering possible: the same channel takes further user
+ *    messages, turn by turn, against the same session.
+ *
+ * 2. `--permission-mode acceptEdits` lets the agent edit files without asking,
+ *    which is safe *here specifically* because its cwd is a throwaway worktree
+ *    on its own branch. Anything beyond that still needs approval — and in
+ *    headless mode Claude auto-denies what it cannot ask about, reporting it in
+ *    `result.permission_denials`. We surface those as blocked rather than
+ *    letting them vanish into a transcript nobody reads.
+ */
+export const claude: AgentAdapter = {
+  id: "claude",
+  bin: "claude",
+  credentials: [
+    path.join(homedir(), ".claude", ".credentials.json"),
+    // macOS keeps the credential in the Keychain, leaving only this behind.
+    path.join(homedir(), ".claude.json"),
+  ],
+
+  spawn({ cwd, prompt, resume }) {
+    return {
+      command: "claude",
+      args: [
+        "-p",
+        "--output-format",
+        "stream-json",
+        "--input-format",
+        "stream-json",
+        // Without --verbose the stream buffers to the end, which defeats the
+        // entire point of watching a run.
+        "--verbose",
+        "--permission-mode",
+        "acceptEdits",
+        // Echo our own messages back so the transcript shows steering in place.
+        "--replay-user-messages",
+        ...(resume ? ["--resume", resume] : []),
+      ],
+      env: { CLAUDE_PROJECT_DIR: cwd },
+      stdin: userMessage(prompt),
+    }
+  },
+
+  live: { encode: userMessage },
+
+  parse(line) {
+    if (!line.trim()) return []
+    let msg: Record<string, any>
+    try {
+      msg = JSON.parse(line)
+    } catch {
+      return [{ kind: "text", text: line }]
+    }
+
+    const out: AgentEvent[] = []
+    if (typeof msg["session_id"] === "string") {
+      out.push({ kind: "session", sessionId: msg["session_id"] })
+    }
+
+    switch (msg["type"]) {
+      case "assistant": {
+        for (const block of msg["message"]?.content ?? []) {
+          if (block?.type === "text" && block.text?.trim()) {
+            out.push({ kind: "text", text: block.text })
+          } else if (block?.type === "tool_use") {
+            out.push({
+              kind: "tool",
+              tool: String(block.name ?? "tool"),
+              detail: summarize(block.name, block.input),
+              status: "started",
+            })
+          }
+        }
+        break
+      }
+
+      case "user": {
+        // Tool results come back threaded as synthetic user messages. We only
+        // care about the failures — a transcript of every successful read is
+        // noise, but a denial is the thing the user needs to see.
+        for (const block of msg["message"]?.content ?? []) {
+          if (block?.type === "tool_result" && block.is_error) {
+            const text = typeof block.content === "string" ? block.content : "tool failed"
+            const denial = /permission/i.test(text)
+            out.push(
+              denial
+                ? { kind: "blocked", requestId: String(block.tool_use_id ?? ""), detail: text }
+                : { kind: "tool", tool: "result", detail: text.slice(0, 400), status: "failed" },
+            )
+          }
+        }
+        break
+      }
+
+      case "result": {
+        const denials = msg["permission_denials"]
+        if (Array.isArray(denials)) {
+          for (const d of denials) {
+            out.push({
+              kind: "blocked",
+              requestId: String(d?.tool_use_id ?? ""),
+              detail: `${d?.tool_name ?? "tool"} — ${summarize(d?.tool_name, d?.tool_input)}`,
+            })
+          }
+        }
+        const cost = msg["total_cost_usd"]
+        const usage = msg["usage"]
+        if (typeof cost === "number") {
+          const tokens = (usage?.input_tokens ?? 0) + (usage?.output_tokens ?? 0)
+          out.push({
+            kind: "usage",
+            text: `${msg["num_turns"] ?? 1} turn(s) · ${tokens} tokens · $${cost.toFixed(4)}`,
+          })
+        }
+        if (msg["is_error"]) {
+          out.push({ kind: "error", message: String(msg["result"] ?? "run failed") })
+        }
+        break
+      }
+
+      // Advertised rate-limit notices are interleaved into the stream and are
+      // not part of the conversation.
+      case "rate_limit_event":
+      case "system":
+        break
+    }
+    return out
+  },
+}
+
+/** The stdin wire format for a user turn, verified empirically. */
+function userMessage(text: string): string {
+  return (
+    JSON.stringify({
+      type: "user",
+      message: { role: "user", content: [{ type: "text", text }] },
+    }) + "\n"
+  )
+}
+
+/** A one-line gloss of a tool call, for the transcript. */
+function summarize(name: unknown, input: Record<string, unknown> | undefined): string {
+  if (!input) return ""
+  const pick = (k: string) => (typeof input[k] === "string" ? (input[k] as string) : null)
+  const first =
+    pick("command") ??
+    pick("file_path") ??
+    pick("path") ??
+    pick("pattern") ??
+    pick("prompt") ??
+    pick("description") ??
+    ""
+  return first.replace(/\s+/g, " ").slice(0, 200) || String(name ?? "")
+}

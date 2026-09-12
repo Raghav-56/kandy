@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite"
-import type { KandyEvent, PendingEvent } from "@kandy/core"
+import type { KandyEvent, PendingEvent, TranscriptFrame, TranscriptRole } from "@kandy/core"
 import { DB_PATH } from "./paths.js"
 
 /**
@@ -29,6 +29,16 @@ export class Store {
         data  TEXT    NOT NULL
       );
       CREATE INDEX IF NOT EXISTS events_type ON events(type);
+
+      CREATE TABLE IF NOT EXISTS transcript (
+        run_id TEXT    NOT NULL,
+        seq    INTEGER NOT NULL,
+        ts     INTEGER NOT NULL,
+        role   TEXT    NOT NULL,
+        text   TEXT    NOT NULL,
+        meta   TEXT,
+        PRIMARY KEY (run_id, seq)
+      );
 
       CREATE TABLE IF NOT EXISTS output (
         run_id  TEXT    NOT NULL,
@@ -67,6 +77,57 @@ export class Store {
       seq: number
     }
     return row.seq
+  }
+
+  /**
+   * Append a transcript frame. Sequence is per-run and dense, so a client can
+   * ask for "everything after 42" for one note without scanning the log.
+   */
+  appendTranscript(
+    runId: string,
+    role: TranscriptRole,
+    text: string,
+    meta?: string,
+  ): TranscriptFrame {
+    const row = this.db
+      .prepare("SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM transcript WHERE run_id = ?")
+      .get(runId) as { next: number }
+    const ts = Date.now()
+    this.db
+      .prepare("INSERT INTO transcript (run_id, seq, ts, role, text, meta) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(runId, row.next, ts, role, text, meta ?? null)
+    return {
+      kind: "transcript",
+      runId,
+      seq: row.next,
+      ts,
+      role,
+      text,
+      ...(meta ? { meta } : {}),
+    }
+  }
+
+  transcriptSince(runId: string, after = 0, limit = 1000): TranscriptFrame[] {
+    const rows = this.db
+      .prepare(
+        "SELECT seq, ts, role, text, meta FROM transcript WHERE run_id = ? AND seq > ? ORDER BY seq LIMIT ?",
+      )
+      .all(runId, after, limit) as {
+      seq: number
+      ts: number
+      role: TranscriptRole
+      text: string
+      meta: string | null
+    }[]
+    return rows.map((r) => ({
+      kind: "transcript" as const,
+      runId,
+      seq: r.seq,
+      ts: r.ts,
+      role: r.role,
+      text: r.text,
+      ...(r.meta ? { meta: r.meta } : {}),
+    }))
   }
 
   appendOutput(runId: string, channel: "stdout" | "stderr", text: string): number {

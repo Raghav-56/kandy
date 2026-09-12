@@ -1,19 +1,31 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
+import { homedir } from "node:os"
+import path from "node:path"
 import {
   between,
   event,
   id,
+  isTranscript,
   notesIn,
   type AgentId,
   type BoardView,
   type ErrorCode,
+  type StreamFrame,
 } from "@kandy/core"
 import type { Store } from "./store.js"
 import type { Bus } from "./bus.js"
 import type { Runner } from "./runner.js"
 import { listBoards, projectBoard } from "./projection.js"
 import { detectAll } from "./agents/index.js"
-import { isDirty } from "./worktree.js"
+import {
+  checkRepo,
+  deleteBranch,
+  diff as gitDiff,
+  diffStat,
+  isDirty,
+  mergeBranch,
+  removeWorktree,
+} from "./worktree.js"
 
 const VERSION = "0.0.0"
 const STARTED = Date.now()
@@ -50,16 +62,29 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     return send(res, 200, { agents: await detectAll() })
   }
 
+  if (req.method === "GET" && url.pathname === "/repo/check") {
+    const p = url.searchParams.get("path") ?? ""
+    return send(res, 200, await checkRepo(expandHome(p)))
+  }
+
   if (req.method === "GET" && url.pathname === "/boards") {
     return send(res, 200, { boards: listBoards(deps.store) })
   }
 
   if (req.method === "POST" && url.pathname === "/boards") {
-    const body = await json<{ name: string; repoPath: string }>(req)
-    if (!body?.name || !body?.repoPath) return fail(res, 400, "bad_request", "name and repoPath required")
+    const body = await json<{ name?: string; repoPath: string }>(req)
+    if (!body?.repoPath) return fail(res, 400, "bad_request", "repoPath required")
+
+    // Validate here rather than at first run. A board pointed at a
+    // non-repo is a board that looks fine until the moment it matters.
+    const check = await checkRepo(expandHome(body.repoPath))
+    if (!check.isRepo) {
+      return fail(res, 400, "not_a_repo", check.error ?? `${body.repoPath} is not a git repository`)
+    }
 
     const boardId = id("board")
-    emit(deps, event("board.created", { boardId, name: body.name, repoPath: body.repoPath }))
+    const name = body.name?.trim() || check.name || "board"
+    emit(deps, event("board.created", { boardId, name, repoPath: check.path }))
     // Seed the lifecycle lanes. They're labels; status on the note is authoritative.
     for (const [i, name] of ["Inbox", "Queued", "Running", "Review", "Done"].entries()) {
       emit(
@@ -107,9 +132,24 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     return send(res, 200, { ok: true, seq: e.seq, noteId })
   }
 
+  // GET /notes/:id/diff
+  if (req.method === "GET" && parts[0] === "notes" && parts[2] === "diff") {
+    const wt = deps.runner.worktreeOf(parts[1]!)
+    if (!wt) return send(res, 200, { diff: "", stat: "", branch: null })
+    const [diff, stat] = await Promise.all([gitDiff(wt), diffStat(wt)])
+    return send(res, 200, { diff, stat, branch: wt.branch })
+  }
+
   // POST /notes/:id/<action>
   if (req.method === "POST" && parts[0] === "notes" && parts[1]) {
     return noteAction(deps, res, parts[1], parts[2] ?? "", req)
+  }
+
+  // GET /runs/:id/transcript
+  if (req.method === "GET" && parts[0] === "runs" && parts[2] === "transcript") {
+    const after = Number(url.searchParams.get("after") ?? 0)
+    const frames = deps.store.transcriptSince(parts[1]!, after)
+    return send(res, 200, { frames, nextAfter: frames.at(-1)?.seq ?? null })
   }
 
   // POST /runs/:id/cancel
@@ -184,9 +224,52 @@ async function noteAction(
       const runId = deps.runner.request(view.board.id, noteId, agent)
       return send(res, 200, { ok: true, seq: deps.store.head(), runId })
     }
+    case "message": {
+      const b = await json<{ text: string }>(req)
+      if (!b?.text?.trim()) return fail(res, 400, "bad_request", "text required")
+      try {
+        const delivery = deps.runner.steer(view.board.id, noteId, b.text.trim())
+        return send(res, 200, { ok: true, seq: deps.store.head(), delivery })
+      } catch (err) {
+        return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))
+      }
+    }
+
     case "review": {
       const b = await json<{ decision: "merge" | "discard" | "revise"; comment?: string }>(req)
       if (!b?.decision) return fail(res, 400, "bad_request", "decision required")
+
+      // `revise` is steering, not a verdict: keep the worktree and the
+      // session, hand the agent the comment, and let it keep going.
+      if (b.decision === "revise") {
+        if (!b.comment?.trim())
+          return fail(res, 400, "bad_request", "revise needs a comment saying what to change")
+        const delivery = deps.runner.steer(view.board.id, noteId, b.comment.trim())
+        const e = emit(deps, event("review.decided", { noteId, decision: "revise", comment: b.comment }))
+        return send(res, 200, { ok: true, seq: e.seq, delivery })
+      }
+
+      const wt = deps.runner.worktreeOf(noteId)
+      if (wt) {
+        if (b.decision === "merge") {
+          const result = await mergeBranch(view.board.repoPath, wt.branch)
+          if (!result.merged) {
+            // Leave everything exactly as it was. A conflict is the user's
+            // call, and they still have the branch and the worktree.
+            return fail(
+              res,
+              409,
+              "worktree_failed",
+              `merge conflict on ${wt.branch} — resolve it yourself, the branch is intact:\n${result.conflict ?? ""}`,
+            )
+          }
+        }
+        // Both verdicts end the same way: the worktree has served its purpose.
+        await removeWorktree(view.board.repoPath, wt.path, true).catch(() => {})
+        if (b.decision === "discard") await deleteBranch(view.board.repoPath, wt.branch)
+        deps.runner.forget(noteId)
+      }
+
       const e = emit(deps, event("review.decided", { noteId, ...b }))
       return send(res, 200, { ok: true, seq: e.seq })
     }
@@ -206,7 +289,7 @@ function sse(deps: ServerDeps, req: IncomingMessage, res: ServerResponse, after:
 
   for (const e of deps.store.since(after)) write(res, e)
 
-  const unsubscribe = deps.bus.subscribe((e) => write(res, e))
+  const unsubscribe = deps.bus.subscribe((f) => write(res, f))
   const beat = setInterval(() => res.write(":\n\n"), 15_000)
 
   req.on("close", () => {
@@ -215,8 +298,20 @@ function sse(deps: ServerDeps, req: IncomingMessage, res: ServerResponse, after:
   })
 }
 
-function write(res: ServerResponse, e: { seq: number; type: string }) {
-  res.write(`id: ${e.seq}\nevent: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`)
+function write(res: ServerResponse, f: StreamFrame) {
+  // Transcript frames deliberately carry no `id:`. Per the SSE spec that
+  // leaves the client's Last-Event-ID untouched, so a reconnect resumes the
+  // domain log exactly where it left off instead of replaying agent chatter.
+  if (isTranscript(f)) {
+    res.write(`event: transcript\ndata: ${JSON.stringify(f)}\n\n`)
+    return
+  }
+  res.write(`id: ${f.seq}\nevent: ${f.type}\ndata: ${JSON.stringify(f)}\n\n`)
+}
+
+/** `~/code/thing` is what people actually type. */
+function expandHome(p: string): string {
+  return p.startsWith("~") ? path.join(homedir(), p.slice(1)) : p
 }
 
 function findBoardOf(store: Store, noteId: string): BoardView | null {

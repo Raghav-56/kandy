@@ -3,8 +3,12 @@ import type {
   AgentInfo,
   Board,
   BoardView,
+  Delivery,
   KandyEvent,
   OutputLine,
+  RepoCheck,
+  StreamFrame,
+  TranscriptFrame,
 } from "@kandy/core"
 
 export type ClientOptions = {
@@ -62,6 +66,9 @@ export class KandyClient {
   boards() {
     return this.req<{ boards: Board[] }>("GET", "/boards")
   }
+  checkRepo(path: string) {
+    return this.req<RepoCheck>("GET", `/repo/check?path=${encodeURIComponent(path)}`)
+  }
   createBoard(name: string, repoPath: string) {
     return this.req<{ board: Board; seq: number }>("POST", "/boards", { name, repoPath })
   }
@@ -96,6 +103,24 @@ export class KandyClient {
   reviewNote(noteId: string, decision: "merge" | "discard" | "revise", comment?: string) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/review`, { decision, comment })
   }
+  /** Steer a note: reaches a live agent if it takes stdin, else queues a follow-up. */
+  message(noteId: string, text: string) {
+    return this.req<{ delivery: Delivery; seq: number }>("POST", `/notes/${noteId}/message`, {
+      text,
+    })
+  }
+  diff(noteId: string) {
+    return this.req<{ diff: string; stat: string; branch: string | null }>(
+      "GET",
+      `/notes/${noteId}/diff`,
+    )
+  }
+  transcript(runId: string, after = 0) {
+    return this.req<{ frames: TranscriptFrame[]; nextAfter: number | null }>(
+      "GET",
+      `/runs/${runId}/transcript?after=${after}`,
+    )
+  }
   cancelRun(runId: string) {
     return this.req<{ seq: number }>("POST", `/runs/${runId}/cancel`, {})
   }
@@ -112,7 +137,12 @@ export class KandyClient {
    * EventSource handles reconnect and Last-Event-ID for us, which is most of
    * why the transport is SSE rather than a WebSocket we'd have to babysit.
    */
-  events(after: number, onEvent: (e: KandyEvent) => void, onError?: (e: Event) => void): () => void {
+  events(
+    after: number,
+    onEvent: (e: KandyEvent) => void,
+    onError?: (e: Event) => void,
+    onTranscript?: (f: TranscriptFrame) => void,
+  ): () => void {
     // baseUrl may be relative ("/api" behind a dev proxy), which `new URL`
     // rejects without a base. Resolve against the page origin when there is
     // one; fall back to a bare string for non-browser callers.
@@ -126,13 +156,17 @@ export class KandyClient {
     const es = new EventSource(url)
     const handler = (ev: MessageEvent) => {
       try {
-        onEvent(JSON.parse(ev.data) as KandyEvent)
+        const frame = JSON.parse(ev.data) as StreamFrame
+        if ("kind" in frame && frame.kind === "transcript") onTranscript?.(frame)
+        else onEvent(frame as KandyEvent)
       } catch (err) {
         console.error("[kandy] bad event payload", err)
       }
     }
     // Named SSE events don't fire onmessage, so bind each type explicitly.
-    for (const type of EVENT_TYPES) es.addEventListener(type, handler as EventListener)
+    for (const type of [...EVENT_TYPES, "transcript"]) {
+      es.addEventListener(type, handler as EventListener)
+    }
     if (onError) es.onerror = onError
 
     return () => es.close()

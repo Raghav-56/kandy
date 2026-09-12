@@ -1,4 +1,5 @@
 import type { AgentId, Board, BoardView } from "./domain.js"
+import type { TranscriptFrame } from "./events.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
 /**
@@ -22,6 +23,8 @@ export type Commands = {
     res: {}
   }
   "POST /runs/:id/cancel": { req: {}; res: {} }
+  /** Steer a note: talk to the live agent, or queue a follow-up that resumes it. */
+  "POST /notes/:id/message": { req: { text: string }; res: { delivery: Delivery } }
   "POST /runs/:id/respond": {
     req: { requestId: string; decision: "allow" | "deny"; comment?: string }
     res: {}
@@ -34,7 +37,17 @@ export type Queries = {
   "GET /boards/:id/view": { res: BoardView }
   "GET /agents": { res: { agents: AgentInfo[] } }
   "GET /runs/:id/output": { res: { lines: OutputLine[]; nextAfter: number | null } }
+  "GET /runs/:id/transcript": { res: { frames: TranscriptFrame[]; nextAfter: number | null } }
+  "GET /notes/:id/diff": { res: { diff: string; stat: string; branch: string | null } }
+  /** Validate a path before offering to make a board of it. */
+  "GET /repo/check": { res: RepoCheck }
 }
+
+/**
+ * How a steering message reached the agent. Surfaced to the user because the
+ * difference matters: "live" lands mid-turn, "queued" starts a new run.
+ */
+export type Delivery = "live" | "queued"
 
 export type AgentInfo = {
   id: AgentId
@@ -59,6 +72,18 @@ export type OutputLine = {
 export type Ok<T> = { ok: true; seq: number } & T
 export type Err = { ok: false; error: { code: ErrorCode; message: string; detail?: unknown } }
 
+export type RepoCheck = {
+  path: string
+  exists: boolean
+  isRepo: boolean
+  /** Uncommitted changes — notes branch from HEAD and won't see them. */
+  dirty: boolean
+  head: string | null
+  branch: string | null
+  name: string | null
+  error: string | null
+}
+
 export const ERROR_CODES = [
   "bad_request",
   "board_not_found",
@@ -67,6 +92,8 @@ export const ERROR_CODES = [
   "agent_not_available",
   "repo_dirty",
   "worktree_failed",
+  "not_a_repo",
+  "run_not_live",
   "invalid_transition",
   "internal",
 ] as const

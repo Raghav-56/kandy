@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { KandyClient } from "@kandy/client"
-import { reduce, type BoardView } from "@kandy/core"
+import { reduce, type BoardView, type TranscriptFrame } from "@kandy/core"
 
 /**
  * Snapshot, then stream. The reducer is the one in @kandy/core — the same code
@@ -11,6 +11,8 @@ export function useBoard(boardId: string | null) {
   const [view, setView] = useState<BoardView | null>(null)
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Live transcript, keyed by run. Bounded — see below. */
+  const [transcript, setTranscript] = useState<Record<string, TranscriptFrame[]>>({})
 
   // The stream must not be torn down and rebuilt every time the view updates,
   // so the live seq lives in a ref rather than the effect's dependencies.
@@ -21,6 +23,7 @@ export function useBoard(boardId: string | null) {
     let cancelled = false
     let close: (() => void) | undefined
 
+    setTranscript({})
     client
       .view(boardId)
       .then((snapshot) => {
@@ -32,19 +35,22 @@ export function useBoard(boardId: string | null) {
         close = client.events(
           snapshot.seq,
           (e) => {
-            // First event through the stream is proof the connection is real.
-            // Setting this before subscribing would make a failed stream look
-            // healthy, which is the one thing a status dot must never do.
-            setConnected(true)
             // Skip anything already folded into the snapshot.
             if (e.seq <= seq.current) return
             seq.current = e.seq
             setView((v) => (v ? reduce(v, e) : v))
           },
           () => setConnected(false),
+          (frame) => {
+            setTranscript((t) => {
+              const prev = t[frame.runId] ?? []
+              if (prev.some((f) => f.seq === frame.seq)) return t
+              // An agent can talk for a long time. Keep the tail; the full
+              // record is on disk and one fetch away.
+              return { ...t, [frame.runId]: [...prev, frame].slice(-400) }
+            })
+          },
         )
-        // No event may arrive for a while on a quiet board; the absence of an
-        // error is good enough to call it connected.
         setConnected(true)
       })
       .catch((err: Error) => !cancelled && setError(err.message))
@@ -55,18 +61,49 @@ export function useBoard(boardId: string | null) {
     }
   }, [boardId, client])
 
+  /** Backfill a run's transcript from disk when its note is opened. */
+  const loadTranscript = useCallback(
+    async (runId: string) => {
+      try {
+        const { frames } = await client.transcript(runId)
+        setTranscript((t) => {
+          const live = t[runId] ?? []
+          const seen = new Set(frames.map((f) => f.seq))
+          return { ...t, [runId]: [...frames, ...live.filter((f) => !seen.has(f.seq))] }
+        })
+      } catch {
+        // A missing transcript is not worth an error banner; the note may
+        // simply never have run.
+      }
+    },
+    [client],
+  )
+
   /**
    * Commands do not merge a response body — they return a seq and the change
    * arrives on the stream like every other change. One code path for state,
    * which is what makes two browser tabs agree for free.
    */
-  const act = useCallback(async (fn: (c: KandyClient) => Promise<unknown>) => {
-    try {
-      await fn(client)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }, [client])
+  const act = useCallback(
+    async <T,>(fn: (c: KandyClient) => Promise<T>): Promise<T | undefined> => {
+      try {
+        return await fn(client)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+        return undefined
+      }
+    },
+    [client],
+  )
 
-  return { client, view, connected, error, act, clearError: () => setError(null) }
+  return {
+    client,
+    view,
+    connected,
+    error,
+    act,
+    transcript,
+    loadTranscript,
+    clearError: () => setError(null),
+  }
 }

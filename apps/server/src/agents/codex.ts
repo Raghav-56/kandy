@@ -13,6 +13,16 @@ import type { AgentAdapter, AgentEvent } from "./types.js"
  * the stream — so `revise` depends on us seeing the session event before the
  * process exits.
  */
+/** A one-line, human-readable gloss of what a tool call is doing. */
+function summarize(item: Record<string, unknown> | undefined): string {
+  if (!item) return ""
+  for (const key of ["command", "path", "file", "query"]) {
+    const v = item[key]
+    if (typeof v === "string") return v.slice(0, 200)
+  }
+  return ""
+}
+
 export const codex: AgentAdapter = {
   id: "codex",
   bin: "codex",
@@ -57,6 +67,7 @@ export const codex: AgentAdapter = {
           out.push({
             kind: "tool",
             tool: String(itemType),
+            detail: summarize(item),
             status: type === "item.started" ? "started" : "completed",
           })
         } else if (typeof item?.["text"] === "string") {

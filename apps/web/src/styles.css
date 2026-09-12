@@ -1,201 +1,75 @@
-/* Sticky notes should feel like objects: warm paper on a cool desk, a little
-   lift, a little tilt. The status colour is the fastest thing to read. */
+@import "tailwindcss";
 
-:root {
-  --desk: #16181d;
-  --desk-2: #1c1f26;
-  --line: #2a2f39;
-  --ink: #e7e9ee;
-  --ink-dim: #8b93a5;
+/* Guglieri — monochrome typographic gallery. Tokens from DESIGN.md.
+   Every interface colour is achromatic; hierarchy lives in weight and value. */
+@theme {
+  --color-obsidian: #000000;
+  --color-paper-white: #ffffff;
+  --color-carbon: #111111;
+  --color-graphite: #1c1c1c;
+  --color-smoke: #454545;
+  --color-ash: #575757;
+  --color-near-black: #050505;
 
-  --paper: #f5e6a8;
-  --paper-run: #a8d5f5;
-  --paper-block: #f5b8a8;
-  --paper-review: #c3f5a8;
-  --paper-done: #d8dae0;
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  --note-ink: #1d1f24;
-  color-scheme: dark;
+  --text-caption: 12px;
+  --text-body-sm: 14px;
+  --text-body: 22px;
+  --text-heading-sm: 32px;
+  --text-display: 64px;
+
+  --radius-cards: 4px;
+  --radius-links: 8px;
+  --radius-pills: 50px;
 }
 
-* { box-sizing: border-box; }
+:root { color-scheme: dark; }
+
+html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  background: var(--desk);
-  color: var(--ink);
-  font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  background: var(--color-obsidian);
+  color: var(--color-paper-white);
+  font-family: var(--font-sans);
+  font-size: var(--text-body-sm);
+  -webkit-font-smoothing: antialiased;
 }
 
-.app { display: flex; flex-direction: column; height: 100vh; }
-
-/* ---- top bar ---- */
-
-.bar {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--desk-2);
+/* The display voice. Raveo Variable is not distributable; Inter 900 is the
+   substitute DESIGN.md names. Negative tracking tightens as size grows, which
+   is what locks the glyphs into a single visual block. */
+.display {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.06;
 }
-.logo { font-weight: 650; letter-spacing: -0.02em; }
-.repo { color: var(--ink-dim); font-family: ui-monospace, monospace; font-size: 12px; }
-.spacer { flex: 1; }
+.display-lg { font-size: var(--text-display); letter-spacing: -0.04em; line-height: 1; }
+.display-md { font-size: var(--text-heading-sm); }
+.display-sm { font-size: var(--text-body-sm); letter-spacing: 0; }
+.display-xs { font-size: var(--text-caption); letter-spacing: 0; text-transform: uppercase; }
 
-.bar select {
-  background: var(--desk); color: var(--ink);
-  border: 1px solid var(--line); border-radius: 6px;
-  padding: 4px 8px;
-}
-
-.pills { display: flex; gap: 6px; }
-.pill {
-  font-size: 11px; padding: 2px 7px; border-radius: 99px;
-  border: 1px solid var(--line); color: var(--ink-dim);
-}
-.pill-ok { color: #9fe3a0; border-color: #2f5233; }
-
-.dot { width: 8px; height: 8px; border-radius: 99px; }
-.dot-on { background: #4ade80; }
-.dot-off { background: #f59e0b; animation: pulse 1.2s infinite; }
-@keyframes pulse { 50% { opacity: 0.3; } }
-
-.error {
-  padding: 8px 16px; background: #45201d; color: #ffc9c2;
-  border-bottom: 1px solid #6b2f2a; cursor: pointer; font-size: 13px;
-}
-.dismiss { color: #ff9d92; text-decoration: underline; margin-left: 8px; }
-
-/* ---- board ---- */
-
-.board {
-  flex: 1; display: flex; gap: 14px;
-  padding: 16px; overflow-x: auto; align-items: flex-start;
+.meta {
+  font-family: var(--font-sans);
+  font-size: var(--text-caption);
+  font-weight: 400;
+  color: var(--color-ash);
+  line-height: 1.2;
 }
 
-.col {
-  flex: 0 0 300px; min-width: 0;
-  display: flex; flex-direction: column; gap: 10px;
-  background: var(--desk-2);
-  border: 1px solid var(--line); border-radius: 10px;
-  padding: 12px; max-height: 100%;
+/* Scrollbars are chrome; keep them as close to absent as the platform allows. */
+* { scrollbar-width: thin; scrollbar-color: var(--color-smoke) transparent; }
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-thumb { background: var(--color-smoke); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+canvas { display: block; touch-action: none; }
+
+/* Focus is a hairline, never a halo. */
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 1px solid var(--color-paper-white);
+  outline-offset: 2px;
 }
-.col-over { border-color: #4a7fb5; background: #1e242e; }
-
-.col h2 {
-  margin: 0; font-size: 12px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-dim);
-}
-.count {
-  background: var(--desk); border-radius: 99px;
-  padding: 1px 7px; margin-left: 6px; font-size: 11px;
-}
-
-.stack {
-  display: flex; flex-direction: column; gap: 10px;
-  overflow-y: auto; overflow-x: hidden;
-  /* Without min-height a flex child refuses to shrink, so the column grows
-     past the viewport instead of scrolling its own stack. */
-  min-height: 0;
-  /* Notes lift on hover; leave room so the shadow isn't clipped. */
-  padding: 2px;
-  margin: -2px;
-}
-
-/* ---- notes ---- */
-
-.note {
-  background: var(--paper); color: var(--note-ink);
-  border-radius: 3px; padding: 10px 11px;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35), 0 8px 16px rgb(0 0 0 / 0.2);
-  cursor: grab;
-  transform: rotate(-0.35deg);
-  transition: transform 120ms ease, box-shadow 120ms ease;
-}
-.note:nth-child(even) { transform: rotate(0.4deg); }
-.note:hover {
-  transform: rotate(0deg) translateY(-2px);
-  box-shadow: 0 4px 10px rgb(0 0 0 / 0.4), 0 14px 28px rgb(0 0 0 / 0.25);
-}
-.note:active { cursor: grabbing; }
-
-.note-running { background: var(--paper-run); }
-.note-blocked { background: var(--paper-block); }
-.note-review  { background: var(--paper-review); }
-.note-done    { background: var(--paper-done); opacity: 0.65; }
-.note-failed  { background: var(--paper-block); }
-
-/* Blocked is the only status that should ever demand attention. */
-.note-blocked { animation: nudge 2.4s ease-in-out infinite; }
-@keyframes nudge {
-  0%, 92%, 100% { transform: rotate(-0.35deg); }
-  95% { transform: rotate(-1.6deg); }
-  97% { transform: rotate(1.2deg); }
-}
-
-.note-head { display: flex; align-items: center; justify-content: space-between; }
-
-.status {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
-  text-transform: uppercase; opacity: 0.55;
-}
-
-.x {
-  background: none; border: 0; cursor: pointer;
-  color: var(--note-ink); opacity: 0; font-size: 16px; line-height: 1;
-  padding: 0 2px;
-}
-.note:hover .x { opacity: 0.45; }
-.x:hover { opacity: 1 !important; }
-
-.title {
-  margin: 4px 0 8px; font-weight: 500;
-  white-space: pre-wrap; overflow-wrap: anywhere;
-}
-
-.branch {
-  display: block; font-size: 11px; opacity: 0.6;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  margin-bottom: 8px;
-}
-
-.note-foot { display: flex; gap: 6px; align-items: center; }
-.note-foot select {
-  flex: 1; min-width: 0; font-size: 12px; padding: 2px 4px;
-  background: rgb(255 255 255 / 0.45);
-  border: 1px solid rgb(0 0 0 / 0.15); border-radius: 4px;
-  color: var(--note-ink);
-}
-
-.run {
-  background: var(--note-ink); color: var(--paper);
-  border: 0; border-radius: 4px; padding: 3px 12px;
-  font-size: 12px; font-weight: 600; cursor: pointer;
-}
-.run:hover { opacity: 0.85; }
-
-/* ---- composer ---- */
-
-.add {
-  background: none; border: 1px dashed var(--line); border-radius: 6px;
-  color: var(--ink-dim); padding: 7px; cursor: pointer; font-size: 13px;
-}
-.add:hover { color: var(--ink); border-color: var(--ink-dim); }
-
-.composer textarea {
-  width: 100%; resize: none;
-  background: var(--paper); color: var(--note-ink);
-  border: 0; border-radius: 3px; padding: 10px 11px;
-  font: inherit;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
-}
-.composer textarea:focus { outline: 2px solid #4a7fb5; }
-
-/* ---- empty ---- */
-
-.empty { max-width: 640px; margin: 12vh auto; padding: 0 24px; }
-.empty h1 { font-size: 28px; letter-spacing: -0.02em; }
-.empty pre {
-  background: var(--desk-2); border: 1px solid var(--line);
-  border-radius: 8px; padding: 14px; overflow-x: auto; font-size: 12px;
-}
-.hint { color: var(--ink-dim); font-size: 13px; }

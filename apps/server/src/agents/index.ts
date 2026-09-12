@@ -4,6 +4,7 @@ import { promisify } from "node:util"
 import type { AgentId, AgentInfo } from "@kandy/core"
 import type { AgentAdapter } from "./types.js"
 import { codex } from "./codex.js"
+import { claude } from "./claude.js"
 
 const exec = promisify(execFile)
 
@@ -13,6 +14,7 @@ const exec = promisify(execFile)
  * that depends on exactly one provider's goodwill.
  */
 export const ADAPTERS: Partial<Record<AgentId, AgentAdapter>> = {
+  claude,
   codex,
 }
 

@@ -1,12 +1,19 @@
-import type { KandyEvent } from "@kandy/core"
+import type { StreamFrame } from "@kandy/core"
 
-type Listener = (e: KandyEvent) => void
+type Listener = (e: StreamFrame) => void
 
-/** In-process fan-out from the log to every connected SSE stream. */
+/**
+ * In-process fan-out to every connected SSE stream.
+ *
+ * Carries two kinds of frame: durable domain events from the log, and
+ * ephemeral transcript frames. Both go down the same wire; only the former
+ * gets an SSE `id:`, so a reconnect resumes the log without replaying
+ * megabytes of agent chatter. See TranscriptFrame in @kandy/core.
+ */
 export class Bus {
   private listeners = new Set<Listener>()
 
-  publish(e: KandyEvent): void {
+  publish(e: StreamFrame): void {
     for (const l of this.listeners) {
       try {
         l(e)

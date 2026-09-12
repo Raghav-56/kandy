@@ -3,9 +3,11 @@ import type { AgentId } from "@kandy/core"
 /** What an adapter emits after parsing one line of its CLI's output. */
 export type AgentEvent =
   | { kind: "session"; sessionId: string }
+  /** Something the agent said. Goes in the transcript the user reads. */
   | { kind: "text"; text: string }
-  | { kind: "tool"; tool: string; status: "started" | "completed" | "failed" }
+  | { kind: "tool"; tool: string; detail: string; status: "started" | "completed" | "failed" }
   | { kind: "blocked"; requestId: string; detail: string }
+  | { kind: "usage"; text: string }
   | { kind: "error"; message: string }
 
 export type SpawnOptions = {
@@ -16,10 +18,26 @@ export type SpawnOptions = {
   resume?: string
 }
 
+/**
+ * Steering. Some CLIs accept further user messages on stdin mid-run; for the
+ * rest the runner falls back to queueing a follow-up run that resumes the
+ * session. Adapters that can do the former implement this.
+ */
+export type LiveInput = {
+  /** The line to write to the child's stdin, or null if unsupported. */
+  encode(text: string): string | null
+}
+
 export type SpawnSpec = {
   command: string
   args: string[]
   env?: Record<string, string>
+  /**
+   * Written to the child's stdin immediately after spawn. Agents that take
+   * their prompt over a stream-json stdin rather than argv use this — and it
+   * is the same channel steering messages travel on later.
+   */
+  stdin?: string
 }
 
 /**
@@ -36,4 +54,6 @@ export type AgentAdapter = {
   spawn(opts: SpawnOptions): SpawnSpec
   /** One line of stdout → zero or more events. */
   parse(line: string): AgentEvent[]
+  /** Present only on agents that accept mid-run steering. */
+  live?: LiveInput
 }
