@@ -1,5 +1,5 @@
 import type { AgentInfo, Board, BoardView } from "@kandy/core"
-import { cn, money, tailPath } from "@/lib/utils"
+import { cn, compact, money, tailPath } from "@/lib/utils"
 import { AgentMark, agentLabel } from "./AgentMark"
 
 export function TopBar({
@@ -26,7 +26,16 @@ export function TopBar({
   const failed = notes.filter((n) => n.status === "failed").length
   // What this board has cost, ever. A number nobody tracks is a number that
   // surprises you at the end of the month.
-  const spend = (view?.runs ?? []).reduce((sum, r) => sum + (r.costUsd ?? 0), 0)
+  //
+  // Not every agent reports money — Codex reports tokens only — so the figure
+  // is explicitly "where reported" rather than a total that looks complete and
+  // isn't. Tokens are shown alongside because they are the one unit every
+  // agent does report.
+  const runs = view?.runs ?? []
+  const spend = runs.reduce((sum, r) => sum + (r.costUsd ?? 0), 0)
+  const tokens = runs.reduce((sum, r) => sum + (r.tokens ?? 0), 0)
+  const priced = runs.filter((r) => r.costUsd !== null).length
+  const unpriced = runs.filter((r) => r.tokens !== null && r.costUsd === null).length
 
   return (
     <header className="flex shrink-0 items-center gap-5 border-b border-line-soft px-5 py-3">
@@ -69,9 +78,22 @@ export function TopBar({
         {running > 0 && <Pill tone="amber" label={running === 1 ? "running" : "running"} value={running} pulse />}
         {review > 0 && <Pill tone="sage" label="to review" value={review} />}
         {failed > 0 && <Pill tone="coral" label="failed" value={failed} />}
-        {spend > 0 && (
-          <span className="rounded-full border border-line px-2.5 py-1 text-[11.5px] tabular-nums text-dim">
-            {money(spend)}
+        {(spend > 0 || tokens > 0) && (
+          <span
+            title={
+              unpriced > 0
+                ? `${money(spend)} across ${priced} run(s) that report cost. ${unpriced} more reported tokens only — Codex does not report a dollar figure.`
+                : `${money(spend)} across ${priced} run(s)`
+            }
+            className="flex items-center gap-2 rounded-full border border-line px-2.5 py-1 text-[11.5px] tabular-nums text-dim"
+          >
+            {spend > 0 && (
+              <span>
+                {money(spend)}
+                {unpriced > 0 && <span className="text-faint">+</span>}
+              </span>
+            )}
+            {tokens > 0 && <span className="text-faint">{compact(tokens)} tok</span>}
           </span>
         )}
 

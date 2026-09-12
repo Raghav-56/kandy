@@ -3,82 +3,212 @@ import path from "node:path"
 import type { AgentAdapter, AgentEvent } from "./types.js"
 
 /**
- * Reference adapter.
+ * Codex adapter, written against real captured `codex exec --json` output
+ * (codex-cli 0.154.0), not docs.
  *
- * Codex is first because its headless mode is documented, its sandbox flags
- * are explicit, and it carries none of the subscription-OAuth policy
- * ambiguity that Claude Code does. Shape the other adapters toward this one.
+ * Codex speaks a thread/turn/item vocabulary, not Claude's message vocabulary:
  *
- * Known limitation: the session id cannot be pre-assigned, only captured from
- * the stream — so `revise` depends on us seeing the session event before the
- * process exits.
+ *   thread.started   { thread_id }              ← the session id, for resume
+ *   turn.started     {}
+ *   item.started     { item: { type, ... } }    ← command_execution, file_change…
+ *   item.completed   { item: { type, ... } }
+ *   turn.completed   { usage: { input_tokens, output_tokens, … } }
+ *
+ * Two things this got wrong before, both silent:
+ *
+ * 1. We looked for `session_id`, which Codex never emits. Session capture
+ *    therefore always failed, which meant resume and steering quietly did
+ *    nothing for Codex notes.
+ * 2. Usage was never read at all, so Codex runs reported no tokens and no
+ *    turns — and the board's total spend was Claude-only while looking
+ *    complete.
+ *
+ * Codex reports tokens but not money, so cost stays null rather than being
+ * invented from a price list that would be wrong the week it changed.
  */
-/** A one-line, human-readable gloss of what a tool call is doing. */
-function summarize(item: Record<string, unknown> | undefined): string {
-  if (!item) return ""
-  for (const key of ["command", "path", "file", "query"]) {
-    const v = item[key]
-    if (typeof v === "string") return v.slice(0, 200)
-  }
-  return ""
-}
-
 export const codex: AgentAdapter = {
   id: "codex",
   bin: "codex",
   credentials: [path.join(homedir(), ".codex", "auth.json")],
 
   spawn({ cwd, prompt, resume, policy }) {
-    const args = resume
-      ? ["exec", "resume", resume, "--json", prompt]
-      : ["exec", "--json", prompt]
+    const full = policy === "full"
+
+    // `exec` and `exec resume` do NOT take the same flags: resume accepts
+    // neither -s nor -C, and passing them fails the run outright with
+    // "unexpected argument '-s' found". Sandboxing is expressed as a config
+    // override there instead. The working directory needs neither, since the
+    // child is already spawned with the worktree as its cwd.
+    if (resume) {
+      return {
+        command: "codex",
+        args: [
+          "exec",
+          "resume",
+          resume,
+          "--json",
+          ...(full
+            ? ["--dangerously-bypass-approvals-and-sandbox"]
+            : ["-c", 'sandbox_mode="workspace-write"']),
+          prompt,
+        ],
+      }
+    }
+
     return {
       command: "codex",
-      // workspace-write keeps the agent inside its worktree for file edits;
-      // the worktree is the real boundary and this is defence in depth.
-      args: [...args, "-s", policy === "full" ? "danger-full-access" : "workspace-write", "-C", cwd],
+      args: [
+        "exec",
+        "--json",
+        // workspace-write keeps edits inside the worktree; the worktree is the
+        // real boundary and this is defence in depth.
+        "-s",
+        full ? "danger-full-access" : "workspace-write",
+        "-C",
+        cwd,
+        prompt,
+      ],
     }
   },
 
   parse(line) {
     if (!line.trim()) return []
-    let msg: Record<string, unknown>
+    let msg: Record<string, any>
     try {
       msg = JSON.parse(line)
     } catch {
-      // Not every line is JSON even in --json mode. Surface it as text rather
-      // than dropping it — swallowed output is how debugging becomes guesswork.
       return [{ kind: "text", text: line }]
     }
 
     const out: AgentEvent[] = []
-    const type = typeof msg["type"] === "string" ? (msg["type"] as string) : ""
 
-    if (typeof msg["session_id"] === "string") {
-      out.push({ kind: "session", sessionId: msg["session_id"] })
-    }
-
-    switch (type) {
-      case "item.started":
-      case "item.completed": {
-        const item = msg["item"] as Record<string, unknown> | undefined
-        const itemType = item?.["type"]
-        if (itemType === "command_execution" || itemType === "file_change") {
-          out.push({
-            kind: "tool",
-            tool: String(itemType),
-            detail: summarize(item),
-            status: type === "item.started" ? "started" : "completed",
-          })
-        } else if (typeof item?.["text"] === "string") {
-          out.push({ kind: "text", text: item["text"] })
-        }
+    switch (msg["type"]) {
+      case "thread.started": {
+        const id = msg["thread_id"]
+        if (typeof id === "string") out.push({ kind: "session", sessionId: id })
         break
       }
+
+      case "item.started":
+      case "item.completed": {
+        const item = msg["item"] as Record<string, any> | undefined
+        if (item) out.push(...fromItem(item, msg["type"] === "item.started"))
+        break
+      }
+
+      case "turn.completed": {
+        const u = (msg["usage"] ?? {}) as Record<string, number>
+        const tokens = (u["input_tokens"] ?? 0) + (u["output_tokens"] ?? 0)
+        out.push({
+          kind: "usage",
+          text: `${tokens.toLocaleString()} tokens`,
+          // Codex reports no dollar figure. Null is honest; a guess is not.
+          costUsd: null,
+          tokens,
+          turns: 1,
+        })
+        out.push({ kind: "turn_end" })
+        break
+      }
+
+      case "turn.failed": {
+        const err = msg["error"] as Record<string, any> | undefined
+        out.push({ kind: "error", message: String(err?.["message"] ?? "turn failed") })
+        out.push({ kind: "turn_end" })
+        break
+      }
+
+      case "thread.error":
       case "error":
-        out.push({ kind: "error", message: String(msg["message"] ?? "unknown error") })
+        out.push({ kind: "error", message: String(msg["message"] ?? "codex error") })
         break
     }
     return out
   },
+}
+
+/**
+ * Wording Codex uses when it declines to run something, as opposed to running
+ * it and failing. Anchored deliberately: a loose match turns every file that
+ * mentions permissions into a blocked note.
+ */
+const REFUSAL = /requires approval|not permitted|operation not permitted|sandbox denied|approval required/i
+
+/**
+ * Codex emits operational notices as `error` items — hook-trust warnings, a
+ * note that skill descriptions were truncated. They are not failures, and
+ * painting them red teaches people to ignore red.
+ */
+const BENIGN = /bypass-hook-trust|skill descriptions were shortened|descriptions are shorter/i
+
+function fromItem(item: Record<string, any>, started: boolean): AgentEvent[] {
+  const status: "started" | "completed" = started ? "started" : "completed"
+
+  switch (item["type"]) {
+    case "agent_message": {
+      // Only on completion — the started event carries no text yet.
+      const text = typeof item["text"] === "string" ? item["text"] : ""
+      return !started && text.trim() ? [{ kind: "text", text }] : []
+    }
+
+    case "command_execution": {
+      const cmd = String(item["command"] ?? "")
+      const output = String(item["aggregated_output"] ?? "")
+      const exit = item["exit_code"]
+
+      // A refusal is a command that did NOT run. Matching on output text alone
+      // was a false-positive machine: `cat docs/05-agent-auth.md` marked a note
+      // blocked because the document it printed discusses permissions. Require
+      // an actual failure first, and keep the phrasing tight.
+      const failed = typeof exit === "number" && exit !== 0
+      if (!started && failed && REFUSAL.test(output)) {
+        return [
+          { kind: "blocked", requestId: String(item["id"] ?? ""), detail: output.slice(0, 600) },
+        ]
+      }
+      if (!started && failed) {
+        return [{ kind: "tool", tool: "shell", detail: cmd.slice(0, 200), status: "failed" }]
+      }
+      return [{ kind: "tool", tool: "shell", detail: cmd.replace(/\s+/g, " ").slice(0, 200), status }]
+    }
+
+    case "file_change": {
+      const changes = Array.isArray(item["changes"]) ? item["changes"] : []
+      const paths = changes
+        .map((c: Record<string, any>) => String(c["path"] ?? ""))
+        .filter(Boolean)
+        .map((p: string) => p.split("/").slice(-2).join("/"))
+      return [{ kind: "tool", tool: "edit", detail: paths.join(", ").slice(0, 200), status }]
+    }
+
+    case "mcp_tool_call":
+      return [
+        {
+          kind: "tool",
+          tool: String(item["server"] ?? "mcp"),
+          detail: String(item["tool"] ?? ""),
+          status,
+        },
+      ]
+
+    case "web_search":
+      return [{ kind: "tool", tool: "search", detail: String(item["query"] ?? ""), status }]
+
+    case "error": {
+      if (started) return []
+      const message = String(item["message"] ?? "error")
+      return BENIGN.test(message)
+        ? [{ kind: "usage", text: message, costUsd: null, tokens: null, turns: null }]
+        : [{ kind: "error", message }]
+    }
+
+    // Reasoning summaries and todo lists are the agent thinking out loud.
+    // Useful in a terminal, noise in a transcript someone reviews later.
+    case "reasoning":
+    case "todo_list":
+      return []
+
+    default:
+      return []
+  }
 }
