@@ -75,6 +75,9 @@ That is the whole thing: the daemon serves the built board itself, so there is
 one process to run and one URL to open.
 
 `serve` takes `--port N` and `--slots N` (how many agents may run at once).
+Pass `--json` to print a single JSON object once the daemon is listening, with
+`port`, `dbPath`, and `slots` fields, for example:
+`{"port":4477,"dbPath":"/home/user/.local/state/kandy/kandy.db","slots":4}`.
 
 ```sh
 pnpm --filter @kandy/tui dev            # watch the same board from a terminal
