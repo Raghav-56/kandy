@@ -23,6 +23,7 @@ export function TopBar({
   const running = notes.filter((n) => n.status === "running").length
   const blocked = notes.filter((n) => n.status === "blocked").length
   const review = notes.filter((n) => n.status === "review").length
+  const failed = notes.filter((n) => n.status === "failed").length
   // What this board has cost, ever. A number nobody tracks is a number that
   // surprises you at the end of the month.
   const spend = (view?.runs ?? []).reduce((sum, r) => sum + (r.costUsd ?? 0), 0)
@@ -67,6 +68,7 @@ export function TopBar({
         {blocked > 0 && <Pill tone="coral" label="needs you" value={blocked} pulse />}
         {running > 0 && <Pill tone="amber" label={running === 1 ? "running" : "running"} value={running} pulse />}
         {review > 0 && <Pill tone="sage" label="to review" value={review} />}
+        {failed > 0 && <Pill tone="coral" label="failed" value={failed} />}
         {spend > 0 && (
           <span className="rounded-full border border-line px-2.5 py-1 text-[11.5px] tabular-nums text-dim">
             {money(spend)}

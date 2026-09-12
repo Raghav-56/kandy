@@ -1,4 +1,5 @@
 import { Engine } from "./engine.js"
+import { PrWatch } from "./prwatch.js"
 import { Runner } from "./runner.js"
 import { createHttpServer } from "./http.js"
 import { DB_PATH } from "./paths.js"
@@ -32,7 +33,10 @@ function main(): void {
   const slots = intFlag(args, "--slots", DEFAULT_SLOTS)
 
   const engine = new Engine()
-  const runner = new Runner(engine, slots)
+  const prs = new PrWatch(engine)
+  const runner = new Runner(engine, slots, (boardId, noteId) =>
+    void prs.refresh(boardId, noteId).catch(() => {}),
+  )
 
   // A daemon that died mid-run leaves notes claiming to be running. They
   // aren't. Fail them loudly rather than showing a board that lies.
@@ -41,7 +45,8 @@ function main(): void {
     if (view) runner.reconcile(view)
   }
 
-  const server = createHttpServer({ engine, runner })
+  prs.start()
+  const server = createHttpServer({ engine, runner, prs })
   server.listen(port, "127.0.0.1", () => {
     console.log(`kandy server  http://127.0.0.1:${port}`)
     console.log(`state         ${DB_PATH}`)
@@ -51,6 +56,7 @@ function main(): void {
   const shutdown = () => {
     console.log("\nshutting down…")
     runner.shutdown()
+    prs.stop()
     server.close()
     engine.close()
     process.exit(0)

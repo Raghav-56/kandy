@@ -60,6 +60,8 @@ export class Runner {
   constructor(
     private engine: Engine,
     private slots = 4,
+    /** Called when a note's branch is ready to be looked up on the forge. */
+    private onBranchReady?: (boardId: string, noteId: string) => void,
   ) {}
 
   private emit(pending: Parameters<Engine["emit"]>[0]): void {
@@ -415,6 +417,9 @@ export class Runner {
 
     if (status === "succeeded" && l) {
       this.emit(event("review.opened", { noteId, runId, branch: l.worktree.branch, stat }))
+      // A branch may already have a PR — a re-run of a note whose first
+      // attempt was pushed, say. Look before offering to open a second one.
+      void this.onBranchReady?.(l.boardId, noteId)
     }
     if (l) this.syncColumn(l.boardId, noteId)
     void this.pump()
@@ -472,12 +477,11 @@ export class Runner {
   reconcile(view: BoardView): void {
     this.adopt(view)
 
-    // Put notes back in the lane their status says they belong to. A draft is
-    // left wherever the user filed it — that placement is theirs — but a note
-    // that ran is describing machine state, and the board must agree with it.
-    for (const n of view.notes) {
-      if (n.status !== "draft") this.syncColumn(view.board.id, n.id)
-    }
+    // Fail the orphans FIRST. These runs died with the last daemon; until
+    // they are marked, every note they own still reads `running`, and a column
+    // sync done at that point files them under Running — leaving a card that
+    // says "failed" sitting in the lane for work in flight, which is precisely
+    // the lie this method exists to clear up.
     for (const run of view.runs) {
       if (run.status === "running" || run.status === "starting" || run.status === "blocked") {
         this.emit(
@@ -490,6 +494,15 @@ export class Runner {
           }),
         )
       }
+    }
+
+    // Then put notes back in the lane their status says they belong to. A
+    // draft is left wherever the user filed it — that placement is theirs —
+    // but a note that ran is describing machine state, and the board must
+    // agree with it. Read statuses from the live projection, not the snapshot
+    // passed in, which is now one step out of date.
+    for (const n of this.getView(view.board.id)?.notes ?? []) {
+      if (n.status !== "draft") this.syncColumn(view.board.id, n.id)
     }
   }
 

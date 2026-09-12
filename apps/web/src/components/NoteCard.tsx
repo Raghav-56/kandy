@@ -3,6 +3,7 @@ import { cn, duration, money } from "@/lib/utils"
 import { useTick } from "@/hooks/useTick"
 import { AgentMark, agentLabel } from "./AgentMark"
 import { DiffBar } from "./DiffBar"
+import { PrBadge } from "./PrBadge"
 import { STYLES, inkFor } from "./status"
 
 export function NoteCard({
@@ -104,11 +105,11 @@ export function NoteCard({
           </div>
         )}
 
-        {(note.stat || cost || note.status === "blocked") && (
+        {(note.stat || cost || note.pr || note.status === "blocked") && (
           <>
             <div className={cn("my-2.5 h-px", s.rule)} />
             <footer
-              className={cn("flex items-center gap-3 text-[11px]", s.muted)}
+              className={cn("flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]", s.muted)}
             >
               {note.stat && <DiffBar stat={note.stat} onDark={onDark} />}
               {note.stat && note.stat.files > 0 && (
@@ -116,6 +117,7 @@ export function NoteCard({
                   {note.stat.files} {note.stat.files === 1 ? "file" : "files"}
                 </span>
               )}
+              {note.pr && <PrBadge pr={note.pr} onDark={onDark} />}
               {note.status === "blocked" && (
                 <span className="font-medium text-coral">Waiting on you</span>
               )}

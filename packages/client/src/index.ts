@@ -5,9 +5,11 @@ import type {
   Board,
   BoardView,
   Delivery,
+  Forge,
   KandyEvent,
   OutputLine,
   Policy,
+  PullRequest,
   RepoCheck,
   StreamFrame,
   TranscriptFrame,
@@ -103,6 +105,12 @@ export class KandyClient {
   }
   assignNote(noteId: string, agent: AgentId) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/assign`, { agent })
+  }
+  forge(boardId: string) {
+    return this.req<Forge>("GET", `/boards/${boardId}/forge`)
+  }
+  openPr(noteId: string, draft = false) {
+    return this.req<{ pr: PullRequest; seq: number }>("POST", `/notes/${noteId}/pr`, { draft })
   }
   setPolicy(noteId: string, policy: Policy) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/policy`, { policy })
@@ -206,6 +214,8 @@ const EVENT_TYPES = [
   "run.session",
   "run.metrics",
   "note.policy",
+  "note.pr",
+  "board.setup",
   "run.blocked",
   "run.unblocked",
   "run.finished",

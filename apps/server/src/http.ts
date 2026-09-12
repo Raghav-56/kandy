@@ -13,6 +13,8 @@ import {
   type StreamFrame,
 } from "@kandy/core"
 import type { Runner } from "./runner.js"
+import type { PrWatch } from "./prwatch.js"
+import { detectForge, openPr } from "./forge.js"
 import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
 import {
@@ -27,7 +29,7 @@ import {
 const VERSION = "0.0.0"
 const STARTED = Date.now()
 
-export type ServerDeps = { engine: Engine; runner: Runner }
+export type ServerDeps = { engine: Engine; runner: Runner; prs: PrWatch }
 
 export function createHttpServer(deps: ServerDeps) {
   return createServer((req, res) => {
@@ -121,6 +123,13 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     }
     const view = deps.engine.view(boardId)!
     return send(res, 200, { ok: true, seq: view.seq, board: view.board })
+  }
+
+  // GET /boards/:id/forge
+  if (req.method === "GET" && parts[0] === "boards" && parts[2] === "forge") {
+    const view = deps.engine.view(parts[1]!)
+    if (!view) return fail(res, 404, "board_not_found", "no such board")
+    return send(res, 200, await detectForge(view.board.repoPath))
   }
 
   // POST /boards/:id/setup
@@ -242,6 +251,34 @@ async function noteAction(
       const e = emit(deps, event("note.assigned", { noteId, agent: b.agent }))
       return send(res, 200, { ok: true, seq: e.seq })
     }
+    case "pr": {
+      if (!note.branch) return fail(res, 409, "no_branch", "this note has not produced a branch yet")
+
+      const forge = await detectForge(view.board.repoPath)
+      if (!forge.available) return fail(res, 409, "no_forge", forge.reason ?? "no forge available")
+
+      const b = await json<{ draft?: boolean }>(req)
+      try {
+        const pr = await openPr(
+          view.board.repoPath,
+          note.branch,
+          note.title,
+          prBody(note),
+          b?.draft ?? false,
+        )
+        const e = emit(deps, event("note.pr", { noteId, pr }))
+        return send(res, 200, { ok: true, seq: e.seq, pr })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        // A PR may already exist for this branch; if so, adopt it rather than
+        // reporting a failure the user can do nothing about.
+        await deps.prs.refresh(view.board.id, noteId)
+        const now = deps.engine.boardOf(noteId)?.notes.find((n) => n.id === noteId)
+        if (now?.pr) return send(res, 200, { ok: true, seq: deps.engine.head(), pr: now.pr })
+        return fail(res, 409, "internal", message)
+      }
+    }
+
     case "policy": {
       const b = await json<{ policy: "repo" | "full" }>(req)
       if (b?.policy !== "repo" && b?.policy !== "full")
@@ -356,6 +393,14 @@ function write(res: ServerResponse, f: StreamFrame) {
 /** `~/code/thing` is what people actually type. */
 function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(homedir(), p.slice(1)) : p
+}
+
+/** The PR description. Says what produced it, because a reviewer will ask. */
+function prBody(note: { body: string; agent: string | null }): string {
+  const lines = [note.body.trim() || "_No description given._", ""]
+  lines.push("---")
+  lines.push(`Opened from a kandy note${note.agent ? `, run by \`${note.agent}\`` : ""}.`)
+  return lines.join("\n")
 }
 
 function emit(deps: ServerDeps, pending: Parameters<Engine["emit"]>[0]) {

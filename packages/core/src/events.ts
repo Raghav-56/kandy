@@ -1,4 +1,12 @@
-import type { AgentId, DiffStat, Lane, NoteStatus, Policy, RunStatus } from "./domain.js"
+import type {
+  AgentId,
+  DiffStat,
+  Lane,
+  NoteStatus,
+  Policy,
+  PullRequest,
+  RunStatus,
+} from "./domain.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
 /** Envelope fields the server stamps on every event. */
@@ -64,6 +72,8 @@ export type KandyEventMap = {
   }
 
   "review.opened": { noteId: NoteId; runId: RunId; branch: string; stat: DiffStat }
+  /** A PR was opened from this note, or its state changed on the forge. */
+  "note.pr": { noteId: NoteId; pr: PullRequest | null }
   "run.metrics": { runId: RunId; costUsd: number | null; tokens: number | null; turns: number | null }
   "review.decided": {
     noteId: NoteId

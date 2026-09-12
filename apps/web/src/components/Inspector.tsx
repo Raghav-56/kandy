@@ -4,6 +4,7 @@ import type {
   AgentId,
   AgentInfo,
   BoardView,
+  Forge,
   Note,
   Policy,
   TranscriptFrame,
@@ -14,6 +15,7 @@ import { cn, compact, duration, money } from "@/lib/utils"
 import { useTick } from "@/hooks/useTick"
 import { AgentMark, agentLabel } from "./AgentMark"
 import { DiffView } from "./DiffView"
+import { PrBadge } from "./PrBadge"
 import { Stat } from "./Stat"
 import { Transcript } from "./Transcript"
 import { STYLES } from "./status"
@@ -31,6 +33,8 @@ type Props = {
   onPolicy: (policy: Policy) => void
   onSteer: (text: string) => Promise<"live" | "queued" | undefined>
   onReview: (decision: "merge" | "discard") => void
+  forge: Forge | null
+  onOpenPr: () => Promise<void>
   onDelete: () => void
   loadDiff: () => Promise<{ diff: string; stat: string } | undefined>
 }
@@ -41,6 +45,7 @@ export function Inspector(p: Props) {
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const [delivery, setDelivery] = useState<string | null>(null)
+  const [pring, setPring] = useState(false)
 
   const run = p.view.runs.find((r) => r.id === p.note.runId)
   const live = p.note.status === "running" || p.note.status === "blocked"
@@ -58,6 +63,12 @@ export function Inspector(p: Props) {
     if (reviewable) setTab("diff")
   }, [reviewable])
 
+  async function openPr() {
+    setPring(true)
+    await p.onOpenPr()
+    setPring(false)
+  }
+
   async function send() {
     const text = draft.trim()
     if (!text || sending) return
@@ -72,6 +83,7 @@ export function Inspector(p: Props) {
   }
 
   const policy = p.note.policy ?? "repo"
+  const canOpenPr = Boolean(p.forge?.available && p.note.branch && !p.note.pr)
 
   return (
     <aside className="flex h-full w-[500px] shrink-0 flex-col border-l border-line-soft bg-panel">
@@ -121,10 +133,11 @@ export function Inspector(p: Props) {
         )}
 
         {p.note.branch && (
-          <div className="mt-3 flex items-center gap-2">
-            <span className="truncate font-mono text-[11px] text-faint" title={p.note.branch}>
+          <div className="mt-3 flex items-center gap-2.5">
+            <span className="min-w-0 truncate font-mono text-[11px] text-faint" title={p.note.branch}>
               {p.note.branch}
             </span>
+            {p.note.pr && <PrBadge pr={p.note.pr} onDark size="md" />}
             {p.note.stat && (
               <span className="ml-auto shrink-0 text-[11px] tabular-nums">
                 <span className="text-sage">+{p.note.stat.insertions}</span>{" "}
@@ -176,10 +189,15 @@ export function Inspector(p: Props) {
               Stop
             </Button>
           )}
+          {canOpenPr && !live && (
+            <Button variant="outline" size="md" onClick={() => void openPr()} disabled={pring}>
+              {pring ? "Opening…" : "Open PR"}
+            </Button>
+          )}
           {reviewable && (
             <>
               <Button variant="solid" size="md" onClick={() => p.onReview("merge")}>
-                Merge
+                {p.note.pr ? "Merge locally" : "Merge"}
               </Button>
               <Button variant="danger" size="md" onClick={() => p.onReview("discard")}>
                 Discard

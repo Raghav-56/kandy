@@ -114,6 +114,8 @@ export type Note = {
   worktree: string | null
   /** What this note changed. Survives review, unlike the worktree. */
   stat: DiffStat | null
+  /** The PR opened from this note's branch, if there is one. */
+  pr: PullRequest | null
   createdAt: number
   updatedAt: number
 }
@@ -123,6 +125,27 @@ export type DiffStat = {
   files: number
   insertions: number
   deletions: number
+}
+
+/**
+ * A pull request opened from a note's branch.
+ *
+ * Merging locally is only half a workflow — most teams review on the forge.
+ * A note that produced a branch should be able to say "and here is the PR",
+ * including whether CI is happy with it, without anyone leaving the board.
+ */
+export type PullRequest = {
+  number: number
+  url: string
+  title: string
+  /** GitHub's own vocabulary, lowercased: open | merged | closed. */
+  state: "open" | "merged" | "closed"
+  draft: boolean
+  /** Rolled-up CI state, or null when the forge reports none yet. */
+  checks: "passing" | "failing" | "pending" | null
+  /** Review decision, when one has been given. */
+  review: "approved" | "changes_requested" | "review_required" | null
+  updatedAt: number
 }
 
 export type Run = {

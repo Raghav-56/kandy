@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { KandyClient } from "@kandy/client"
-import type { AgentId, AgentInfo, Board } from "@kandy/core"
+import type { AgentId, AgentInfo, Board, Forge } from "@kandy/core"
 import { useBoard } from "./useBoard"
 import { Board as BoardGrid } from "./components/Board"
 import { Composer } from "./components/Composer"
@@ -16,6 +16,7 @@ export function App() {
   const [selected, setSelected] = useState<string | null>(null)
   const [composeIn, setComposeIn] = useState<string | null>(null)
   const [newBoard, setNewBoard] = useState(false)
+  const [forge, setForge] = useState<Forge | null>(null)
 
   const { view, connected, error, act, transcript, activity, loadTranscript, clearError } =
     useBoard(boardId)
@@ -29,6 +30,17 @@ export function App() {
     })
     void bootstrap.agents().then((r) => setAgents(r.agents))
   }, [bootstrap])
+
+  // Whether this board's repo can open PRs at all. Asked once per board so the
+  // affordance never appears on a repo that has nowhere to send one.
+  useEffect(() => {
+    setForge(null)
+    if (!boardId) return
+    void bootstrap
+      .forge(boardId)
+      .then(setForge)
+      .catch(() => setForge(null))
+  }, [boardId, bootstrap])
 
   const note = view?.notes.find((n) => n.id === selected) ?? null
   const defaultAgent = agents.find((a) => a.installed && a.authed)?.id ?? null
@@ -114,6 +126,10 @@ export function App() {
             onPolicy={(policy) => void act((c) => c.setPolicy(note.id, policy))}
             onSteer={async (text) => (await act((c) => c.message(note.id, text)))?.delivery}
             onReview={(decision) => void act((c) => c.reviewNote(note.id, decision))}
+            forge={forge}
+            onOpenPr={async () => {
+              await act((c) => c.openPr(note.id))
+            }}
             onDelete={() => {
               setSelected(null)
               void act((c) => c.deleteNote(note.id))

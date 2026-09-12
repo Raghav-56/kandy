@@ -66,6 +66,7 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         branch: null,
         worktree: null,
         stat: null,
+        pr: null,
         createdAt: e.ts,
         updatedAt: e.ts,
       }
@@ -88,6 +89,9 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
 
     case "note.assigned":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, agent: e.data.agent }))
+
+    case "note.pr":
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, pr: e.data.pr }))
 
     case "note.policy":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, policy: e.data.policy }))
