@@ -1,4 +1,4 @@
-import type { BoardView, Note, Run } from "./domain.js"
+import { LANE_OF, type BoardView, type Column, type Note, type NoteStatus, type Run } from "./domain.js"
 import type { KandyEvent } from "./events.js"
 
 /**
@@ -27,8 +27,11 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
 
     case "column.created": {
       if (e.data.boardId !== view.board.id) return view
-      const { columnId, boardId, name, pos } = e.data
-      return { ...view, columns: [...view.columns, { id: columnId, boardId, name, pos }] }
+      const { columnId, boardId, name, pos, lane } = e.data
+      return {
+        ...view,
+        columns: [...view.columns, { id: columnId, boardId, name, pos, lane: lane ?? null }],
+      }
     }
 
     case "note.created": {
@@ -42,6 +45,7 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         status: "draft",
         pos: e.data.pos,
         agent: null,
+        policy: "repo",
         runId: null,
         branch: null,
         worktree: null,
@@ -67,6 +71,9 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
 
     case "note.assigned":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, agent: e.data.agent }))
+
+    case "note.policy":
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, policy: e.data.policy }))
 
     case "note.status":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, status: e.data.status }))
@@ -188,6 +195,18 @@ function patchRunNote(
 ): BoardView {
   const run = view.runs.find((r) => r.id === runId)
   return run ? patchNote(view, run.noteId, ts, fn) : view
+}
+
+/** The column a note belongs in, given its status. Undefined if the board has none. */
+export function laneColumn(view: BoardView, status: NoteStatus): Column | undefined {
+  const lane = LANE_OF[status]
+  return (
+    view.columns.find((c) => c.lane === lane) ??
+    // Boards created before columns declared lanes still have the default
+    // names. Matching on those keeps them working instead of silently doing
+    // nothing on every status change.
+    view.columns.find((c) => c.lane === null && c.name.toLowerCase() === lane)
+  )
 }
 
 /** Notes in a column, in board order. */

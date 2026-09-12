@@ -14,12 +14,10 @@ import type { AgentAdapter, AgentEvent } from "./types.js"
  *    is what makes steering possible: the same channel takes further user
  *    messages, turn by turn, against the same session.
  *
- * 2. `--permission-mode acceptEdits` lets the agent edit files without asking,
- *    which is safe *here specifically* because its cwd is a throwaway worktree
- *    on its own branch. Anything beyond that still needs approval — and in
- *    headless mode Claude auto-denies what it cannot ask about, reporting it in
- *    `result.permission_denials`. We surface those as blocked rather than
- *    letting them vanish into a transcript nobody reads.
+ * 2. Permission mode follows the note's policy. In headless mode Claude
+ *    auto-denies anything it cannot ask about and reports it in
+ *    `result.permission_denials`; we surface those rather than letting them
+ *    vanish into a transcript nobody reads.
  */
 export const claude: AgentAdapter = {
   id: "claude",
@@ -30,7 +28,7 @@ export const claude: AgentAdapter = {
     path.join(homedir(), ".claude.json"),
   ],
 
-  spawn({ cwd, prompt, resume }) {
+  spawn({ cwd, prompt, resume, policy }) {
     return {
       command: "claude",
       args: [
@@ -43,7 +41,10 @@ export const claude: AgentAdapter = {
         // entire point of watching a run.
         "--verbose",
         "--permission-mode",
-        "acceptEdits",
+        // `acceptEdits` lets the agent write files but refuses most Bash —
+        // including running the very tests it just wrote. `bypassPermissions`
+        // unblocks that, and is the user's explicit choice, never our default.
+        policy === "full" ? "bypassPermissions" : "acceptEdits",
         // Echo our own messages back so the transcript shows steering in place.
         "--replay-user-messages",
         ...(resume ? ["--resume", resume] : []),
@@ -93,7 +94,11 @@ export const claude: AgentAdapter = {
         for (const block of msg["message"]?.content ?? []) {
           if (block?.type === "tool_result" && block.is_error) {
             const text = typeof block.content === "string" ? block.content : "tool failed"
-            const denial = /permission/i.test(text)
+            // Claude phrases refusals several ways — "Permission ... was
+            // denied", "requires approval". Matching only the first word
+            // silently downgrades a denial into an ordinary tool failure,
+            // which is how `blocked` becomes theatre.
+            const denial = /permission|requires approval|was denied|not allowed/i.test(text)
             out.push(
               denial
                 ? { kind: "blocked", requestId: String(block.tool_use_id ?? ""), detail: text }
@@ -127,6 +132,7 @@ export const claude: AgentAdapter = {
         if (msg["is_error"]) {
           out.push({ kind: "error", message: String(msg["result"] ?? "run failed") })
         }
+        out.push({ kind: "turn_end" })
         break
       }
 

@@ -28,15 +28,15 @@ export const codex: AgentAdapter = {
   bin: "codex",
   credentials: [path.join(homedir(), ".codex", "auth.json")],
 
-  spawn({ cwd, prompt, resume }) {
+  spawn({ cwd, prompt, resume, policy }) {
     const args = resume
       ? ["exec", "resume", resume, "--json", prompt]
       : ["exec", "--json", prompt]
     return {
       command: "codex",
-      // workspace-write keeps the agent inside its worktree for file edits.
-      // The worktree is the real boundary; this is defense in depth.
-      args: [...args, "-s", "workspace-write", "-C", cwd],
+      // workspace-write keeps the agent inside its worktree for file edits;
+      // the worktree is the real boundary and this is defence in depth.
+      args: [...args, "-s", policy === "full" ? "danger-full-access" : "workspace-write", "-C", cwd],
     }
   },
 

@@ -116,6 +116,29 @@ actual working tree, which was never touched.
 This is the thing that is hard to copy in a weekend, and it is why it is in the v1 scaffold
 rather than the roadmap.
 
+## Transcript is not the event log
+
+What an agent says and does streams to clients over the same SSE connection, but
+deliberately **carries no `id:` field**. Per the SSE spec that leaves the client's
+`Last-Event-ID` untouched, so a reconnect resumes the domain log exactly where it left off
+rather than replaying megabytes of agent chatter. Transcript lives in its own table, keyed
+per-run, and is fetched only for the note actually open.
+
+This is the concrete form of the rule in [`02-data-model.md`](02-data-model.md): board replay
+must never be proportional to how talkative the agents were.
+
+## Steering
+
+A note is not fire-and-forget. A message sent to a note either:
+
+1. **Reaches the live agent**, if its CLI accepts further user turns on stdin — Claude Code does,
+   over `--input-format stream-json`; or
+2. **Queues a follow-up run** that resumes the agent's session in the *same* worktree, so it
+   keeps its context and its working state.
+
+The caller is told which happened, because from the user's side the difference between "it heard
+me" and "it will hear me next turn" is the entire feel of the thing.
+
 ## Agent adapters
 
 Each supported agent is an adapter that knows three things: how to spawn it headlessly, how to

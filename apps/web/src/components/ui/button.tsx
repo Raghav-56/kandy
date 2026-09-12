@@ -3,24 +3,20 @@ import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
-/**
- * DESIGN.md gives this system exactly two buttons: one filled pill and its
- * ghost inversion. Both are fully rounded and generously padded — a pill that
- * isn't given room reads as a chip, which is the wrong object.
- */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[50px] font-display font-black uppercase tracking-normal transition-colors disabled:pointer-events-none disabled:opacity-40",
+  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-medium transition-all disabled:pointer-events-none disabled:opacity-35",
   {
     variants: {
       variant: {
-        solid: "bg-paper-white text-obsidian hover:bg-[#d9d9d9]",
-        outline: "border border-paper-white text-paper-white hover:bg-paper-white hover:text-obsidian",
-        ghost: "text-ash hover:text-paper-white",
+        solid: "bg-ink text-bg hover:bg-white",
+        outline: "border border-line bg-panel-2 text-ink hover:border-[#32323b] hover:bg-[#1b1b21]",
+        ghost: "text-dim hover:bg-panel-2 hover:text-ink",
+        danger: "border border-[#4a2a25] bg-[#1d1312] text-coral hover:border-coral/60",
       },
       size: {
-        sm: "h-7 px-4 text-[11px]",
-        md: "h-9 px-6 text-[12px]",
-        lg: "h-11 px-10 text-[14px]",
+        sm: "h-7 px-2.5 text-[12px]",
+        md: "h-8 px-3.5 text-[12.5px]",
+        lg: "h-10 px-5 text-[13.5px]",
       },
     },
     defaultVariants: { variant: "outline", size: "sm" },

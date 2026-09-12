@@ -6,6 +6,7 @@ import type {
   Delivery,
   KandyEvent,
   OutputLine,
+  Policy,
   RepoCheck,
   StreamFrame,
   TranscriptFrame,
@@ -93,6 +94,9 @@ export class KandyClient {
   }
   assignNote(noteId: string, agent: AgentId) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/assign`, { agent })
+  }
+  setPolicy(noteId: string, policy: Policy) {
+    return this.req<{ seq: number }>("POST", `/notes/${noteId}/policy`, { policy })
   }
   deleteNote(noteId: string) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/delete`, {})

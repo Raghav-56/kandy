@@ -2,21 +2,39 @@
 
 A board for orchestrating coding agents.
 
-Sticky notes on a board are units of agent work. Write a note, assign it to an agent
-(Claude Code, Codex, Cursor, opencode, Gemini, Grok), and it runs — isolated in its own
-git worktree, streaming progress back to whichever client you happen to be looking at.
-When it lands, the note carries a branch and a diff you can review without leaving the board.
+Sticky notes are units of agent work. Write a note, assign it to an agent
+(Claude Code, Codex, and more to come), and it runs — isolated in its own git
+worktree, streaming its transcript back to whichever client you're looking at.
+You can steer it mid-run. When it lands, the note carries a branch and a diff
+you review without leaving the board.
 
-**Why a board.** Every terminal agent today gives you one conversation. The real job is
-"here are nine things, go" — and the two questions that matter are *what's in flight* and
-*what's blocked on me*. A board answers both at a glance. A scrollback answers neither.
+**Why a board.** Every terminal agent gives you one conversation. The real job is
+"here are nine things, go" — and the two questions that matter are *what's in
+flight* and *what's blocked on me*. A board answers both at a glance. A scrollback
+answers neither.
 
-**Status:** pre-alpha. Architecture and scaffold only.
+**Status:** pre-alpha, but it runs real work. kandy is developed using kandy.
+
+## What works
+
+- **Boards** — point one at a git repo; paths are validated as you type.
+- **Notes** — a prompt, an agent, and a lifecycle: draft → queued → running →
+  review → done. Cards move between lanes by themselves as status changes.
+- **Isolation** — every note runs in its own `git worktree` on its own branch.
+  Several agents work the same repo at once without seeing each other's writes,
+  and your working tree is never touched.
+- **Live transcript** — what the agent said, what it ran, what it was refused.
+- **Steering** — send a message to a running agent mid-turn, or queue a follow-up
+  that resumes its session in the same worktree.
+- **Review** — a diff against the commit it branched from, then merge (`--no-ff`)
+  or discard. Conflicts are reported, never guessed at.
+- **Permissions** — per note: *repo only* (edit files, most shell refused) or
+  *full access* (run anything). Your call, stated plainly, never defaulted up.
 
 ## Architecture
 
-One background **server process** owns all state and all agent execution. Clients are thin
-and interchangeable:
+One background **server process** owns all state and all agent execution.
+Clients are thin and interchangeable.
 
 ```
                     ┌──────────────────────────┐
@@ -25,13 +43,15 @@ and interchangeable:
                │    │  worktree manager        │
                │    │  agent adapters ─┬─► claude
                │    └──────────────────┼─► codex
-               │                       └─► cursor-agent …
+               │                       └─► …
    ┌───────────┴──────┬─────────────────┐
    │                  │                 │
- web (React)      tui (opentui)    desktop (later)
+ web (React)      tui (stub)      desktop (later)
 ```
 
-Read [`docs/01-architecture.md`](docs/01-architecture.md) for the real detail.
+Every state change is an append to an immutable log; views are projections.
+Read [`docs/01-architecture.md`](docs/01-architecture.md) for the reasoning, and
+[`docs/09-open-questions.md`](docs/09-open-questions.md) for what's still unsolved.
 
 ## Layout
 
@@ -39,15 +59,38 @@ Read [`docs/01-architecture.md`](docs/01-architecture.md) for the real detail.
 | --- | --- |
 | `apps/server` | The daemon. Owns state, runs agents, serves the API. |
 | `apps/web` | React board. The primary client. |
-| `apps/tui` | Terminal client. Status + attach, not a full editor. |
-| `packages/core` | Domain types, event schemas, protocol contract. Shared by everything. |
-| `packages/client` | Typed client for the server API. Used by web and tui. |
+| `apps/tui` | Terminal client. A stub today. |
+| `packages/core` | Domain types, event schemas, and the one reducer everything projects with. |
+| `packages/client` | Typed client for the server API. |
 
-## Development
+## Running it
 
 ```sh
 pnpm install
-pnpm dev
+pnpm build
+
+node apps/server/dist/cli.js serve      # the daemon, on :4477
+pnpm --filter @kandy/web dev            # the board, on :5477
 ```
 
-Requires Node >= 22 and pnpm.
+Then open the board, create one against a repo, and write a note.
+
+Requires Node >= 22, pnpm, and at least one agent CLI installed and logged in
+(`claude` or `codex`). kandy never reads or stores your credentials — it spawns
+the CLI you already authenticated, and the child inherits it.
+
+## Docs
+
+| | |
+| --- | --- |
+| [Vision](docs/00-vision.md) | What this is and what we're betting on |
+| [Architecture](docs/01-architecture.md) | Daemon, transport, event log, steering |
+| [Data model](docs/02-data-model.md) | Notes, runs, events, ordering |
+| [Worktrees](docs/03-worktrees.md) | The isolation mechanism, and what will bite |
+| [Protocol](docs/04-protocol.md) | HTTP + SSE surface |
+| [Agents & auth](docs/05-agent-auth.md) | Adapters, credentials, and the policy risk |
+| [Landscape](docs/06-landscape.md) | t3code, opencode, pi — read from source |
+| [Sync](docs/07-sync.md) | Why there's none yet, and what it'll be |
+| [Roadmap](docs/08-roadmap.md) | What's next, in order |
+| [Open questions](docs/09-open-questions.md) | Honest list of what's unresolved |
+| [Interface](docs/10-interface.md) | Design rules, and a direction we reverted |

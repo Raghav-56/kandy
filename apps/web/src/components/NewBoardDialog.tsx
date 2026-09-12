@@ -69,36 +69,45 @@ export function NewBoardDialog({
           Point it at a git repository. Every note runs in its own worktree off that repo.
         </DialogDescription>
 
-        <div className="mt-10 space-y-6">
+        <div className="mt-6 space-y-4">
           <label className="block">
-            <span className="display display-xs text-ash">Repository path</span>
+            <span className="label">Repository path</span>
             <Input
               autoFocus
               value={path}
               onChange={(e) => setPath(e.target.value)}
               placeholder="~/Developer/kandy"
-              className="mt-3 font-mono"
+              className="mt-1.5 font-mono"
               onKeyDown={(e) => e.key === "Enter" && void create()}
             />
             <RepoStatus path={path} check={check} />
           </label>
 
           <label className="block">
-            <span className="display display-xs text-ash">Name</span>
+            <span className="label">Name</span>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={check?.name ?? "optional — defaults to the folder name"}
-              className="mt-3"
+              className="mt-1.5"
               onKeyDown={(e) => e.key === "Enter" && void create()}
             />
           </label>
         </div>
 
-        {error && <p className="mt-6 bg-paper-white px-3 py-2 text-[12px] text-obsidian">{error}</p>}
+        {error && (
+          <p className="mt-4 rounded-lg border border-[#3d2621] bg-[#1d1312] px-3 py-2 text-[12px] text-[#e8b3a8]">
+            {error}
+          </p>
+        )}
 
-        <div className="mt-10 flex items-center gap-4">
-          <Button variant="solid" size="md" disabled={!check?.isRepo || busy} onClick={() => void create()}>
+        <div className="mt-6 flex items-center gap-2">
+          <Button
+            variant="solid"
+            size="md"
+            disabled={!check?.isRepo || busy}
+            onClick={() => void create()}
+          >
             {busy ? "Creating…" : "Create board"}
           </Button>
           <Button variant="ghost" size="md" onClick={() => onOpenChange(false)}>
@@ -111,23 +120,27 @@ export function NewBoardDialog({
 }
 
 function RepoStatus({ path, check }: { path: string; check: RepoCheck | null }) {
-  if (!path.trim()) return <p className="meta mt-3">Absolute path, or ~ for home.</p>
-  if (!check) return <p className="meta mt-3">Checking…</p>
+  if (!path.trim())
+    return <p className="mt-2 text-[11.5px] text-faint">Absolute path, or ~ for home.</p>
+  if (!check) return <p className="mt-2 text-[11.5px] text-faint">Checking…</p>
 
   if (!check.isRepo) {
-    return <p className="mt-3 text-[12px] text-paper-white">{check.error ?? "Not a git repository."}</p>
+    return <p className="mt-2 text-[11.5px] text-coral">{check.error ?? "Not a git repository."}</p>
   }
 
   return (
-    <div className="meta mt-3 space-y-1">
-      <div className="font-mono text-[#d4d4d4]">{check.path}</div>
-      <div>
+    <div className="mt-2 space-y-1 text-[11.5px]">
+      <div className="flex items-center gap-1.5 text-sage">
+        <span className="h-1.5 w-1.5 rounded-full bg-sage" />
+        <span className="font-mono text-dim">{check.path}</span>
+      </div>
+      <div className="text-faint">
         on {check.branch} at {check.head}
       </div>
       {/* Worth saying plainly: notes branch from HEAD and will not see
           uncommitted work. Discovering that later feels like a betrayal. */}
       {check.dirty && (
-        <div className="text-paper-white">
+        <div className="text-amber">
           Uncommitted changes — agents branch from HEAD and won't see them.
         </div>
       )}

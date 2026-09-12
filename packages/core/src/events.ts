@@ -1,4 +1,4 @@
-import type { AgentId, NoteStatus, RunStatus } from "./domain.js"
+import type { AgentId, Lane, NoteStatus, Policy, RunStatus } from "./domain.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
 /** Envelope fields the server stamps on every event. */
@@ -10,7 +10,13 @@ export type EventMeta = {
 export type KandyEventMap = {
   "board.created": { boardId: BoardId; name: string; repoPath: string }
 
-  "column.created": { columnId: ColumnId; boardId: BoardId; name: string; pos: string }
+  "column.created": {
+    columnId: ColumnId
+    boardId: BoardId
+    name: string
+    pos: string
+    lane?: Lane | null
+  }
 
   "note.created": {
     noteId: NoteId
@@ -23,6 +29,7 @@ export type KandyEventMap = {
   "note.edited": { noteId: NoteId; title?: string; body?: string }
   "note.moved": { noteId: NoteId; columnId: ColumnId; pos: string }
   "note.assigned": { noteId: NoteId; agent: AgentId }
+  "note.policy": { noteId: NoteId; policy: Policy }
   "note.status": { noteId: NoteId; status: NoteStatus }
   "note.deleted": { noteId: NoteId }
 

@@ -2,7 +2,12 @@
 
 Ordered by "what would make this real," not by what's easy.
 
-## M0 — the spine (current scaffold)
+> **Where we are:** M0 and M1 are done, and most of M2. kandy runs real work on
+> its own codebase — concurrent isolated runs, live transcript, steering, and a
+> review flow that merges. What M2 still owes is answering a permission prompt
+> *in flight* rather than only seeing that one was refused.
+
+## M0 — the spine ✅
 
 - Monorepo, shared protocol package, typed client.
 - Server: SQLite event log, command handlers, SSE stream, board projection.
@@ -12,23 +17,28 @@ Ordered by "what would make this real," not by what's easy.
 **Done when:** two tabs open, drag a note in one, it moves in the other. That proves the whole
 architecture end to end and takes days, not weeks.
 
-## M1 — one agent, one note, real isolation
+## M1 — one agent, one note, real isolation ✅
 
 - Worktree manager: create, track, clean up.
-- One adapter. **Codex first**, not Claude — its headless mode is documented, its sandbox flags
-  are explicit, and it carries none of the OAuth-policy ambiguity (see `05-agent-auth.md`).
+- Two adapters. Codex was written first for its documented headless mode and explicit sandbox
+  flags; Claude Code followed once we had captured its real stream-json output, and it is now the
+  reference because it is the only one that accepts mid-turn steering.
 - `run.output` streaming to the note card.
 - Cancel a run.
 
 **Done when:** write a note, click run, watch it work, end up with a branch.
 
-## M2 — the actual product
+## M2 — the actual product (mostly done)
 
 - **Concurrency.** N notes running at once, each in its own worktree, with a configurable slot
   limit. This is the moment kandy becomes different from every chat-shaped tool.
 - **Review.** A note in `review` shows a diff and three buttons: merge, discard, revise. Revise
   resumes the agent's session in the same worktree.
-- **Blocked.** Permission requests surface as a blocked note, answerable from any client.
+- **Blocked.** ⚠️ Half done. Refusals surface — Claude auto-denies in headless mode and reports
+  each one — but we cannot yet *answer* them: by the time the note goes blocked the agent has
+  moved on. Answering in flight needs `canUseTool`, which means running the agent in-process
+  instead of as a subprocess. That is a real fork in the architecture, not a tweak.
+- **Permissions policy.** ✅ Per note, *repo only* or *full access*, chosen by the user.
 
 **Done when:** you run five notes over lunch and review them in ten minutes.
 

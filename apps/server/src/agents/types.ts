@@ -1,4 +1,4 @@
-import type { AgentId } from "@kandy/core"
+import type { AgentId, Policy } from "@kandy/core"
 
 /** What an adapter emits after parsing one line of its CLI's output. */
 export type AgentEvent =
@@ -8,6 +8,12 @@ export type AgentEvent =
   | { kind: "tool"; tool: string; detail: string; status: "started" | "completed" | "failed" }
   | { kind: "blocked"; requestId: string; detail: string }
   | { kind: "usage"; text: string }
+  /**
+   * The agent finished a turn. Agents we hold stdin open for (to steer them)
+   * will otherwise sit waiting for more input forever, so this is what tells
+   * the runner it is safe to close the pipe and let the process exit.
+   */
+  | { kind: "turn_end" }
   | { kind: "error"; message: string }
 
 export type SpawnOptions = {
@@ -16,6 +22,8 @@ export type SpawnOptions = {
   prompt: string
   /** Agent's own session id, to continue a previous run in this worktree. */
   resume?: string
+  /** How much the user has allowed this note to do. */
+  policy: Policy
 }
 
 /**

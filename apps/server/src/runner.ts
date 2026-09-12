@@ -1,10 +1,25 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { createInterface } from "node:readline"
-import { event, id, type AgentId, type BoardView, type Delivery } from "@kandy/core"
+import {
+  between,
+  event,
+  id,
+  laneColumn,
+  notesIn,
+  type AgentId,
+  type BoardView,
+  type Delivery,
+} from "@kandy/core"
 import type { Store } from "./store.js"
 import type { Bus } from "./bus.js"
 import { adapter } from "./agents/index.js"
-import { commitLeftovers, createWorktree, diffStat, type Worktree } from "./worktree.js"
+import {
+  commitLeftovers,
+  createWorktree,
+  diffStat,
+  isDirty,
+  type Worktree,
+} from "./worktree.js"
 
 type Live = {
   runId: string
@@ -51,6 +66,31 @@ export class Runner {
     this.bus.publish(this.store.append(pending))
   }
 
+  /**
+   * Move a note into the column for its current status.
+   *
+   * Called after every event that can change status. The reducer derives
+   * status from run events, so this reads the freshly-projected view rather
+   * than trying to predict it.
+   */
+  syncColumn(boardId: string, noteId: string): void {
+    const view = this.getView(boardId)
+    const note = view?.notes.find((n) => n.id === noteId)
+    if (!view || !note) return
+
+    const target = laneColumn(view, note.status)
+    if (!target || target.id === note.columnId) return
+
+    const last = notesIn(view, target.id).at(-1)
+    this.emit(
+      event("note.moved", {
+        noteId,
+        columnId: target.id,
+        pos: between(last?.pos ?? null, null),
+      }),
+    )
+  }
+
   /** Persist a transcript frame and push it to anyone watching, live. */
   private say(
     runId: string,
@@ -64,6 +104,7 @@ export class Runner {
   request(boardId: string, noteId: string, agent: AgentId): string {
     const runId = id("run")
     this.emit(event("run.requested", { runId, noteId, agent }))
+    this.syncColumn(boardId, noteId)
     this.queue.push({ runId, noteId, boardId, agent })
     void this.pump()
     return runId
@@ -141,15 +182,17 @@ export class Runner {
     const worktree = q.worktree ?? (await createWorktree(view.board.repoPath, q.noteId, note.title))
     this.worktrees.set(q.noteId, worktree)
 
-    // Resume the agent's own session if this note has run here before, so a
-    // follow-up keeps the conversation instead of starting cold.
-    const prior = view.runs
-      .filter((r) => r.noteId === q.noteId && r.agentSessionId)
-      .at(-1)?.agentSessionId
+    // Resume the agent's session only when continuing in an existing worktree.
+    // A fresh worktree means a fresh filesystem, and an agent whose memory
+    // disagrees with what's on disk wastes a turn rediscovering that.
+    const prior = q.worktree
+      ? view.runs.filter((r) => r.noteId === q.noteId && r.agentSessionId).at(-1)?.agentSessionId
+      : undefined
 
     const spec = a.spawn({
       cwd: worktree.path,
       prompt: q.prompt ?? note.body ?? note.title,
+      policy: note.policy ?? "repo",
       ...(prior ? { resume: prior } : {}),
     })
 
@@ -183,10 +226,30 @@ export class Runner {
       }),
     )
 
+    if ((note.policy ?? "repo") === "full") {
+      this.say(q.runId, "system", "running with full access — this agent can do anything you can")
+    }
+
+    // Say plainly what the agent can and cannot see.
+    //
+    // A note branches from HEAD, so uncommitted work in the user's tree is
+    // invisible to it. We used to refuse to start at all when the tree was
+    // dirty — which makes the tool unusable during exactly the normal
+    // development it exists to support. Warn, don't block: the footgun is
+    // mild, and being told about it is the whole fix.
+    if (await isDirty(view.board.repoPath).catch(() => false)) {
+      this.say(
+        q.runId,
+        "system",
+        `branched from ${worktree.baseRef.slice(0, 7)} — uncommitted changes in your working tree are not visible to this agent`,
+      )
+    }
+
     // Agents whose prompt travels over stdin get it now. The pipe stays open:
     // it is the same channel steering messages use later.
     if (spec.stdin && child.stdin?.writable) child.stdin.write(spec.stdin)
 
+    this.syncColumn(q.boardId, q.noteId)
     this.consume(q.runId, child, (line) => a.parse(line))
 
     child.on("error", (err) => {
@@ -233,6 +296,14 @@ export class Runner {
             case "usage":
               this.say(runId, "system", ev.text)
               break
+            case "turn_end":
+              // One run is one turn. Closing stdin lets the agent exit, which
+              // finishes the run, frees the slot, and moves the note to review.
+              // Steering sent *during* the turn still landed live; steering
+              // after this point becomes a follow-up run that resumes the
+              // session in the same worktree.
+              child.stdin?.end()
+              break
             case "blocked":
               this.say(runId, "system", ev.detail, "permission")
               this.emit(
@@ -243,6 +314,10 @@ export class Runner {
                   detail: ev.detail,
                 }),
               )
+              {
+                const live = this.live.get(runId)
+                if (live) this.syncColumn(live.boardId, live.noteId)
+              }
               break
             case "error":
               this.say(runId, "error", ev.message)
@@ -289,6 +364,7 @@ export class Runner {
     if (status === "succeeded" && l) {
       this.emit(event("review.opened", { noteId, runId, branch: l.worktree.branch, stat }))
     }
+    if (l) this.syncColumn(l.boardId, noteId)
     void this.pump()
   }
 
@@ -343,6 +419,13 @@ export class Runner {
    */
   reconcile(view: BoardView): void {
     this.adopt(view)
+
+    // Put notes back in the lane their status says they belong to. A draft is
+    // left wherever the user filed it — that placement is theirs — but a note
+    // that ran is describing machine state, and the board must agree with it.
+    for (const n of view.notes) {
+      if (n.status !== "draft") this.syncColumn(view.board.id, n.id)
+    }
     for (const run of view.runs) {
       if (run.status === "running" || run.status === "starting" || run.status === "blocked") {
         this.emit(

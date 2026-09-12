@@ -13,10 +13,10 @@ this wrong makes review feel like homework, and review is the whole back half of
 isolation cleanly. But real work spans a frontend and a backend, and forcing two boards for one
 task is exactly the friction we claim to remove.
 
-**Free-position canvas or columns?** Sticky notes imply free positioning, which is expressive
-in a browser and meaningless in a terminal. Columns are honest in both. Current assumption:
-columns are the model, canvas is a browser-only *view* — but this has not been tested with a
-real user and it is the core of the "sticky note" pitch.
+**~~Free-position canvas or columns?~~** *Settled: columns.* We built the spatial version — a
+3D board with cards in space — and it was worse at the only two questions a board needs to
+answer. Free positioning is expressive; a lifecycle is not a thing you want to arrange by hand.
+See [`10-interface.md`](10-interface.md).
 
 **Who is this for?** Someone running six agents at once is already sophisticated and probably
 already has tmux and a script. The person who *needs* a board may not yet run enough agents to
@@ -24,15 +24,24 @@ need one. This gap is real and unresolved.
 
 ## Technical
 
-**How does a blocked run actually surface?** A permission prompt from an agent's stdout has to
-become a structured request we can answer from a browser. Each CLI expresses this differently
-and some don't express it at all — they just hang, or auto-approve because we passed a bypass
-flag. If we always pass bypass flags, `blocked` never happens and our safest-looking status is
-theatre.
+**~~How does a blocked run actually surface?~~** *Partly answered.* Claude Code in headless
+mode does not hang and does not silently auto-approve: it auto-**denies** what it cannot ask
+about, emits the refusal as a `tool_result` with `is_error: true`, and reports every one in
+`result.permission_denials` with the tool name and its arguments. So `blocked` is real, and the
+adapter surfaces it.
 
-**Can we reliably capture agent session ids?** Resume — which `revise` depends on — needs them.
-Codex won't let us pre-assign one. Gemini doesn't reliably emit one. This may make `revise`
-work well for some agents and not others, which is a bad user-facing inconsistency.
+What is still open is the other half: **we can see the denial but we cannot answer it.** The
+agent has already moved on by the time the note goes blocked, so today "blocked" means "it was
+refused something" rather than "it is waiting for you." Answering in-flight needs the
+`canUseTool` callback from `@anthropic-ai/claude-agent-sdk`, which means running the agent
+in-process rather than as a subprocess — a real architectural fork, not a tweak. Codex and the
+others each express refusal differently and will need their own answer.
+
+**Can we reliably capture agent session ids?** Resume — which steering depends on — needs them.
+Claude emits `session_id` on every event and can even be handed one up front, so it is solved
+there. Codex won't let us pre-assign one; Gemini doesn't reliably emit one at all. Steering will
+therefore be excellent on some agents and degraded on others, which is a bad inconsistency to
+put in front of a user without explaining it.
 
 **How much output is too much?** An agent can emit megabytes. Storage, replay, and rendering
 all need a cap or a rollup, and we haven't designed one.

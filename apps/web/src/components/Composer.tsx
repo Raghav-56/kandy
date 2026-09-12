@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/input"
 
 /**
  * Writing a note is writing a prompt. The field is the size of the thing you
- * should actually write — a sentence or two of intent, not a paragraph of spec.
+ * should actually write — a sentence or two of intent, not a page of spec.
  */
 export function Composer({
   agents,
@@ -28,29 +28,32 @@ export function Composer({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 px-6">
-      <div className="w-[min(640px,100%)] border border-[#2a2a2a] bg-graphite p-10">
-        <h2 className="display display-md">New note</h2>
-        <p className="meta mt-3">What should the agent do?</p>
-
+    <div
+      className="fixed inset-0 z-40 flex items-start justify-center bg-black/60 px-6 pt-[16vh] backdrop-blur-[2px]"
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-[min(620px,100%)] rounded-xl border border-line bg-panel p-5 shadow-2xl shadow-black/60"
+      >
         <Textarea
           autoFocus
           rows={4}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Fix the flicker when a note moves between lanes."
-          className="mt-8"
+          placeholder="What should the agent do?"
+          className="border-0 bg-transparent px-0 text-[15px] leading-[1.5] focus:border-0"
           onKeyDown={(e) => {
             if (e.key === "Escape") onCancel()
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(e.shiftKey)
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(!e.shiftKey)
           }}
         />
 
-        <div className="mt-8 flex flex-wrap items-center gap-4">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line-soft pt-3">
           <select
             value={agent}
             onChange={(e) => setAgent(e.target.value as AgentId)}
-            className="h-9 rounded-[50px] border border-ash bg-transparent px-5 text-[11px] uppercase text-paper-white"
+            className="h-7 rounded-lg border border-line bg-panel-2 px-2 text-[12px] text-ink"
           >
             <option value="">no agent</option>
             {agents.map((a) => (
@@ -61,18 +64,13 @@ export function Composer({
             ))}
           </select>
 
-          <Button variant="outline" size="md" onClick={() => submit(false)} disabled={!text.trim()}>
+          <Button variant="ghost" onClick={() => submit(false)} disabled={!text.trim()}>
             Add
           </Button>
-          <Button
-            variant="solid"
-            size="md"
-            onClick={() => submit(true)}
-            disabled={!text.trim() || !agent}
-          >
+          <Button variant="solid" onClick={() => submit(true)} disabled={!text.trim() || !agent}>
             Add &amp; run
           </Button>
-          <span className="meta ml-auto">⌘↵ add · ⇧⌘↵ run · esc</span>
+          <span className="ml-auto text-[11px] text-faint">⌘↵ run · ⇧⌘↵ add · esc</span>
         </div>
       </div>
     </div>

@@ -1,34 +1,71 @@
 import type { NoteStatus } from "@kandy/core"
 
 /**
- * The achromatic status language.
+ * One warm paper tone carries almost every note; status is a dot and a word.
  *
- * DESIGN.md forbids colour outright, which turns out to be a better constraint
- * than a limitation: status has to be carried by *value* and *motion*, and both
- * survive a glance across a room better than hue does. Inversion is the loudest
- * signal the palette has, so `blocked` — the only status that legitimately
- * demands attention — is the one that gets it.
+ * The earlier version tinted the whole card per status and the board turned
+ * into a bag of sweets. Only two statuses earn a surface change: `blocked`,
+ * which is the one state that legitimately demands attention, and `done`,
+ * which should recede until it's invisible.
  */
-export type Surface = {
-  face: string
+export type Style = {
+  /** Card surface. */
+  surface: string
   ink: string
-  /** Muted ink for the status label and metadata. */
-  dim: string
-  /** Pushed back in Z; finished work recedes. */
-  depth: number
-  scale: number
+  muted: string
+  /** The status dot. */
+  dot: string
+  label: string
 }
 
-export const SURFACES: Record<NoteStatus, Surface> = {
-  draft:   { face: "#ffffff", ink: "#000000", dim: "#575757", depth: 0,     scale: 1 },
-  queued:  { face: "#d4d4d4", ink: "#000000", dim: "#575757", depth: -0.25, scale: 0.98 },
-  running: { face: "#ffffff", ink: "#000000", dim: "#000000", depth: 0.35,  scale: 1.02 },
-  blocked: { face: "#0a0a0a", ink: "#ffffff", dim: "#ffffff", depth: 0.5,   scale: 1.03 },
-  review:  { face: "#ffffff", ink: "#000000", dim: "#000000", depth: 0.2,   scale: 1 },
-  done:    { face: "#1c1c1c", ink: "#575757", dim: "#454545", depth: -0.6,  scale: 0.9 },
-  failed:  { face: "#0a0a0a", ink: "#ffffff", dim: "#575757", depth: -0.1,  scale: 0.96 },
+export const STYLES: Record<NoteStatus, Style> = {
+  draft: {
+    surface: "bg-paper text-paper-ink",
+    ink: "text-paper-ink",
+    muted: "text-[#6b6759]",
+    dot: "bg-[#a9a294]",
+    label: "draft",
+  },
+  queued: {
+    surface: "bg-paper-2 text-paper-ink",
+    ink: "text-paper-ink",
+    muted: "text-[#6b6759]",
+    dot: "bg-azure",
+    label: "queued",
+  },
+  running: {
+    surface: "bg-paper text-paper-ink",
+    ink: "text-paper-ink",
+    muted: "text-[#6b6759]",
+    dot: "bg-amber",
+    label: "running",
+  },
+  blocked: {
+    surface: "bg-[#f6dcd4] text-paper-ink",
+    ink: "text-paper-ink",
+    muted: "text-[#7a5c53]",
+    dot: "bg-coral",
+    label: "needs you",
+  },
+  review: {
+    surface: "bg-paper text-paper-ink",
+    ink: "text-paper-ink",
+    muted: "text-[#6b6759]",
+    dot: "bg-sage",
+    label: "review",
+  },
+  done: {
+    surface: "bg-panel-2 text-dim border border-line",
+    ink: "text-dim",
+    muted: "text-faint",
+    dot: "bg-[#3a3a42]",
+    label: "done",
+  },
+  failed: {
+    surface: "bg-[#1d1312] text-[#e8b3a8] border border-[#3d2621]",
+    ink: "text-[#e8b3a8]",
+    muted: "text-[#8a5f56]",
+    dot: "bg-coral",
+    label: "failed",
+  },
 }
-
-export const CARD = { w: 2.0, h: 1.25, d: 0.05 }
-export const LANE_GAP = 2.45
-export const ROW_GAP = 1.5

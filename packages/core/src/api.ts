@@ -1,4 +1,4 @@
-import type { AgentId, Board, BoardView } from "./domain.js"
+import type { AgentId, Board, BoardView, Policy } from "./domain.js"
 import type { TranscriptFrame } from "./events.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
@@ -16,6 +16,7 @@ export type Commands = {
   "POST /notes/:id/edit": { req: { title?: string; body?: string }; res: {} }
   "POST /notes/:id/move": { req: { columnId: ColumnId; before?: NoteId; after?: NoteId }; res: {} }
   "POST /notes/:id/assign": { req: { agent: AgentId }; res: {} }
+  "POST /notes/:id/policy": { req: { policy: Policy }; res: {} }
   "POST /notes/:id/delete": { req: {}; res: {} }
   "POST /notes/:id/run": { req: { agent?: AgentId }; res: { runId: RunId } }
   "POST /notes/:id/review": {

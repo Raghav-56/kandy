@@ -13,13 +13,11 @@ export function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-[2px]" />
       <DialogPrimitive.Content
         className={cn(
-          // Graphite: two shades above the canvas, which is the whole of the
-          // elevation language. No shadow, no glow.
           "fixed left-1/2 top-1/2 z-50 w-[min(520px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2",
-          "border border-[#2a2a2a] bg-graphite p-10",
+          "rounded-xl border border-line bg-panel p-7 shadow-2xl shadow-black/60",
           className,
         )}
         {...props}
@@ -34,12 +32,22 @@ export function DialogTitle({
   className,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Title>) {
-  return <DialogPrimitive.Title className={cn("display display-md", className)} {...props} />
+  return (
+    <DialogPrimitive.Title
+      className={cn("text-[17px] font-semibold tracking-[-0.01em]", className)}
+      {...props}
+    />
+  )
 }
 
 export function DialogDescription({
   className,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Description>) {
-  return <DialogPrimitive.Description className={cn("meta mt-3", className)} {...props} />
+  return (
+    <DialogPrimitive.Description
+      className={cn("mt-1.5 text-[12.5px] leading-relaxed text-dim", className)}
+      {...props}
+    />
+  )
 }

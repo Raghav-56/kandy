@@ -22,7 +22,6 @@ import {
   deleteBranch,
   diff as gitDiff,
   diffStat,
-  isDirty,
   mergeBranch,
   removeWorktree,
 } from "./worktree.js"
@@ -85,14 +84,23 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     const boardId = id("board")
     const name = body.name?.trim() || check.name || "board"
     emit(deps, event("board.created", { boardId, name, repoPath: check.path }))
-    // Seed the lifecycle lanes. They're labels; status on the note is authoritative.
-    for (const [i, name] of ["Inbox", "Queued", "Running", "Review", "Done"].entries()) {
+    // Seed the lifecycle lanes. Each declares the lane it represents, so the
+    // server can move notes between them as their status changes.
+    const LANES = [
+      { name: "Inbox", lane: "inbox" },
+      { name: "Queued", lane: "queued" },
+      { name: "Running", lane: "running" },
+      { name: "Review", lane: "review" },
+      { name: "Done", lane: "done" },
+    ] as const
+    for (const [i, col] of LANES.entries()) {
       emit(
         deps,
         event("column.created", {
           columnId: id("col"),
           boardId,
-          name,
+          name: col.name,
+          lane: col.lane,
           pos: between(null, null) + String(i),
         }),
       )
@@ -204,6 +212,14 @@ async function noteAction(
       const e = emit(deps, event("note.assigned", { noteId, agent: b.agent }))
       return send(res, 200, { ok: true, seq: e.seq })
     }
+    case "policy": {
+      const b = await json<{ policy: "repo" | "full" }>(req)
+      if (b?.policy !== "repo" && b?.policy !== "full")
+        return fail(res, 400, "bad_request", "policy must be 'repo' or 'full'")
+      const e = emit(deps, event("note.policy", { noteId, policy: b.policy }))
+      return send(res, 200, { ok: true, seq: e.seq })
+    }
+
     case "delete": {
       const e = emit(deps, event("note.deleted", { noteId }))
       return send(res, 200, { ok: true, seq: e.seq })
@@ -214,12 +230,6 @@ async function noteAction(
       if (!agent) return fail(res, 400, "bad_request", "note has no agent assigned")
       if (note.status === "running" || note.status === "queued")
         return fail(res, 409, "invalid_transition", `note is already ${note.status}`)
-
-      // Surface a dirty tree rather than silently branching from HEAD and
-      // giving the agent a repo that's missing the user's last hour of work.
-      if (await isDirty(view.board.repoPath)) {
-        return fail(res, 409, "repo_dirty", "repo has uncommitted changes; commit or stash first")
-      }
 
       const runId = deps.runner.request(view.board.id, noteId, agent)
       return send(res, 200, { ok: true, seq: deps.store.head(), runId })
@@ -271,6 +281,7 @@ async function noteAction(
       }
 
       const e = emit(deps, event("review.decided", { noteId, ...b }))
+      deps.runner.syncColumn(view.board.id, noteId)
       return send(res, 200, { ok: true, seq: e.seq })
     }
     default:

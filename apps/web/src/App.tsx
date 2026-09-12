@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { KandyClient } from "@kandy/client"
 import type { AgentId, AgentInfo, Board } from "@kandy/core"
 import { useBoard } from "./useBoard"
-import { Board3D } from "./components/Board3D"
+import { Board as BoardGrid } from "./components/Board"
 import { Composer } from "./components/Composer"
 import { Inspector } from "./components/Inspector"
 import { NewBoardDialog } from "./components/NewBoardDialog"
@@ -78,16 +78,16 @@ export function App() {
       {error && (
         <button
           onClick={clearError}
-          className="shrink-0 bg-paper-white px-6 py-3 text-left text-[12px] text-obsidian"
+          className="shrink-0 border-b border-[#3d2621] bg-[#1d1312] px-5 py-2.5 text-left text-[12px] text-[#e8b3a8]"
         >
-          {error} — dismiss
+          {error} <span className="ml-2 text-faint">dismiss</span>
         </button>
       )}
 
       <div className="flex min-h-0 flex-1">
         <main className="relative min-w-0 flex-1">
           {view ? (
-            <Board3D
+            <BoardGrid
               view={view}
               selectedId={selected}
               onSelect={setSelected}
@@ -113,6 +113,7 @@ export function App() {
             onRun={(agent) => void act((c) => c.runNote(note.id, agent))}
             onCancel={(runId) => void act((c) => c.cancelRun(runId))}
             onAssign={(agent) => void act((c) => c.assignNote(note.id, agent))}
+            onPolicy={(policy) => void act((c) => c.setPolicy(note.id, policy))}
             onSteer={async (text) => (await act((c) => c.message(note.id, text)))?.delivery}
             onReview={(decision) => void act((c) => c.reviewNote(note.id, decision))}
             onDelete={() => {
@@ -151,18 +152,19 @@ export function App() {
 }
 
 function Empty({ hasBoards, onNewBoard }: { hasBoards: boolean; onNewBoard: () => void }) {
+  if (hasBoards) {
+    return <div className="flex h-full items-center justify-center text-[12px] text-faint">Loading…</div>
+  }
   return (
-    <div className="flex h-full items-center">
-      <div className="px-16">
-        <h1 className="display display-lg max-w-[12ch]">
-          {hasBoards ? "Loading" : "Nothing on the wall"}
-        </h1>
-        <p className="mt-10 max-w-[46ch] text-[22px] leading-[1.18] tracking-[-0.44px] text-[#d4d4d4]">
-          A board is a git repository. Every note you write becomes a unit of work an agent picks
-          up — in its own worktree, on its own branch.
+    <div className="flex h-full items-center justify-center px-6">
+      <div className="max-w-[420px] text-center">
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Nothing on the board yet</h1>
+        <p className="mt-3 text-[13px] leading-relaxed text-dim">
+          A board is a git repository. Every note becomes a unit of work an agent picks up — in its
+          own worktree, on its own branch, so several can run at once without colliding.
         </p>
-        <div className="mt-10">
-          <Button variant="solid" size="lg" onClick={onNewBoard}>
+        <div className="mt-6">
+          <Button variant="solid" size="md" onClick={onNewBoard}>
             New board
           </Button>
         </div>
