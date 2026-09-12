@@ -483,6 +483,9 @@ export class Runner {
           path: n.worktree,
           branch: n.branch,
           baseRef: run?.baseRef ?? "HEAD",
+          // Not recorded in the log, so a worktree adopted after a restart
+          // diffs against its pinned commit until its next run.
+          baseBranch: null,
         })
       }
     }

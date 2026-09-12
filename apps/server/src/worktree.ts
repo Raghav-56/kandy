@@ -38,7 +38,19 @@ function ensureExcluded(repoPath: string): void {
 export type Worktree = {
   path: string
   branch: string
+  /** The commit the note branched from. Pinned so a queued note doesn't drift. */
   baseRef: string
+  /**
+   * The branch it will land on, e.g. "main".
+   *
+   * Diffs are taken against this rather than `baseRef`, because the two answer
+   * different questions. `baseRef` is "where did this agent start", which must
+   * stay pinned. "What did this note change" has to be asked against the live
+   * base branch: once main is merged INTO the note's branch, a diff from the
+   * pinned commit counts main's own work as the note's. That is how a note
+   * that added 132 lines came to report 2,496.
+   */
+  baseBranch: string | null
 }
 
 function slug(title: string): string {
@@ -64,6 +76,10 @@ export async function createWorktree(
   // Resolve the base commit now and record it. A note queued at 2pm must not
   // silently rebase onto whatever main looks like when a slot frees up.
   const baseRef = await git(repoPath, "rev-parse", "HEAD")
+  // Detached HEAD has no branch to land on; fall back to the pinned commit.
+  const baseBranch = await git(repoPath, "rev-parse", "--abbrev-ref", "HEAD")
+    .then((b) => (b && b !== "HEAD" ? b : null))
+    .catch(() => null)
 
   ensureExcluded(repoPath)
   const root = worktreeRoot(repoPath)
@@ -73,7 +89,7 @@ export async function createWorktree(
   const branch = `kandy/${noteId}-${slug(title)}`
 
   await git(repoPath, "worktree", "add", "-b", branch, dir, baseRef)
-  return { path: dir, branch, baseRef }
+  return { path: dir, branch, baseRef, baseBranch }
 }
 
 /** Agents are inconsistent about committing. Capture whatever they left. */
@@ -85,8 +101,16 @@ export async function commitLeftovers(wt: Worktree, message: string): Promise<bo
   return true
 }
 
+/**
+ * What to diff against: the branch this note lands on, falling back to the
+ * commit it started from. See Worktree.baseBranch for why these differ.
+ */
+function against(wt: Worktree): string {
+  return `${wt.baseBranch ?? wt.baseRef}...HEAD`
+}
+
 export async function diffStat(wt: Worktree): Promise<string> {
-  return git(wt.path, "diff", "--stat", `${wt.baseRef}...HEAD`)
+  return git(wt.path, "diff", "--stat", against(wt))
 }
 
 /**
@@ -95,7 +119,9 @@ export async function diffStat(wt: Worktree): Promise<string> {
  *   " 2 files changed, 105 insertions(+), 1 deletion(-)"
  */
 export async function diffNumbers(wt: Worktree): Promise<DiffStat> {
-  const line = await git(wt.path, "diff", "--shortstat", `${wt.baseRef}...HEAD`).catch(() => "")
+  const line = await git(wt.path, "diff", "--shortstat", against(wt))
+    // A base branch that no longer exists shouldn't lose the diff entirely.
+    .catch(() => git(wt.path, "diff", "--shortstat", `${wt.baseRef}...HEAD`).catch(() => ""))
   const num = (re: RegExp) => Number(line.match(re)?.[1] ?? 0)
   return {
     files: num(/(\d+) files? changed/),
@@ -105,7 +131,9 @@ export async function diffNumbers(wt: Worktree): Promise<DiffStat> {
 }
 
 export async function diff(wt: Worktree): Promise<string> {
-  return git(wt.path, "diff", `${wt.baseRef}...HEAD`)
+  return git(wt.path, "diff", against(wt)).catch(() =>
+    git(wt.path, "diff", `${wt.baseRef}...HEAD`),
+  )
 }
 
 export async function removeWorktree(repoPath: string, dir: string, force = false): Promise<void> {
