@@ -17,7 +17,9 @@ import {
   carryInto,
   commitLeftovers,
   createWorktree,
+  diff as gitDiff,
   diffNumbers,
+  diffStat,
   isDirty,
   runSetup,
   type Worktree,
@@ -402,10 +404,18 @@ export class Runner {
 
     let error: string | null = null
     let stat: DiffStat = { files: 0, insertions: 0, deletions: 0 }
+    // The textual --stat and the diff itself are for the review snapshot, not
+    // the event: too big for the log, and gone with the worktree if unsaved.
+    let statText = ""
+    let diff = ""
     if (l) {
       try {
         await commitLeftovers(l.worktree, `kandy: ${noteId}`)
-        stat = await diffNumbers(l.worktree)
+        ;[stat, statText, diff] = await Promise.all([
+          diffNumbers(l.worktree),
+          diffStat(l.worktree),
+          gitDiff(l.worktree),
+        ])
       } catch (err) {
         error = `failed to capture agent output: ${err instanceof Error ? err.message : err}`
         this.say(runId, "error", error)
@@ -416,6 +426,14 @@ export class Runner {
     this.emit(event("run.finished", { runId, noteId, status, exitCode: code, error }))
 
     if (status === "succeeded" && l) {
+      // Snapshot before announcing: deciding the review removes the worktree,
+      // and a review that can no longer show its own diff is not a review.
+      this.engine.store.saveDiff(noteId, {
+        runId,
+        branch: l.worktree.branch,
+        stat: statText,
+        diff,
+      })
       this.emit(event("review.opened", { noteId, runId, branch: l.worktree.branch, stat }))
       // A branch may already have a PR — a re-run of a note whose first
       // attempt was pushed, say. Look before offering to open a second one.

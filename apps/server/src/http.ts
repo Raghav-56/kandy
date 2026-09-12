@@ -190,11 +190,29 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   }
 
   // GET /notes/:id/diff
+  //
+  // The live worktree is the truth while it exists — a note can still be
+  // running, and its diff grows under us. Once review is decided the worktree
+  // is gone, so we fall back to the snapshot taken when review opened.
   if (req.method === "GET" && parts[0] === "notes" && parts[2] === "diff") {
-    const wt = deps.runner.worktreeOf(parts[1]!)
-    if (!wt) return send(res, 200, { diff: "", stat: "", branch: null })
-    const [diff, stat] = await Promise.all([gitDiff(wt), diffStat(wt)])
-    return send(res, 200, { diff, stat, branch: wt.branch })
+    const noteId = parts[1]!
+    const wt = deps.runner.worktreeOf(noteId)
+    if (wt) {
+      try {
+        const [diff, stat] = await Promise.all([gitDiff(wt), diffStat(wt)])
+        return send(res, 200, { diff, stat, branch: wt.branch, capturedAt: null })
+      } catch {
+        // Worktree remembered but no longer on disk. The snapshot is all we have.
+      }
+    }
+    const saved = deps.engine.store.savedDiff(noteId)
+    if (!saved) return send(res, 200, { diff: "", stat: "", branch: null, capturedAt: null })
+    return send(res, 200, {
+      diff: saved.diff,
+      stat: saved.stat,
+      branch: saved.branch,
+      capturedAt: saved.ts,
+    })
   }
 
   // POST /notes/:id/<action>

@@ -15,7 +15,14 @@ type FileDiff = {
  * write". Splitting per file answers the first question at a glance and keeps
  * the second from being a two-thousand-line wall.
  */
-export function DiffView({ diff }: { diff: string }) {
+export function DiffView({
+  diff,
+  capturedAt,
+}: {
+  diff: string
+  /** Set when the worktree is gone and this is the snapshot taken at review. */
+  capturedAt?: number | null
+}) {
   const files = useMemo(() => splitFiles(diff), [diff])
   const [open, setOpen] = useState<string | null>(files[0]?.path ?? null)
 
@@ -25,6 +32,11 @@ export function DiffView({ diff }: { diff: string }) {
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4">
+      {capturedAt != null && (
+        <p className="mb-2.5 px-1 text-[11px] text-faint">
+          Snapshot from review on {new Date(capturedAt).toLocaleString()} — the worktree is gone.
+        </p>
+      )}
       <div className="space-y-2">
         {files.map((f) => {
           const isOpen = open === f.path

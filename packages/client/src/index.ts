@@ -131,7 +131,13 @@ export class KandyClient {
     })
   }
   diff(noteId: string) {
-    return this.req<{ diff: string; stat: string; branch: string | null }>(
+    return this.req<{
+      diff: string
+      stat: string
+      branch: string | null
+      /** Non-null when the worktree is gone and this is the review-time snapshot. */
+      capturedAt: number | null
+    }>(
       "GET",
       `/notes/${noteId}/diff`,
     )

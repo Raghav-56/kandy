@@ -38,12 +38,12 @@ type Props = {
   forge: Forge | null
   onOpenPr: () => Promise<void>
   onDelete: () => void
-  loadDiff: () => Promise<{ diff: string; stat: string } | undefined>
+  loadDiff: () => Promise<{ diff: string; capturedAt: number | null } | undefined>
 }
 
 export function Inspector(p: Props) {
   const [tab, setTab] = useState<"stream" | "diff">("stream")
-  const [diff, setDiff] = useState<string | null>(null)
+  const [diff, setDiff] = useState<{ text: string; capturedAt: number | null } | null>(null)
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const [delivery, setDelivery] = useState<string | null>(null)
@@ -57,7 +57,8 @@ export function Inspector(p: Props) {
 
   useEffect(() => {
     setDiff(null)
-    if (tab === "diff") void p.loadDiff().then((d) => d && setDiff(d.diff))
+    if (tab === "diff")
+      void p.loadDiff().then((d) => d && setDiff({ text: d.diff, capturedAt: d.capturedAt }))
   }, [tab, p.note.id])
 
   // Jump to the diff as soon as there is one to judge.
@@ -255,7 +256,7 @@ export function Inspector(p: Props) {
       ) : diff === null ? (
         <p className="flex-1 px-5 py-6 text-center text-[12px] text-faint">Loading…</p>
       ) : (
-        <DiffView diff={diff} />
+        <DiffView diff={diff.text} capturedAt={diff.capturedAt} />
       )}
 
       {/* Steering: the point of a board you can walk up to mid-run. */}
@@ -315,3 +316,4 @@ function PolicyToggle({
     </button>
   )
 }
+

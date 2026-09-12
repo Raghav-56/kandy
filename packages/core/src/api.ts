@@ -45,7 +45,13 @@ export type Queries = {
   "GET /agents": { res: { agents: AgentInfo[] } }
   "GET /runs/:id/output": { res: { lines: OutputLine[]; nextAfter: number | null } }
   "GET /runs/:id/transcript": { res: { frames: TranscriptFrame[]; nextAfter: number | null } }
-  "GET /notes/:id/diff": { res: { diff: string; stat: string; branch: string | null } }
+  /**
+   * `capturedAt` is null for a diff read live from the worktree, and the time
+   * of the snapshot for one replayed after the worktree was removed.
+   */
+  "GET /notes/:id/diff": {
+    res: { diff: string; stat: string; branch: string | null; capturedAt: number | null }
+  }
   /** Validate a path before offering to make a board of it. */
   "GET /repo/check": { res: RepoCheck }
   /** Whether this board's repo can open PRs at all, and where. */
