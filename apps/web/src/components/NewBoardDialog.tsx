@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import type { KandyClient } from "@kandy/client"
 import type { RepoCheck } from "@kandy/core"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
+import { FolderPicker } from "./FolderPicker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -25,6 +26,9 @@ export function NewBoardDialog({
   const [name, setName] = useState("")
   const [check, setCheck] = useState<RepoCheck | null>(null)
   const [busy, setBusy] = useState(false)
+  // Browsing is the default; typing is the escape hatch for people who already
+  // know the path and would rather not click through to it.
+  const [typing, setTyping] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -70,18 +74,40 @@ export function NewBoardDialog({
         </DialogDescription>
 
         <div className="mt-6 space-y-4">
-          <label className="block">
-            <span className="label">Repository path</span>
-            <Input
-              autoFocus
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              placeholder="~/Developer/kandy"
-              className="mt-1.5 font-mono"
-              onKeyDown={(e) => e.key === "Enter" && void create()}
-            />
-            <RepoStatus path={path} check={check} />
-          </label>
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="label">Repository</span>
+              <button
+                onClick={() => setTyping((t) => !t)}
+                className="text-[11px] text-faint transition-colors hover:text-dim"
+              >
+                {typing ? "browse instead" : "type a path"}
+              </button>
+            </div>
+
+            <div className="mt-1.5">
+              {typing ? (
+                <Input
+                  autoFocus
+                  value={path}
+                  onChange={(e) => setPath(e.target.value)}
+                  placeholder="~/Developer/kandy"
+                  className="font-mono"
+                  onKeyDown={(e) => e.key === "Enter" && void create()}
+                />
+              ) : (
+                <FolderPicker
+                  client={client}
+                  onPick={(p) => {
+                    setPath(p)
+                    setTyping(true)
+                  }}
+                />
+              )}
+            </div>
+
+            {(typing || path) && <RepoStatus path={path} check={check} />}
+          </div>
 
           <label className="block">
             <span className="label">Name</span>

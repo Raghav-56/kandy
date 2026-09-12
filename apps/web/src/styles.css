@@ -95,3 +95,40 @@ body {
 
 @keyframes breathe { 50% { opacity: 0.45; } }
 .breathe { animation: breathe 2s ease-in-out infinite; }
+
+/* Markdown from agents. Tight vertical rhythm — these are messages in a
+   stream, not documents, and default prose spacing makes six of them
+   unreadable. */
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 0 0 0.6em; }
+.md ul, .md ol { margin: 0 0 0.6em; padding-left: 1.2em; }
+.md li { margin: 0.15em 0; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md h1, .md h2, .md h3, .md h4 {
+  margin: 1em 0 0.4em;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.md strong { font-weight: 600; color: #fff; }
+.md em { font-style: italic; }
+.md pre {
+  margin: 0 0 0.7em;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--color-line-soft);
+  background: #0c0c0e;
+}
+.md blockquote {
+  margin: 0 0 0.6em;
+  padding-left: 0.8em;
+  border-left: 2px solid var(--color-line);
+  color: var(--color-dim);
+}
+.md hr { margin: 0.9em 0; border: 0; border-top: 1px solid var(--color-line-soft); }
+.md table { margin: 0 0 0.7em; border-collapse: collapse; font-size: 12px; }
+.md th, .md td { border: 1px solid var(--color-line-soft); padding: 3px 7px; text-align: left; }
+.md th { background: var(--color-panel-2); font-weight: 600; }

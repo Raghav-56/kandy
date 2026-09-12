@@ -56,6 +56,8 @@ export type Queries = {
   "GET /repo/check": { res: RepoCheck }
   /** Whether this board's repo can open PRs at all, and where. */
   "GET /boards/:id/forge": { res: Forge }
+  /** Directory listing, for choosing a repo without typing a path. */
+  "GET /repo/browse": { res: Listing }
 }
 
 /**
@@ -104,6 +106,21 @@ export type RepoCheck = {
 }
 
 /** What we know about the repo's hosting, for the PR affordances. */
+export type DirEntry = {
+  name: string
+  path: string
+  isRepo: boolean
+}
+
+export type Listing = {
+  path: string
+  parent: string | null
+  entries: DirEntry[]
+  isRepo: boolean
+  /** Places repos usually live, so the picker opens somewhere useful. */
+  suggestions: DirEntry[]
+}
+
 export type Forge = {
   /** gh is installed and authenticated. */
   available: boolean

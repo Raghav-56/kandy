@@ -50,7 +50,9 @@ export function Inspector(p: Props) {
   // Reviewing a diff needs room; watching a stream does not. One toggle rather
   // than a drag handle, because the two useful widths are the only two anyone
   // actually wants.
-  const [wide, setWide] = useState(false)
+  // Three sizes, because a note is read three ways: glanced at, worked in, and
+  // reviewed properly. A sheet pinned to the right could only ever be one.
+  const [full, setFull] = useState(false)
 
   const run = p.view.runs.find((r) => r.id === p.note.runId)
   const live = p.note.status === "running" || p.note.status === "blocked"
@@ -58,11 +60,15 @@ export function Inspector(p: Props) {
   const s = STYLES[p.note.status]
   useTick(live)
 
+  // Full screen shows both at once — reading the diff while reading what the
+  // agent said it did is the actual review motion.
+  const split = full && Boolean(p.note.branch)
+
   useEffect(() => {
     setDiff(null)
-    if (tab === "diff")
+    if (tab === "diff" || split)
       void p.loadDiff().then((d) => d && setDiff({ text: d.diff, capturedAt: d.capturedAt }))
-  }, [tab, p.note.id])
+  }, [tab, split, p.note.id])
 
   // Jump to the diff as soon as there is one to judge.
   useEffect(() => {
@@ -92,12 +98,22 @@ export function Inspector(p: Props) {
   const canOpenPr = Boolean(p.forge?.available && p.note.branch && !p.note.pr)
 
   return (
-    <aside
+    <div
       className={cn(
-        "flex h-full shrink-0 flex-col border-l border-line-soft bg-panel transition-[width]",
-        wide ? "w-[min(980px,70vw)]" : "w-[560px]",
+        "fixed inset-0 z-40 flex bg-black/55 backdrop-blur-[2px]",
+        full ? "p-0" : "items-center justify-center p-6",
       )}
+      onMouseDown={(e) => {
+        // Only the backdrop closes. A drag that started inside must not.
+        if (e.target === e.currentTarget) p.onClose()
+      }}
     >
+      <aside
+        className={cn(
+          "flex min-h-0 flex-col overflow-hidden border border-line bg-panel shadow-2xl shadow-black/60",
+          full ? "h-full w-full rounded-none border-0" : "h-[86vh] w-[min(1080px,94vw)] rounded-2xl",
+        )}
+      >
       <header className="px-5 pb-4 pt-4">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -129,12 +145,12 @@ export function Inspector(p: Props) {
           </div>
           <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
             <button
-              onClick={() => setWide((w) => !w)}
-              aria-label={wide ? "Narrow panel" : "Widen panel"}
-              title={wide ? "Narrow" : "Widen — for reading diffs"}
+              onClick={() => setFull((f) => !f)}
+              aria-label={full ? "Exit full screen" : "Full screen"}
+              title={full ? "Exit full screen" : "Full screen — for reading diffs"}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-dim transition-colors hover:bg-panel-2 hover:text-ink"
             >
-              {wide ? "⇥" : "⇤"}
+              {full ? "⤡" : "⤢"}
             </button>
             <button
               onClick={p.onClose}
@@ -238,7 +254,7 @@ export function Inspector(p: Props) {
       </header>
 
       <nav className="flex items-center gap-1 border-y border-line-soft px-4 py-2">
-        {(["stream", "diff"] as const).map((t) => (
+        {(split ? ([] as const) : (["stream", "diff"] as const)).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -265,18 +281,32 @@ export function Inspector(p: Props) {
         </button>
       </nav>
 
-      {tab === "stream" ? (
-        <Transcript
-          key={p.note.id}
-          frames={p.frames}
-          prompt={p.note.body}
-          onEditPrompt={(body) => p.onEdit({ body })}
-        />
-      ) : diff === null ? (
-        <p className="flex-1 px-5 py-6 text-center text-[12px] text-faint">Loading…</p>
-      ) : (
-        <DiffView diff={diff.text} capturedAt={diff.capturedAt} />
-      )}
+      <div className="flex min-h-0 flex-1">
+        {(tab === "stream" || split) && (
+          <div
+            className={cn(
+              "flex min-w-0 flex-col",
+              split ? "flex-1 border-r border-line-soft" : "flex-1",
+            )}
+          >
+            <Transcript
+              key={p.note.id}
+              frames={p.frames}
+              prompt={p.note.body}
+              onEditPrompt={(body) => p.onEdit({ body })}
+            />
+          </div>
+        )}
+        {(tab === "diff" || split) && (
+          <div className={cn("flex min-w-0 flex-col", split ? "flex-[1.25]" : "flex-1")}>
+            {diff === null ? (
+              <p className="flex-1 px-5 py-6 text-center text-[12px] text-faint">Loading…</p>
+            ) : (
+              <DiffView diff={diff.text} capturedAt={diff.capturedAt} />
+            )}
+          </div>
+        )}
+      </div>
 
       {/* What it is doing, pinned just above where you would interrupt it. */}
       {live && p.activity && <ActivityStrip tool={p.activity.tool} detail={p.activity.detail} />}
@@ -299,7 +329,8 @@ export function Inspector(p: Props) {
           <span className="text-[11px] text-faint">{delivery ?? "⌘↵ to send"}</span>
         </div>
       </div>
-    </aside>
+      </aside>
+    </div>
   )
 }
 

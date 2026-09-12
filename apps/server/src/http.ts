@@ -16,6 +16,7 @@ import type { Runner } from "./runner.js"
 import type { PrWatch } from "./prwatch.js"
 import { detectForge, openPr } from "./forge.js"
 import { serveStatic } from "./static.js"
+import { list as listDir, nativePick, suggestions } from "./browse.js"
 import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
 import {
@@ -70,6 +71,25 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
 
   if (req.method === "GET" && routed === "/agents") {
     return send(res, 200, { agents: await detectAll() })
+  }
+
+  // GET /repo/browse?path=... — directory listing for the picker
+  if (req.method === "GET" && routed === "/repo/browse") {
+    const p = url.searchParams.get("path")
+    try {
+      return send(res, 200, {
+        ...listDir(p ?? homedir()),
+        suggestions: suggestions(),
+      })
+    } catch (err) {
+      return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // POST /repo/pick — the OS folder chooser, where the platform has one
+  if (req.method === "POST" && routed === "/repo/pick") {
+    const picked = await nativePick()
+    return send(res, 200, { path: picked, supported: process.platform === "darwin" })
   }
 
   if (req.method === "GET" && routed === "/repo/check") {

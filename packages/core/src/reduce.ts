@@ -150,7 +150,11 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         // Costs accumulate across turns of the same run.
         costUsd: sum(r.costUsd, e.data.costUsd),
         tokens: sum(r.tokens, e.data.tokens),
-        turns: e.data.turns ?? r.turns,
+        // Summed, not replaced. Claude reports a cumulative num_turns once per
+        // result; Codex reports turns:1 on every turn.completed. Summing is
+        // right for both — replacing made every Codex run read "1 turn" no
+        // matter how long it worked.
+        turns: sum(r.turns, e.data.turns),
       }))
 
     case "run.session":

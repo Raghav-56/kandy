@@ -7,6 +7,7 @@ import type {
   Delivery,
   Forge,
   KandyEvent,
+  Listing,
   OutputLine,
   Policy,
   PullRequest,
@@ -69,6 +70,14 @@ export class KandyClient {
   }
   boards() {
     return this.req<{ boards: Board[] }>("GET", "/boards")
+  }
+  browse(path?: string) {
+    const q = path ? `?path=${encodeURIComponent(path)}` : ""
+    return this.req<Listing>("GET", `/repo/browse${q}`)
+  }
+  /** Opens the OS folder chooser on the machine running the daemon. */
+  pickFolder() {
+    return this.req<{ path: string | null; supported: boolean }>("POST", "/repo/pick", {})
   }
   checkRepo(path: string) {
     return this.req<RepoCheck>("GET", `/repo/check?path=${encodeURIComponent(path)}`)

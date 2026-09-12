@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { TranscriptFrame } from "@kandy/core"
 import { InlineEdit } from "./InlineEdit"
+import { Markdown } from "./Markdown"
 import { cn } from "@/lib/utils"
 
 /**
@@ -120,13 +121,7 @@ function Frame({ frame: f }: { frame: TranscriptFrame }) {
     )
   }
 
-  return (
-    <p
-      className={cn(
-        "whitespace-pre-wrap break-words px-1 text-[13px] leading-[1.65] text-ink",
-      )}
-    >
-      {f.text}
-    </p>
-  )
+  // Assistant messages are markdown. Rendering them is the difference between
+  // reading a message and reading a log.
+  return <Markdown className="px-1">{f.text}</Markdown>
 }
