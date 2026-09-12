@@ -1,0 +1,14 @@
+{
+  "name": "@kandy/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": { "kandy": "./dist/cli.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --watch --experimental-strip-types src/cli.ts",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": { "@kandy/core": "workspace:*" }
+}
