@@ -15,6 +15,7 @@ import {
 import type { Runner } from "./runner.js"
 import type { PrWatch } from "./prwatch.js"
 import { detectForge, openPr } from "./forge.js"
+import { serveStatic } from "./static.js"
 import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
 import {
@@ -42,35 +43,45 @@ export function createHttpServer(deps: ServerDeps) {
 
 async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? "/", "http://localhost")
-  const parts = url.pathname.split("/").filter(Boolean)
+
+  // The web client always talks to "/api". In dev that is a Vite proxy; when
+  // the daemon serves the bundle itself it is the same origin. Stripping the
+  // prefix here means the client needs no knowledge of which it is.
+  const apiPath = url.pathname.startsWith("/api/")
+    ? url.pathname.slice(4)
+    : url.pathname === "/api"
+      ? "/"
+      : null
+  const routed = apiPath ?? url.pathname
+  const parts = routed.split("/").filter(Boolean)
 
   // The web client is served from a different origin in dev.
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Headers", "content-type, authorization")
   if (req.method === "OPTIONS") return void res.writeHead(204).end()
 
-  if (req.method === "GET" && url.pathname === "/health") {
+  if (req.method === "GET" && routed === "/health") {
     return send(res, 200, { version: VERSION, uptime: Date.now() - STARTED, pid: process.pid })
   }
 
-  if (req.method === "GET" && url.pathname === "/events") {
+  if (req.method === "GET" && routed === "/events") {
     return sse(deps, req, res, Number(req.headers["last-event-id"] ?? url.searchParams.get("after") ?? 0))
   }
 
-  if (req.method === "GET" && url.pathname === "/agents") {
+  if (req.method === "GET" && routed === "/agents") {
     return send(res, 200, { agents: await detectAll() })
   }
 
-  if (req.method === "GET" && url.pathname === "/repo/check") {
+  if (req.method === "GET" && routed === "/repo/check") {
     const p = url.searchParams.get("path") ?? ""
     return send(res, 200, await checkRepo(expandHome(p)))
   }
 
-  if (req.method === "GET" && url.pathname === "/boards") {
+  if (req.method === "GET" && routed === "/boards") {
     return send(res, 200, { boards: deps.engine.projections.boards() })
   }
 
-  if (req.method === "POST" && url.pathname === "/boards") {
+  if (req.method === "POST" && routed === "/boards") {
     const body = await json<{
       name?: string
       repoPath: string
@@ -154,7 +165,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     return send(res, 200, view)
   }
 
-  if (req.method === "POST" && url.pathname === "/notes") {
+  if (req.method === "POST" && routed === "/notes") {
     const body = await json<{ boardId: string; columnId: string; title: string; body?: string }>(req)
     if (!body?.boardId || !body?.columnId || !body?.title)
       return fail(res, 400, "bad_request", "boardId, columnId and title required")
@@ -209,6 +220,9 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     const lines = deps.engine.store.outputSince(parts[1]!, after)
     return send(res, 200, { lines, nextAfter: lines.at(-1)?.seq ?? null })
   }
+
+  // Anything that isn't the API is the web client, if one is built.
+  if (req.method === "GET" && apiPath === null && serveStatic(url.pathname, res)) return
 
   return fail(res, 404, "bad_request", `no route for ${req.method} ${url.pathname}`)
 }

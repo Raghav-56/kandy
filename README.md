@@ -68,13 +68,18 @@ Read [`docs/01-architecture.md`](docs/01-architecture.md) for the reasoning, and
 ```sh
 pnpm install
 pnpm build
-
-node apps/server/dist/cli.js serve      # the daemon, on :4477
-pnpm --filter @kandy/web dev            # the board, on :5477
-pnpm --filter @kandy/tui dev            # or watch it from the terminal
+node apps/server/dist/cli.js serve      # board + API on http://127.0.0.1:4477
 ```
 
+That is the whole thing: the daemon serves the built board itself, so there is
+one process to run and one URL to open.
+
 `serve` takes `--port N` and `--slots N` (how many agents may run at once).
+
+```sh
+pnpm --filter @kandy/tui dev            # watch the same board from a terminal
+pnpm --filter @kandy/web dev            # work ON the UI, with HMR, on :5477
+```
 
 Then open the board, create one against a repo, and write a note.
 

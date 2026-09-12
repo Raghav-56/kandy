@@ -3,6 +3,7 @@ import { PrWatch } from "./prwatch.js"
 import { Runner } from "./runner.js"
 import { createHttpServer } from "./http.js"
 import { DB_PATH } from "./paths.js"
+import { hasWebBuild } from "./static.js"
 
 const DEFAULT_PORT = 4477
 const DEFAULT_SLOTS = 4
@@ -48,8 +49,11 @@ function main(): void {
   prs.start()
   const server = createHttpServer({ engine, runner, prs })
   server.listen(port, "127.0.0.1", () => {
-    console.log(`kandy server  http://127.0.0.1:${port}`)
+    console.log(`kandy         http://127.0.0.1:${port}`)
     console.log(`state         ${DB_PATH}`)
+    if (!hasWebBuild()) {
+      console.log(`board         not built — run \`pnpm build\` to serve the UI from here`)
+    }
     console.log(`slots         ${slots}`)
   })
 
