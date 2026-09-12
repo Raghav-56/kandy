@@ -123,6 +123,7 @@ export function App() {
             onRun={(agent) => void act((c) => c.runNote(note.id, agent))}
             onCancel={(runId) => void act((c) => c.cancelRun(runId))}
             onAssign={(agent) => void act((c) => c.assignNote(note.id, agent))}
+            onEdit={async (patch) => (await act((c) => c.editNote(note.id, patch))) !== undefined}
             onPolicy={(policy) => void act((c) => c.setPolicy(note.id, policy))}
             onSteer={async (text) => (await act((c) => c.message(note.id, text)))?.delivery}
             onReview={(decision) => void act((c) => c.reviewNote(note.id, decision))}
@@ -144,9 +145,9 @@ export function App() {
           agents={agents}
           defaultAgent={defaultAgent}
           onCancel={() => setComposeIn(null)}
-          onCreate={async (title, agent, run) => {
+          onCreate={async (title, body, agent, run) => {
             setComposeIn(null)
-            const created = await act((c) => c.createNote(view.board.id, composeIn, title))
+            const created = await act((c) => c.createNote(view.board.id, composeIn, title, body))
             if (!created) return
             if (agent) await act((c) => c.assignNote(created.noteId, agent))
             if (run && agent) await act((c) => c.runNote(created.noteId, agent))
