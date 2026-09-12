@@ -14,7 +14,6 @@
  * terminal is always handed back intact.
  */
 import { KandyClient } from "@kandy/client"
-import { installEventSource } from "./eventsource.js"
 import { notesIn, reduce, type Board, type BoardView, type Note, type NoteStatus } from "@kandy/core"
 
 const BASE = process.env["KANDY_URL"] ?? "http://127.0.0.1:4477"
@@ -145,6 +144,120 @@ function column(name: string, notes: Note[], width: number, height: number, pad 
 
   if (pad) while (rows.length < height) rows.push(" ".repeat(width))
   return rows.slice(0, height)
+}
+
+// --- SSE ---------------------------------------------------------------------
+
+/**
+ * A minimal `EventSource`, installed only when the runtime doesn't ship one
+ * (Node still gates it behind --experimental-eventsource on the versions we
+ * support). Inlined rather than imported: `--experimental-strip-types` doesn't
+ * rewrite a `./x.js` specifier to the `.ts` on disk, so a second file would
+ * break `pnpm dev` even though it typechecks.
+ *
+ * It exists so @kandy/client stays the single implementation of the wire
+ * format — the TUI calls `client.events()` exactly like the browser does,
+ * instead of growing a second SSE parser that can drift from it.
+ *
+ * Implements the slice of the spec the server actually uses: named events,
+ * `id:` tracking, comment heartbeats, and reconnect with `Last-Event-ID` so a
+ * dropped connection resumes the log rather than replaying it.
+ */
+type SseHandler = (ev: { data: string; lastEventId: string; type: string }) => void
+
+const RETRY_MS = 1000
+
+class NodeEventSource {
+  onerror: ((e: unknown) => void) | null = null
+
+  // No constructor parameter properties anywhere in this file: strip-types
+  // rejects them as non-erasable syntax.
+  private readonly url: string | URL
+  private handlers = new Map<string, Set<SseHandler>>()
+  private controller: AbortController | null = null
+  private lastId = ""
+  private closed = false
+
+  constructor(url: string | URL) {
+    this.url = url
+    void this.loop()
+  }
+
+  addEventListener(type: string, handler: SseHandler): void {
+    const set = this.handlers.get(type) ?? new Set<SseHandler>()
+    set.add(handler)
+    this.handlers.set(type, set)
+  }
+
+  removeEventListener(type: string, handler: SseHandler): void {
+    this.handlers.get(type)?.delete(handler)
+  }
+
+  close(): void {
+    this.closed = true
+    this.controller?.abort()
+  }
+
+  private async loop(): Promise<void> {
+    while (!this.closed) {
+      try {
+        await this.connect()
+      } catch (err) {
+        if (this.closed) return
+        this.onerror?.(err)
+      }
+      if (this.closed) return
+      await new Promise((r) => setTimeout(r, RETRY_MS))
+    }
+  }
+
+  private async connect(): Promise<void> {
+    const controller = new AbortController()
+    this.controller = controller
+    const res = await fetch(this.url, {
+      signal: controller.signal,
+      headers: {
+        accept: "text/event-stream",
+        ...(this.lastId ? { "last-event-id": this.lastId } : {}),
+      },
+    })
+    if (!res.ok || !res.body) throw new Error(`sse: ${res.status} ${res.statusText}`)
+
+    const decoder = new TextDecoder()
+    let buffer = ""
+    for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+      buffer += decoder.decode(chunk, { stream: true })
+      // Frames are separated by a blank line; keep the trailing partial.
+      const frames = buffer.split("\n\n")
+      buffer = frames.pop() ?? ""
+      for (const frame of frames) this.dispatch(frame)
+    }
+    // The server ended the stream: fall back to the reconnect loop.
+    throw new Error("sse: stream closed")
+  }
+
+  private dispatch(frame: string): void {
+    let type = "message"
+    const data: string[] = []
+    for (const line of frame.split("\n")) {
+      if (line === "" || line.startsWith(":")) continue // heartbeat
+      const colon = line.indexOf(":")
+      const field = colon === -1 ? line : line.slice(0, colon)
+      const value = colon === -1 ? "" : line.slice(colon + 1).replace(/^ /, "")
+      if (field === "event") type = value
+      else if (field === "data") data.push(value)
+      else if (field === "id" && !value.includes("\0")) this.lastId = value
+    }
+    if (data.length === 0) return
+    const ev = { data: data.join("\n"), lastEventId: this.lastId, type }
+    for (const h of this.handlers.get(type) ?? []) h(ev)
+  }
+}
+
+function installEventSource(): void {
+  const g = globalThis as { EventSource?: unknown }
+  if (typeof g.EventSource === "function") return
+  g.EventSource = NodeEventSource
 }
 
 // --- main -------------------------------------------------------------------
