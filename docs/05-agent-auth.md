@@ -63,6 +63,8 @@ The `codex exec --json` event vocabulary:
   `cached_input_tokens`, and `output_tokens`.
 - Items arrive as `item.started` / `item.completed`, with `item.type` of
   `agent_message`, `command_execution`, `file_change`, `reasoning`, or `error`.
+- Codex refusals appear as a `command_execution` item with a non-zero `exit_code`,
+  not as a distinct event type.
 
 Codex reports tokens but no dollar cost.
 
