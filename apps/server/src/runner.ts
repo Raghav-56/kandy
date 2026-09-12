@@ -16,6 +16,7 @@ import { adapter } from "./agents/index.js"
 import {
   commitLeftovers,
   createWorktree,
+  diff as gitDiff,
   diffStat,
   isDirty,
   type Worktree,
@@ -348,10 +349,11 @@ export class Runner {
 
     let error: string | null = null
     let stat = ""
+    let diff = ""
     if (l) {
       try {
         await commitLeftovers(l.worktree, `kandy: ${noteId}`)
-        stat = await diffStat(l.worktree)
+        ;[stat, diff] = await Promise.all([diffStat(l.worktree), gitDiff(l.worktree)])
       } catch (err) {
         error = `failed to capture agent output: ${err instanceof Error ? err.message : err}`
         this.say(runId, "error", error)
@@ -362,6 +364,9 @@ export class Runner {
     this.emit(event("run.finished", { runId, noteId, status, exitCode: code, error }))
 
     if (status === "succeeded" && l) {
+      // Snapshot before announcing: deciding the review removes the worktree,
+      // and a review that can no longer show its own diff is not a review.
+      this.store.saveDiff(noteId, { runId, branch: l.worktree.branch, stat, diff })
       this.emit(event("review.opened", { noteId, runId, branch: l.worktree.branch, stat }))
     }
     if (l) this.syncColumn(l.boardId, noteId)

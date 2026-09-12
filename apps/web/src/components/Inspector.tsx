@@ -18,12 +18,12 @@ type Props = {
   onSteer: (text: string) => Promise<"live" | "queued" | undefined>
   onReview: (decision: "merge" | "discard") => void
   onDelete: () => void
-  loadDiff: () => Promise<{ diff: string; stat: string } | undefined>
+  loadDiff: () => Promise<DiffView | undefined>
 }
 
 export function Inspector(p: Props) {
   const [tab, setTab] = useState<"stream" | "diff">("stream")
-  const [diff, setDiff] = useState<{ diff: string; stat: string } | null>(null)
+  const [diff, setDiff] = useState<DiffView | null>(null)
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const [delivery, setDelivery] = useState<string | null>(null)
@@ -274,13 +274,21 @@ function Stream({ frames, body }: { frames: TranscriptFrame[]; body: string }) {
   )
 }
 
-function Diff({ diff }: { diff: { diff: string; stat: string } | null }) {
+type DiffView = { diff: string; stat: string; capturedAt: number | null }
+
+function Diff({ diff }: { diff: DiffView | null }) {
   if (!diff) return <p className="flex-1 px-5 py-4 text-[12px] text-faint">Loading…</p>
   if (!diff.diff.trim())
     return <p className="flex-1 px-5 py-4 text-[12px] text-faint">No changes yet.</p>
 
   return (
     <div className="flex-1 overflow-auto px-5 py-4">
+      {diff.capturedAt !== null && (
+        <p className="mb-3 text-[11px] text-faint">
+          Snapshot from review on {new Date(diff.capturedAt).toLocaleString()} — the worktree is
+          gone.
+        </p>
+      )}
       <pre className="mb-3 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-dim">
         {diff.stat}
       </pre>
