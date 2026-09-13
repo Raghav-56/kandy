@@ -52,27 +52,12 @@
  * element that should feel loud; everything else steps back from it.
  */
 
-/* The tagline is one sentence. Hold it to a measure that keeps it one or two
-   lines instead of letting it run the full column width. */
-.VPHero .tagline {
-  max-width: 30rem;
-  font-size: 17px;
-  line-height: 1.6;
-  opacity: 0.78;
-}
-.VPHero .name { letter-spacing: -0.02em; }
-.VPHero .text { letter-spacing: -0.025em; }
+/* VitePress still renders its own hero container with nothing in it; ours
+   lives in the #home-hero-before slot and owns the spacing. */
+.VPHome .VPHero { display: none; }
+.VPHome { padding-bottom: 0; }
 
-/* Air above and below, so the hero is a page rather than a header. The name
-   sitting flush against the nav is what made it read as a banner. */
-.VPHome .VPHero { padding-top: 104px; padding-bottom: 16px; }
-@media (max-width: 640px) { .VPHome .VPHero { padding-top: 64px; } }
-
-/* Feature cards: flat, bordered, no fill. A card that is both filled and
-   bordered is two ways of saying the same thing. */
-.VPFeatures .VPFeature {
-  background: transparent;
-  border: 1px solid var(--vp-c-divider);
-}
-.VPFeatures .VPFeature .title { font-size: 15px; }
-.VPFeatures .VPFeature .details { font-size: 14px; line-height: 1.6; }
+/* The screenshot is cropped so the board continues past the fold. Any gap
+   under it breaks that, so the prose starts immediately. */
+.VPHome .vp-doc { padding-top: 0; }
+.VPHome .VPContent .vp-doc > div > :first-child { margin-top: 56px; }
