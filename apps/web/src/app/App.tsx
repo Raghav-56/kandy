@@ -1,3 +1,4 @@
+import { daemonToken } from "@/lib/daemon-token"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { KandyClient } from "@kandy/client"
 import type { AgentId, AgentInfo, Board, Forge } from "@kandy/core"
@@ -17,7 +18,7 @@ import { Sidebar, type View } from "./Sidebar"
 import { TriageList } from "./TriageList"
 
 export function App() {
-  const client = useMemo(() => new KandyClient({ baseUrl: "/api" }), [])
+  const client = useMemo(() => new KandyClient({ baseUrl: "/api", token: daemonToken }), [])
   const [boards, setBoards] = useState<Board[]>([])
   const [boardId, setBoardId] = useState<string | null>(null)
   const [agents, setAgents] = useState<AgentInfo[]>([])

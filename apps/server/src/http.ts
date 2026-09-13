@@ -31,10 +31,12 @@ import {
   removeWorktree,
 } from "./worktree.js"
 
+import { authorized } from "./auth.js"
+
 const VERSION = "0.0.0"
 const STARTED = Date.now()
 
-export type ServerDeps = { engine: Engine; runner: Runner; prs: PrWatch }
+export type ServerDeps = { engine: Engine; runner: Runner; prs: PrWatch; token: string }
 
 export function createHttpServer(deps: ServerDeps) {
   return createServer((req, res) => {
@@ -59,10 +61,34 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   const routed = apiPath ?? url.pathname
   const parts = routed.split("/").filter(Boolean)
 
-  // The web client is served from a different origin in dev.
-  res.setHeader("Access-Control-Allow-Origin", "*")
-  res.setHeader("Access-Control-Allow-Headers", "content-type, authorization")
+  // No cross-origin API access. The development UI uses Vite's /api proxy.
+  // Validate Host too: a rebound attacker hostname must not expose the token.
+  const port = req.socket.localPort
+  const hosts = new Set([
+    `127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`,
+    "127.0.0.1:5477", "localhost:5477", "[::1]:5477",
+  ])
+  const host = req.headers.host ?? ""
+  const origin = req.headers.origin
+  if (!hosts.has(host) || (origin !== undefined && origin !== `http://${host}`)) {
+    return send(res, 403, { ok: false, error: { code: "forbidden", message: "Untrusted origin or host" } })
+  }
   if (req.method === "OPTIONS") return void res.writeHead(204).end()
+
+  if (req.method === "GET" && routed === "/auth/token") {
+    // Custom headers require preflight cross-origin, which we never allow.
+    if (req.headers["x-kandy-client"] !== "web" ||
+        (req.headers["sec-fetch-site"] !== undefined && req.headers["sec-fetch-site"] !== "same-origin")) {
+      return send(res, 403, { ok: false, error: { code: "forbidden", message: "Same-origin client required" } })
+    }
+    res.setHeader("Cache-Control", "no-store")
+    return send(res, 200, { token: deps.token })
+  }
+
+  if (req.method !== "GET" && req.method !== "HEAD" && !authorized(req.headers.authorization, deps.token)) {
+    res.setHeader("WWW-Authenticate", "Bearer")
+    return send(res, 401, { ok: false, error: { code: "unauthorized", message: "Valid bearer token required" } })
+  }
 
   if (req.method === "GET" && routed === "/health") {
     return send(res, 200, { version: VERSION, uptime: Date.now() - STARTED, pid: process.pid })

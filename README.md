@@ -126,3 +126,16 @@ files) queue work onto a board rather than doing it inline. Copy it to
 | [Open questions](docs/09-open-questions.md) | Honest list of what's unresolved |
 | [Interface](docs/10-interface.md) | Design rules, and a direction we reverted |
 | [Going multiplayer](docs/11-going-multiplayer.md) | Sharing a note with a teammate — the bet, kept as notes |
+
+### Local daemon authentication
+
+The daemon creates a random token on first start at `$XDG_STATE_HOME/kandy/token`
+(default `~/.local/state/kandy/token`), readable only by its owner. CLI and web
+writes send this token as an `Authorization: Bearer` header. GET/HEAD reads remain
+unauthenticated; tokens in query strings are not accepted. Other HTTP methods
+require authentication (except OPTIONS preflight).
+
+The web app obtains its token through a same-origin, non-cacheable bootstrap
+request. Cross-origin requests are rejected, and development uses the Vite
+`/api` proxy on port 5477. API integrations should read the token file and pass
+it via `KandyClient({ token })` or the bearer header.

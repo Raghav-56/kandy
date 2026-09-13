@@ -4,10 +4,13 @@ import path from "node:path"
 import { KandyClient } from "@kandy/client"
 import { dim } from "./banner.js"
 
+import { readToken } from "../auth.js"
+import { TOKEN_PATH } from "../paths.js"
+
 export const DEFAULT_PORT = 4477
 
 export function client(port = DEFAULT_PORT): KandyClient {
-  return new KandyClient({ baseUrl: `http://127.0.0.1:${port}` })
+  return new KandyClient({ baseUrl: `http://127.0.0.1:${port}`, token: () => readToken(TOKEN_PATH) })
 }
 
 export async function isUp(port = DEFAULT_PORT): Promise<boolean> {

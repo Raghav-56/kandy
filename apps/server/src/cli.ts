@@ -4,7 +4,8 @@ import { Engine } from "./engine.js"
 import { PrWatch } from "./prwatch.js"
 import { Runner } from "./runner.js"
 import { createHttpServer } from "./http.js"
-import { DB_PATH } from "./paths.js"
+import { loadToken } from "./auth.js"
+import { DB_PATH, TOKEN_PATH } from "./paths.js"
 import { hasWebBuild } from "./static.js"
 import { warmPrices } from "./pricing.js"
 import { banner, berry, bold, dim, faint, lemon, mint } from "./cli/banner.js"
@@ -107,6 +108,7 @@ function serve(args: string[]): void {
   const port = intFlag(args, "--port", DEFAULT_PORT)
   const slots = intFlag(args, "--slots", DEFAULT_SLOTS)
 
+  const token = loadToken(TOKEN_PATH)
   const engine = new Engine()
   const prs: PrWatch = new PrWatch(engine, 60_000, (boardId, noteId) => {
     runner.landed(boardId, noteId)
@@ -126,7 +128,7 @@ function serve(args: string[]): void {
   // Fetched once a day and cached; failing is silent, since pricing a turn
   // must never be able to stop an agent from running.
   void warmPrices()
-  const server = createHttpServer({ engine, runner, prs })
+  const server = createHttpServer({ engine, runner, prs, token })
   server.listen(port, "127.0.0.1", () => {
     process.stdout.write(banner(`http://127.0.0.1:${port}`))
     process.stdout.write(

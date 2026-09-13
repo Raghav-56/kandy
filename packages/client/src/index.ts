@@ -19,7 +19,7 @@ import type {
 
 export type ClientOptions = {
   baseUrl?: string
-  token?: string
+  token?: string | (() => string | Promise<string>)
 }
 
 export class KandyError extends Error {
@@ -39,7 +39,7 @@ export class KandyError extends Error {
  */
 export class KandyClient {
   private baseUrl: string
-  private token: string | undefined
+  private token: ClientOptions["token"]
 
   constructor(opts: ClientOptions = {}) {
     this.baseUrl = (opts.baseUrl ?? "http://127.0.0.1:4477").replace(/\/$/, "")
@@ -47,11 +47,13 @@ export class KandyClient {
   }
 
   private async req<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const token = method === "GET" || method === "HEAD" ? undefined
+      : typeof this.token === "function" ? await this.token() : this.token
     const res = await fetch(this.baseUrl + path, {
       method,
       headers: {
         ...(body ? { "content-type": "application/json" } : {}),
-        ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     })
@@ -209,7 +211,6 @@ export class KandyClient {
       ? new URL(this.baseUrl + "/events", origin)
       : new URL(this.baseUrl + "/events")
     url.searchParams.set("after", String(after))
-    if (this.token) url.searchParams.set("token", this.token)
 
     const es = new EventSource(url)
     const handler = (ev: MessageEvent) => {

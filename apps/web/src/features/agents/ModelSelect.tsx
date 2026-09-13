@@ -1,3 +1,4 @@
+import { daemonToken } from "@/lib/daemon-token"
 import { useEffect, useState } from "react"
 import type { AgentId } from "@kandy/core"
 import { KandyClient } from "@kandy/client"
@@ -29,7 +30,7 @@ function loadModels(agent: string): Promise<string[]> {
   const existing = inflight.get(agent)
   if (existing) return existing
 
-  const p = new KandyClient({ baseUrl: "/api" })
+  const p = new KandyClient({ baseUrl: "/api", token: daemonToken })
     .models(agent)
     .then((r) => {
       cache.set(agent, r.models)
