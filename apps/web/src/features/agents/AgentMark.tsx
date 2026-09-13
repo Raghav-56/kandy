@@ -72,6 +72,7 @@ function Generic({ className, style }: MarkProps) {
 const MARKS: Record<AgentId, { Icon: typeof Generic; tint: string | null; label: string }> = {
   claude: { Icon: Claude, tint: "text-[#d97757]", label: "Claude Code" },
   codex: { Icon: OpenAI, tint: null, label: "Codex" },
+  aider: { Icon: Generic, tint: null, label: "Aider" },
   cursor: { Icon: Generic, tint: null, label: "Cursor" },
   opencode: { Icon: Generic, tint: null, label: "opencode" },
   gemini: { Icon: Gemini, tint: null, label: "Gemini" },

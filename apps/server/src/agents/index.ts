@@ -5,6 +5,7 @@ import type { AgentId, AgentInfo } from "@kandy/core"
 import type { AgentAdapter } from "./types.js"
 import { codex } from "./codex.js"
 import { claude } from "./claude.js"
+import { aider } from "./aider.js"
 
 const exec = promisify(execFile)
 
@@ -16,6 +17,7 @@ const exec = promisify(execFile)
 export const ADAPTERS: Partial<Record<AgentId, AgentAdapter>> = {
   claude,
   codex,
+  aider,
 }
 
 export function adapter(id: AgentId): AgentAdapter | undefined {
@@ -36,7 +38,8 @@ export async function detect(a: AgentAdapter): Promise<AgentInfo> {
     id: a.id,
     installed,
     // Existence only. We never open these files.
-    authed: a.credentials.some((p) => existsSync(p)),
+    // Agents without a credential probe validate their own provider setup.
+    authed: a.credentials.length === 0 ? installed : a.credentials.some((p) => existsSync(p)),
     version,
   }
 }

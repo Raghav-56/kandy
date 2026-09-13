@@ -107,6 +107,11 @@ type Menu = {
  * are what the CLIs document and what stays correct when a new model ships.
  */
 const MENU: Record<string, Menu> = {
+  aider: {
+    aliases: [],
+    keep: /^(?:(?:anthropic\/)?claude-|(?:openai\/)?gpt-|deepseek\/deepseek-|gemini\/gemini-)/,
+    drop: /(audio|realtime|search|transcribe|tts|image|embedding|instruct|codex|:|-\d{8})/,
+  },
   claude: {
     aliases: ["fable", "opus", "sonnet", "haiku"],
     keep: /^claude-(opus|sonnet|haiku)-\d/,
@@ -165,6 +170,8 @@ export function modelsFor(agent: string): string[] {
  * pinned id does not.
  */
 export function defaultModelFor(agent: string): string | null {
+  // Aider chooses its provider from the user's existing configuration.
+  if (agent === "aider") return null
   if (agent === "claude") return "opus"
   // Whatever the agent is already configured to run is the one choice we know
   // works on this machine; a table entry is only ever a guess.

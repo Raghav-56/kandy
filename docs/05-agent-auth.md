@@ -79,3 +79,19 @@ session id, so resume is unreliable. Ship it without resume rather than faking i
 
 **Grok Build** — `grok -p --output-format streaming-json`; NDJSON events `step_start`, `text`,
 `tool_use`, `step_finish`, `error`. Requires a SuperGrok/X Premium+ subscription.
+
+**Aider** — `aider --message <prompt> --yes-always --no-pretty --no-stream`.
+The adapter leaves provider configuration and authentication to the child and
+checks no credential files. Installed means available; provider authentication
+is validated by aider when it runs. The model defaults to aider's own configured
+choice. Auto/dirty commits are disabled. Repo policy also disables suggested
+shell commands, automatic linting and automatic tests; aider has no OS sandbox.
+Live steering and session-ID resume are not supported by this adapter.
+
+Plain output is preserved as transcript text, with applied edits normalized to
+tool frames. Token counts use aider's rounded sent/received figures. Per-message
+costs accumulate; cumulative session costs are ignored. Split token/cost lines
+are emitted separately without counting tokens or turns twice. Process exit,
+not a usage summary, finishes the run. Output formats follow
+[aider's implementation](https://github.com/Aider-AI/aider/blob/main/aider/coders/base_coder.py)
+and flags follow its [scripting interface](https://aider.chat/docs/scripting.html).
