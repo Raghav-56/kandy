@@ -34,7 +34,12 @@ export function Confirm({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(480px,calc(100vw-32px))]">
+      {/* shadcn's DialogContent is a grid with an implicit `auto` column, which
+          sizes to the max-content width of its widest child. One long
+          unbreakable branch name therefore pushed the facts and the buttons
+          clean outside the box. Pinning the column to minmax(0,1fr) makes the
+          children obey the dialog's width so `truncate` can do its job. */}
+      <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-[480px]">
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription asChild>
           <div className="text-muted-foreground mt-1.5 text-[12.5px] leading-relaxed">{body}</div>
@@ -43,9 +48,11 @@ export function Confirm({
         {facts && facts.length > 0 && (
           <dl className="bg-muted/60 mt-4 space-y-1.5 rounded-xl p-3">
             {facts.map((f) => (
-              <div key={f.label} className="flex items-baseline gap-3 text-[12px]">
-                <dt className="text-muted-foreground w-[86px] shrink-0">{f.label}</dt>
-                <dd className="min-w-0 flex-1 truncate font-mono">{f.value}</dd>
+              <div key={f.label} className="flex min-w-0 items-baseline gap-3 text-[12px]">
+                <dt className="text-muted-foreground w-[74px] shrink-0">{f.label}</dt>
+                <dd className="min-w-0 flex-1 truncate font-mono" title={String(f.value ?? "")}>
+                  {f.value}
+                </dd>
               </div>
             ))}
           </dl>

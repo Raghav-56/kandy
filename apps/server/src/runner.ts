@@ -130,7 +130,19 @@ export class Runner {
     const runId = id("run")
     this.emit(event("run.requested", { runId, noteId, agent }))
     this.syncColumn(boardId, noteId)
-    this.queue.push({ runId, noteId, boardId, agent })
+
+    // A note has one workspace, not one per attempt. Retrying used to try to
+    // create a second worktree on a branch that already existed, which fails
+    // outright — and if it had succeeded it would have left the first attempt's
+    // work stranded on an orphan branch.
+    const existing = this.worktrees.get(noteId)
+    this.queue.push({
+      runId,
+      noteId,
+      boardId,
+      agent,
+      ...(existing ? { worktree: existing } : {}),
+    })
     void this.pump()
     return runId
   }
@@ -207,6 +219,10 @@ export class Runner {
     const fresh = !q.worktree
     const worktree = q.worktree ?? (await createWorktree(view.board.repoPath, q.noteId, note.title))
     this.worktrees.set(q.noteId, worktree)
+
+    if (!fresh) {
+      this.say(q.runId, "system", `continuing in ${worktree.branch}`)
+    }
 
     // A fresh worktree has no dependencies, no .env, no caches. Prepare it
     // before the agent arrives, or it will write a test it cannot run.

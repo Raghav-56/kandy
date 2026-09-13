@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { CornerDownLeft } from "lucide-react"
 import type { AgentId, AgentInfo } from "@kandy/core"
-import { Button, Kbd, Textarea } from "@/ui"
+import { Button, Dialog, DialogContent, DialogTitle, Kbd, Textarea } from "@/ui"
 import { AgentSelect } from "@/features/agents/AgentSelect"
 import { ModelSelect } from "@/features/agents/ModelSelect"
 
@@ -9,9 +9,13 @@ import { ModelSelect } from "@/features/agents/ModelSelect"
  * Writing a note is writing a prompt.
  *
  * One writing surface, not a form: the first line becomes the title and the
- * rest becomes the prompt, which is the same rule the CLI uses, so a note reads
- * the same wherever it was written. Everything else sits on one row underneath
- * and is optional.
+ * rest becomes the prompt, the same rule the CLI uses, so a note reads the same
+ * wherever it was written.
+ *
+ * Built on the same Dialog as every other modal — the hand-rolled overlay it
+ * used to have had its own dimming, its own animation and no focus trap, and
+ * sat so close in tone to the dimmed board behind it that it barely read as a
+ * layer at all.
  */
 export function Composer({
   agents,
@@ -44,35 +48,34 @@ export function Composer({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-6 pt-[13vh] backdrop-blur-[2px]"
-      onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
-    >
-      <div className="rise bg-card w-[min(680px,100%)] overflow-hidden rounded-2xl border shadow-2xl shadow-black/50">
-        <div className="px-4 pt-4">
-          <Textarea
-            autoFocus
-            rows={5}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="What should the agent do?"
-            className="resize-none border-0 bg-transparent px-0 text-[15px] leading-[1.55] shadow-none focus-visible:ring-0"
-            onKeyDown={(e) => {
-              if (e.key === "Escape") onCancel()
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(!e.shiftKey)
-              e.stopPropagation()
-            }}
-          />
+    <Dialog open onOpenChange={(v) => !v && onCancel()}>
+      <DialogContent
+        showCloseButton={false}
+        className="top-[16vh] grid-cols-[minmax(0,1fr)] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-[660px]"
+      >
+        {/* Present for screen readers; the placeholder is the visible prompt. */}
+        <DialogTitle className="sr-only">New note</DialogTitle>
 
-          {/* Say what the split will do, once there is something to split. */}
-          {body && (
-            <p className="text-muted-foreground/70 mt-1 text-[11px]">
-              First line is the title; the rest is the prompt.
-            </p>
-          )}
-        </div>
+        <Textarea
+          autoFocus
+          rows={5}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="What should the agent do?"
+          className="min-h-[132px] resize-none rounded-none border-0 bg-transparent px-5 py-4 text-[15px] leading-[1.55] shadow-none focus-visible:ring-0"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(!e.shiftKey)
+            e.stopPropagation()
+          }}
+        />
 
-        <div className="bg-muted/40 mt-3 flex flex-wrap items-center gap-2 border-t px-4 py-3">
+        {body && (
+          <p className="text-muted-foreground/70 -mt-1 px-5 pb-3 text-[11px]">
+            First line is the title; the rest is the prompt.
+          </p>
+        )}
+
+        <div className="bg-muted/50 flex flex-wrap items-center gap-2 border-t px-4 py-3">
           <AgentSelect
             value={agent || null}
             agents={agents}
@@ -108,7 +111,7 @@ export function Composer({
             <Kbd>esc</Kbd> cancel
           </span>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
