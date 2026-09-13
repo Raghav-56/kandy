@@ -31,6 +31,36 @@ with an agent*. If a user can't feel that difference in thirty seconds, we have 
 Their weak spot, from the source: no per-task filesystem isolation. Their concurrency story is
 checkpoint-and-restore, not parallel worktrees. That is the gap we build into.
 
+## herdr — `herdrdev/herdr`
+
+**The competitor that matters now.** YC-backed, ~9.2k GitHub stars and climbing fast, Rust,
+open runtime. Positioned as "the runtime your coding agents live on."
+
+A terminal multiplexer built for agents. Every agent gets a real terminal pane; herdr detects
+each one's state automatically — working, blocked, done, idle — across every project, and turns
+that into an attention queue. Native integrations for 17+ agents (claude code, codex, cursor,
+grok, opencode). A Socket API exposes orchestration to other programs.
+
+The framing is deliberate and good: it does not wrap or replace the agents, it **owns their
+terminals** and adds a thin observability layer on top.
+
+**Where this leaves us.** They are better resourced, better known, and shipping into the same
+pain. We do not win on adapter count — 17 integrations against our two is not a gap we close by
+working harder, and chasing it just buys us 15 maintenance surfaces.
+
+The difference is the primitive. Their unit is a **pane**; ours is a **job**. A pane is
+something you watch — the attention queue *is* the product, and it assumes you are present. A
+note has a lifecycle and terminates in an outcome: a branch, a diff, merged or discarded, at a
+known cost. "Absence is the point" is a different claim than "a better place to watch."
+
+Their weak spot is structural, not a missing feature: **a pty cannot be shared.** It is one
+machine, one user, and it forgets when it closes. They can add a board view in a sprint; they
+cannot make a terminal pane hand off to a teammate's laptop without becoming something else.
+Our immutable log can. See [`11-going-multiplayer.md`](11-going-multiplayer.md).
+
+Second-order consequence: because panes forget, they cannot answer what a feature cost, which
+agent lands work first-try, or what got discarded. We keep the log, so we can.
+
 ## opencode — `sst/opencode`
 
 Not a competitor — a well-engineered reference for the server half.

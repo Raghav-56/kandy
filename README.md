@@ -15,6 +15,8 @@ answers neither.
 
 **Status:** pre-alpha, but it runs real work. kandy is developed using kandy.
 
+![The kandy board: notes in flight, waiting on review, and done](apps/docs/public/shots/board.png)
+
 ## What works
 
 - **Boards** — point one at a git repo; paths are validated as you type.
@@ -118,8 +120,9 @@ files) queue work onto a board rather than doing it inline. Copy it to
 | [Worktrees](docs/03-worktrees.md) | The isolation mechanism, and what will bite |
 | [Protocol](docs/04-protocol.md) | HTTP + SSE surface |
 | [Agents & auth](docs/05-agent-auth.md) | Adapters, credentials, and the policy risk |
-| [Landscape](docs/06-landscape.md) | t3code, opencode, pi — read from source |
+| [Landscape](docs/06-landscape.md) | herdr, t3code, opencode, pi — read from source |
 | [Sync](docs/07-sync.md) | Why there's none yet, and what it'll be |
 | [Roadmap](docs/08-roadmap.md) | What's next, in order |
 | [Open questions](docs/09-open-questions.md) | Honest list of what's unresolved |
 | [Interface](docs/10-interface.md) | Design rules, and a direction we reverted |
+| [Going multiplayer](docs/11-going-multiplayer.md) | Sharing a note with a teammate — the bet, kept as notes |

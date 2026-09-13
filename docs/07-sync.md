@@ -50,6 +50,24 @@ work we've already done.
 **Hand-rolled LWW** is fine for scalar fields and breaks exactly where kanban lives — concurrent
 reorders of an ordered list. You end up rebuilding a list CRDT by hand. Don't.
 
+## Addendum — sharing is not the same problem
+
+Added September 2026, after thinking through the share button. See
+[`11-going-multiplayer.md`](11-going-multiplayer.md).
+
+Everything above is about **concurrent editing**: two people dragging the same board at the same
+moment. That is what Yjs is for and the analysis stands.
+
+Handoff is a different shape. I stop, you start — **sequential, not concurrent**. It needs the
+event log replicated and folded, not a CRDT arbitrating simultaneous writes. Don't pull in 40kb
+and a relay protocol to ship a share button; the append-only log plus the shared reducer we
+already have is the substrate, and a git orphan branch or a tailnet peer is enough transport.
+
+The decision below — *the local daemon is authoritative; the cloud is a relay, never a copy* —
+is still the one that matters, and a hosted sharing tier is in tension with it. Resolvable (a
+relay storing an encrypted log it cannot read is not a "copy" in the sense meant here), but it
+has to be decided deliberately rather than drifted into.
+
 ## The decision that actually matters
 
 Not which CRDT. It is **who is authoritative**.

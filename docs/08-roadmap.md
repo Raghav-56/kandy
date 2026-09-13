@@ -65,6 +65,7 @@ This is the demo. Everything before it is plumbing and everything after it is ex
 - Desktop via Tauri wrapping the web client. Not Electron.
 - Dependencies between notes ("B starts when A lands").
 - Multiplayer boards (see `07-sync.md`).
+- Sharing a note with a teammate who runs their own agent (see `11-going-multiplayer.md`).
 - Templates / recurring notes.
 
 ## Explicitly deferred
@@ -75,6 +76,11 @@ it should be a deliberate M5+ decision, not something half-built early.
 
 **Any cloud storage of user content.** The moment we store boards server-side we inherit
 security, compliance, and trust obligations we're not equipped for and don't need.
+
+> Under active tension. A hosted sharing tier would contradict this, and sharing may be the
+> whole moat — see [`11-going-multiplayer.md`](11-going-multiplayer.md). The escape hatch is
+> that a relay storing an encrypted log it cannot read inherits far less of that burden. Not
+> decided; deliberately still deferred here until a share works between two laptops at all.
 
 ## The one thing to protect
 
