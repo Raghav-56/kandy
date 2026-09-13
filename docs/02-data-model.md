@@ -59,6 +59,14 @@ type Run = {
 }
 ```
 
+## Run cost source
+
+`Run.costSource` records where a run's dollar cost came from. It has three values:
+
+`reported` means the agent gave a dollar figure.
+`estimated` means the cost was computed from token usage against the LiteLLM price table.
+`unpriced` means no rate was found; it does not mean the run was free.
+
 ## Ordering
 
 Notes are ordered by a **fractional index** string (`pos`), not an integer. Moving a note
