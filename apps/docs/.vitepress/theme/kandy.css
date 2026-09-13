@@ -11,9 +11,9 @@
   --vp-c-brand-3: #a03c63;
   --vp-c-brand-soft: rgb(232 127 164 / 0.14);
 
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #c2527c, #a8802a 55%, #3d9c73);
-
+  /* One colour. A three-stop rainbow on a five-letter word reads as a toy,
+     and the headline underneath is what should be carrying the page. */
+  --vp-home-hero-name-color: var(--vp-c-brand-1);
 }
 
 .dark {
@@ -45,3 +45,34 @@
   border-radius: 12px;
   margin: 20px 0 4px;
 }
+
+/* --- the hero -------------------------------------------------------------
+ *
+ * Minimal here means fewer things, each with room. The headline is the only
+ * element that should feel loud; everything else steps back from it.
+ */
+
+/* The tagline is one sentence. Hold it to a measure that keeps it one or two
+   lines instead of letting it run the full column width. */
+.VPHero .tagline {
+  max-width: 30rem;
+  font-size: 17px;
+  line-height: 1.6;
+  opacity: 0.78;
+}
+.VPHero .name { letter-spacing: -0.02em; }
+.VPHero .text { letter-spacing: -0.025em; }
+
+/* Air above and below, so the hero is a page rather than a header. The name
+   sitting flush against the nav is what made it read as a banner. */
+.VPHome .VPHero { padding-top: 104px; padding-bottom: 16px; }
+@media (max-width: 640px) { .VPHome .VPHero { padding-top: 64px; } }
+
+/* Feature cards: flat, bordered, no fill. A card that is both filled and
+   bordered is two ways of saying the same thing. */
+.VPFeatures .VPFeature {
+  background: transparent;
+  border: 1px solid var(--vp-c-divider);
+}
+.VPFeatures .VPFeature .title { font-size: 15px; }
+.VPFeatures .VPFeature .details { font-size: 14px; line-height: 1.6; }

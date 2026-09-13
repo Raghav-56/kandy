@@ -3,7 +3,7 @@ layout: home
 hero:
   name: kandy
   text: Stop babysitting your coding agents
-  tagline: Queue a dozen jobs and walk away. Each one runs in its own git worktree, so agents never collide — and comes back as a branch and a diff you approve. Claude Code and Codex, on your machine, with the logins you already have.
+  tagline: Queue a dozen jobs and walk away. Each comes back as a diff you approve.
   actions:
     - theme: brand
       text: Getting started
@@ -12,14 +12,12 @@ hero:
       text: The CLI
       link: /guide/cli
 features:
-  - title: Twelve agents, one repository
-    details: Every note gets its own worktree and branch. They edit the same files at the same time and never see each other's writes — and your working tree is never touched.
-  - title: Absence is the point
-    details: A chat needs you present, watching a stream. A board does not. The list is sorted by what is actually waiting on you, so coming back takes a minute, not an afternoon.
-  - title: Argue with it mid-run
-    details: Send a message to a working agent, or queue a follow-up that resumes its session in the same worktree. Attach files it can open. It keeps its context either way.
+  - title: Isolated by default
+    details: One git worktree and branch per note. Agents never see each other's writes, and never touch your working tree.
+  - title: Built to be left alone
+    details: The list sorts by what is actually waiting on you. Coming back takes a minute, not an afternoon.
   - title: Nothing lands unread
-    details: Every job ends as a diff and a decision — merge here, open a PR, or discard. Each asks first, and says exactly what will happen to that branch.
+    details: Every job ends as a diff and a decision — merge, open a PR, or discard.
 ---
 
 ## In thirty seconds

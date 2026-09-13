@@ -145,10 +145,15 @@ onBeforeUnmount(() => stop?.())
   position: absolute;
   inset: 0;
   width: 100%;
-  height: 760px;
+  height: 620px;
   pointer-events: none;
   z-index: 0;
   mix-blend-mode: multiply;
+  /* On white, multiply at full strength reads as a grey smudge rather than as
+     atmosphere. It should be felt, not seen — and it must never compete with
+     the headline sitting on top of it. */
+  opacity: 0.22;
+  mask-image: linear-gradient(to bottom, #000 35%, transparent 92%);
 }
-.dark .kandy-backdrop { mix-blend-mode: screen; }
+.dark .kandy-backdrop { mix-blend-mode: screen; opacity: 0.8; }
 </style>
