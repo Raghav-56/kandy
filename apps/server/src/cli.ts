@@ -9,6 +9,7 @@ import { hasWebBuild } from "./static.js"
 import { warmPrices } from "./pricing.js"
 import { banner, berry, bold, dim, faint, lemon, mint } from "./cli/banner.js"
 import {
+  cmdGc,
   cmdList,
   cmdNew,
   cmdOpen,
@@ -87,12 +88,17 @@ function usage(): void {
   w(head("setup"))
   w(cmd("kandy serve [--port N]", "run the daemon in the foreground"))
   w(cmd("kandy skill", "let other agents queue work onto a board"))
+  w(cmd("kandy gc [--dry-run]", "reclaim the worktrees of finished notes"))
+  w(`\n  ${dim("Each note keeps a whole checkout until its note is done. gc gives")}\n`)
+  w(`  ${dim("that disk back and leaves every branch where it is.")}\n`)
 
   w(head("flags"))
   w(cmd("--agent claude|codex", "which agent runs it"))
   w(cmd("--no-run", "write the note without starting it"))
   w(cmd("--port N", "a daemon on a different port (default 4477)"))
   w(cmd("--all", "include finished notes in `ls`"))
+  w(cmd("--dry-run", "say what `gc` would reclaim, remove nothing"))
+  w(cmd("--force", "let `gc` remove unmerged or dirty worktrees"))
   w(cmd("--slots N", "how many agents may run at once (serve)"))
 
   w(`\n  ${dim("Notes run with repo-only permissions by default: an agent can edit")}\n`)
@@ -155,7 +161,7 @@ async function main(): Promise<void> {
   const agent = strFlag(argv, "--agent") as AgentId | undefined
   const noRun = argv.includes("--no-run")
   const VALUED = ["--port", "--slots", "--agent"]
-  const BARE = ["--no-run", "--all", "-a"]
+  const BARE = ["--no-run", "--all", "-a", "--dry-run", "--force"]
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
   // and reporting "nothing here" is worse than refusing it.
@@ -193,6 +199,15 @@ async function main(): Promise<void> {
       break
     case "stats":
       process.exit(await cmdStats({ port }))
+      break
+    case "gc":
+      process.exit(
+        await cmdGc({
+          port,
+          dryRun: argv.includes("--dry-run"),
+          force: argv.includes("--force"),
+        }),
+      )
       break
     case "open":
       process.exit(await cmdOpen({ port }))
