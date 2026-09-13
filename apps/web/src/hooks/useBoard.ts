@@ -1,3 +1,4 @@
+import { daemonToken } from "@/lib/daemon-token"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { KandyClient } from "@kandy/client"
 import { reduce, type ActivityFrame, type BoardView, type TranscriptFrame } from "@kandy/core"
@@ -7,7 +8,7 @@ import { reduce, type ActivityFrame, type BoardView, type TranscriptFrame } from
  * the server projects with and the TUI will render with.
  */
 export function useBoard(boardId: string | null) {
-  const client = useMemo(() => new KandyClient({ baseUrl: "/api" }), [])
+  const client = useMemo(() => new KandyClient({ baseUrl: "/api", token: daemonToken }), [])
   const [view, setView] = useState<BoardView | null>(null)
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)

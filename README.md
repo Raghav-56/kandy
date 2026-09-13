@@ -127,3 +127,15 @@ files) queue work onto a board rather than doing it inline. Copy it to
 | [Interface](docs/10-interface.md) | Design rules, and a direction we reverted |
 | [Going multiplayer](docs/11-going-multiplayer.md) | Sharing a note with a teammate — the bet, kept as notes |
 | [Spike: git share](docs/12-spike-git-share.md) | Two laptops over an orphan branch — what held, what didn't |
+
+## Talking to the daemon
+
+The daemon mints a random token on first start at `$XDG_STATE_HOME/kandy/token`
+(`~/.local/state/kandy/token` by default), readable only by you. Reads over
+loopback stay open; every write sends it as an `Authorization: Bearer` header.
+Tokens in query strings are not accepted, and cross-origin requests are
+rejected outright — the dev UI goes through Vite's `/api` proxy on port 5477.
+
+The web client fetches its token through a same-origin bootstrap request and
+keeps it in memory, never in storage or a URL. Anything else talking to the
+API should read the token file and pass it as `KandyClient({ token })`.

@@ -172,6 +172,8 @@ export type Forge = {
 
 export const ERROR_CODES = [
   "bad_request",
+  "unauthorized",
+  "forbidden",
   "board_not_found",
   "note_not_found",
   "run_not_found",
