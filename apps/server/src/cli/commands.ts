@@ -7,6 +7,7 @@ import { promisify } from "node:util"
 import type { AgentId, Board, BoardView, Note } from "@kandy/core"
 import { banner, berry, bold, dim, faint, heat, lemon, mint, sparkline, statusTag } from "./banner.js"
 import { client, DEFAULT_PORT, ensureUp } from "./daemon.js"
+import type { Reclaimable } from "../gc.js"
 import { findReclaimable, heldBack, humanBytes, reclaim } from "../gc.js"
 
 const exec = promisify(execFile)
@@ -304,35 +305,43 @@ export async function cmdGc(opts: {
   }
 
   out()
+  // Colour codes make a string longer than it looks, so pad the plain label and
+  // colour the result — otherwise the size column walks left and right.
+  const VERB = 10
+  const row = (verb: string, colour: (s: string) => string, item: Reclaimable, tail = "") =>
+    out(
+      `  ${colour(verb.padEnd(VERB))} ${faint(humanBytes(item.bytes).padStart(8))}  ${item.title}${tail}`,
+    )
+  const under = (text: string) => out(`  ${" ".repeat(VERB + 11)}${dim(text)}`)
+  const how = (item: Reclaimable) =>
+    dim(item.outcome === "discarded" ? "  discarded" : item.outcome === "merged" ? "  merged" : "")
+
   let freed = 0
   let held = 0
   for (const item of found) {
     const why = heldBack(item, opts.force)
-    const size = faint(humanBytes(item.bytes).padStart(8))
-    const tail =
-      dim(item.outcome === "discarded" ? "  discarded" : item.outcome === "merged" ? "  merged" : "")
 
     if (why) {
       held++
-      out(`  ${lemon("kept".padEnd(9))} ${size}  ${item.title}`)
-      out(`  ${" ".repeat(9)} ${" ".repeat(8)}  ${dim(why)}${dim(" — pass --force to remove it")}`)
+      row("kept", lemon, item)
+      under(`${why} — pass --force to remove it`)
       continue
     }
 
     if (opts.dryRun) {
       freed += item.bytes
-      out(`  ${faint("would free".padEnd(9))} ${size}  ${item.title}${tail}`)
+      row("would free", faint, item, how(item))
       continue
     }
 
     try {
       await reclaim(here.board.repoPath, item, opts.force)
       freed += item.bytes
-      out(`  ${mint("freed".padEnd(9))} ${size}  ${item.title}${tail}`)
+      row("freed", mint, item, how(item))
     } catch (err) {
       held++
-      out(`  ${berry("failed".padEnd(9))} ${size}  ${item.title}`)
-      out(`  ${" ".repeat(9)} ${" ".repeat(8)}  ${dim(err instanceof Error ? err.message.split("\n")[0]! : String(err))}`)
+      row("failed", berry, item)
+      under(err instanceof Error ? err.message.split("\n")[0]! : String(err))
     }
   }
 
