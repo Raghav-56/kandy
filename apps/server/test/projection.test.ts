@@ -35,6 +35,31 @@ test("a board appears and can be read back", () => {
   store.close()
 })
 
+test("a board signs nothing until it is asked to", () => {
+  // Off by default, and a log written before attribution existed replays to
+  // off — never to on, which would silently start editing someone's history.
+  const { store, projections } = fresh()
+  emit(store, projections, {
+    type: "board.created",
+    data: { boardId: "b1", name: "demo", repoPath: "/tmp/demo" },
+  })
+  assert.deepEqual(projections.view("b1")?.board.attribution, { commit: false, pr: false })
+
+  // The two switches move independently: yes to a PR footer, no to trailers.
+  emit(store, projections, {
+    type: "board.attribution",
+    data: { boardId: "b1", attribution: { commit: false, pr: true } },
+  })
+  assert.deepEqual(projections.view("b1")?.board.attribution, { commit: false, pr: true })
+
+  emit(store, projections, {
+    type: "board.attribution",
+    data: { boardId: "b1", attribution: { commit: true, pr: false } },
+  })
+  assert.deepEqual(projections.view("b1")?.board.attribution, { commit: true, pr: false })
+  store.close()
+})
+
 test("a note is found by id without searching every board", () => {
   const { store, projections } = fresh()
   emit(store, projections, { type: "board.created", data: { boardId: "b1", name: "a", repoPath: "/a" } })

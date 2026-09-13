@@ -22,6 +22,7 @@ import { computeStats } from "./stats.js"
 import { list as listDir, nativePick, suggestions } from "./browse.js"
 import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
+import { coerceAttribution, commitTrailers, prBody } from "./attribution.js"
 import {
   checkRepo,
   deleteBranch,
@@ -243,6 +244,23 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     return send(res, 200, { ok: true, seq: e.seq })
   }
 
+  // POST /boards/:id/attribution
+  if (req.method === "POST" && parts[0] === "boards" && parts[2] === "attribution") {
+    const body = await json<{ attribution: unknown }>(req)
+    if (!deps.engine.view(parts[1]!)) return fail(res, 404, "board_not_found", "no such board")
+    // Coerced rather than trusted: a half-sent object must resolve to "off"
+    // for the key it omitted, never to "on" by accident. Writing someone's
+    // git history because a field was undefined is not a mistake to allow.
+    const e = emit(
+      deps,
+      event("board.attribution", {
+        boardId: parts[1]!,
+        attribution: coerceAttribution(body?.attribution),
+      }),
+    )
+    return send(res, 200, { ok: true, seq: e.seq })
+  }
+
   // POST /boards/:id/setup
   if (req.method === "POST" && parts[0] === "boards" && parts[2] === "setup") {
     const body = await json<{ setup: string | null; carry?: string[] }>(req)
@@ -404,7 +422,10 @@ async function noteAction(
           view.board.repoPath,
           note.branch,
           note.title,
-          prBody(note),
+          prBody(note, {
+            model: note.model ?? (note.agent ? view.board.models?.[note.agent] : null) ?? null,
+            footer: view.board.attribution?.pr === true,
+          }),
           b?.draft ?? false,
         )
         const e = emit(deps, event("note.pr", { noteId, pr }))
@@ -488,7 +509,19 @@ async function noteAction(
       const wt = deps.runner.worktreeOf(noteId)
       if (wt) {
         if (b.decision === "merge") {
-          const result = await mergeBranch(view.board.repoPath, wt.branch)
+          // The merge commit is the one commit that is definitely still in
+          // history after the branch is deleted, so it is the one worth
+          // signing — when the board asked to be signed at all.
+          const trailers = view.board.attribution?.commit
+            ? commitTrailers({
+                noteId,
+                runId: note.runId,
+                agent: note.agent,
+                model:
+                  note.model ?? (note.agent ? view.board.models?.[note.agent] : null) ?? null,
+              })
+            : []
+          const result = await mergeBranch(view.board.repoPath, wt.branch, trailers)
           if (!result.merged) {
             // Leave everything exactly as it was. A conflict is the user's
             // call, and they still have the branch and the worktree.
@@ -552,14 +585,6 @@ function write(res: ServerResponse, f: StreamFrame) {
 /** `~/code/thing` is what people actually type. */
 function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(homedir(), p.slice(1)) : p
-}
-
-/** The PR description. Says what produced it, because a reviewer will ask. */
-function prBody(note: { body: string; agent: string | null }): string {
-  const lines = [note.body.trim() || "_No description given._", ""]
-  lines.push("---")
-  lines.push(`Opened from a kandy note${note.agent ? `, run by \`${note.agent}\`` : ""}.`)
-  return lines.join("\n")
 }
 
 function emit(deps: ServerDeps, pending: Parameters<Engine["emit"]>[0]) {

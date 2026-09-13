@@ -1,4 +1,4 @@
-import { reduce, type Board, type BoardView, type KandyEvent } from "@kandy/core"
+import { NO_ATTRIBUTION, reduce, type Board, type BoardView, type KandyEvent } from "@kandy/core"
 import type { Store } from "./store.js"
 
 /**
@@ -33,6 +33,9 @@ export class Projections {
           setup: e.data.setup ?? null,
           carry: e.data.carry ?? [],
           models: e.data.models ?? {},
+          // Off unless a board.attribution event says otherwise — boards
+          // created before this existed replay to silence, as they behaved.
+          attribution: e.data.attribution ?? { ...NO_ATTRIBUTION },
           createdAt: e.ts,
         },
         columns: [],

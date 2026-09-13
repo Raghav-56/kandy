@@ -1,4 +1,4 @@
-import type { AgentId, Board, BoardView, Policy, PullRequest } from "./domain.js"
+import type { AgentId, Attribution, Board, BoardView, Policy, PullRequest } from "./domain.js"
 import type { TranscriptFrame } from "./events.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
@@ -25,6 +25,8 @@ export type Commands = {
   "POST /notes/:id/policy": { req: { policy: Policy }; res: {} }
   "POST /notes/:id/model": { req: { model: string | null }; res: {} }
   "POST /boards/:id/models": { req: { models: Record<string, string> }; res: {} }
+  /** Turn commit trailers and the PR footer on or off, independently. */
+  "POST /boards/:id/attribution": { req: { attribution: Partial<Attribution> }; res: {} }
   /** Push the note's branch and open a PR for it. */
   "POST /notes/:id/pr": { req: { draft?: boolean }; res: { pr: PullRequest } }
   "POST /notes/:id/delete": { req: {}; res: {} }

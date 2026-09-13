@@ -16,6 +16,7 @@ function view(): BoardView {
       setup: null,
       carry: [],
       models: {},
+      attribution: { commit: false, pr: false },
       createdAt: 0,
     },
     columns: [],

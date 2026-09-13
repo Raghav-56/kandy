@@ -3,6 +3,7 @@ import { promisify } from "node:util"
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import type { DiffStat } from "@kandy/core"
+import { withTrailers } from "./attribution.js"
 import { worktreeRoot } from "./paths.js"
 
 const exec = promisify(execFile)
@@ -92,12 +93,31 @@ export async function createWorktree(
   return { path: dir, branch, baseRef, baseBranch }
 }
 
-/** Agents are inconsistent about committing. Capture whatever they left. */
-export async function commitLeftovers(wt: Worktree, message: string): Promise<boolean> {
+/**
+ * Agents are inconsistent about committing. Capture whatever they left.
+ *
+ * `trailers` is empty unless the board asked for attribution, and an empty
+ * list must produce exactly the command this issued before trailers existed —
+ * no `--trailer` flags at all. `git commit --trailer` (git ≥ 2.32) does the
+ * formatting: blank line after the subject, one trailer per line, readable
+ * back with `git log --format='%(trailers:key=Kandy-Note,valueonly)'`.
+ */
+export async function commitLeftovers(
+  wt: Worktree,
+  message: string,
+  trailers: readonly string[] = [],
+): Promise<boolean> {
   const status = await git(wt.path, "status", "--porcelain")
   if (!status) return false
   await git(wt.path, "add", "-A")
-  await git(wt.path, "commit", "-m", message, "--no-verify")
+  await git(
+    wt.path,
+    "commit",
+    "-m",
+    message,
+    ...trailers.flatMap((t) => ["--trailer", t]),
+    "--no-verify",
+  )
   return true
 }
 
@@ -147,13 +167,18 @@ export async function removeWorktree(repoPath: string, dir: string, force = fals
  * "what did kandy do here" stays answerable a month later. A conflict is
  * reported rather than resolved; the user has a worktree and an editor, and
  * guessing at a merge on their behalf is how trust dies.
+ *
+ * `git merge` has no `--trailer` of its own, so trailers are folded into the
+ * message here. With none, the message is the same string it always was.
  */
 export async function mergeBranch(
   repoPath: string,
   branch: string,
+  trailers: readonly string[] = [],
 ): Promise<{ merged: boolean; conflict?: string }> {
   try {
-    await git(repoPath, "merge", "--no-ff", "-m", `kandy: merge ${branch}`, branch)
+    const message = withTrailers(`kandy: merge ${branch}`, trailers)
+    await git(repoPath, "merge", "--no-ff", "-m", message, branch)
     return { merged: true }
   } catch (err) {
     // Leave the repo clean rather than parked in a half-merge the user has to

@@ -2,6 +2,7 @@ import type {
   ActivityFrame,
   AgentId,
   AgentInfo,
+  Attribution,
   Board,
   BoardView,
   Delivery,
@@ -141,6 +142,9 @@ export class KandyClient {
   }
   setBoardModels(boardId: string, models: Record<string, string>) {
     return this.req<{ seq: number }>("POST", `/boards/${boardId}/models`, { models })
+  }
+  setBoardAttribution(boardId: string, attribution: Attribution) {
+    return this.req<{ seq: number }>("POST", `/boards/${boardId}/attribution`, { attribution })
   }
   setPolicy(noteId: string, policy: Policy) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/policy`, { policy })

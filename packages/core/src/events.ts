@@ -1,5 +1,6 @@
 import type {
   AgentId,
+  Attribution,
   CostSource,
   DiffStat,
   Lane,
@@ -24,11 +25,14 @@ export type KandyEventMap = {
     setup?: string | null
     carry?: string[]
     models?: Partial<Record<AgentId, string>>
+    attribution?: Attribution
   }
   "board.setup": { boardId: BoardId; setup: string | null; carry?: string[] }
   /** Removes the board from kandy. The repository itself is never touched. */
   "board.removed": { boardId: BoardId }
   "board.models": { boardId: BoardId; models: Partial<Record<AgentId, string>> }
+  /** Whether this board's commits carry trailers and its PRs carry a footer. */
+  "board.attribution": { boardId: BoardId; attribution: Attribution }
 
   "column.created": {
     columnId: ColumnId

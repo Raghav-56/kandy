@@ -15,6 +15,7 @@ import {
 } from "@kandy/core"
 import type { Engine } from "./engine.js"
 import { adapter } from "./agents/index.js"
+import { commitTrailers } from "./attribution.js"
 import { priceUsage } from "./pricing.js"
 import {
   carryInto,
@@ -448,6 +449,40 @@ export class Runner {
     })
   }
 
+  /**
+   * The subject line for whatever the agent left uncommitted.
+   *
+   * The note's title, because that is the one sentence someone already wrote
+   * describing this work. It used to be `kandy: note_m2d904cm893j2fp0`, which
+   * says nothing to anyone reading `git log --oneline` — least of all the
+   * person who wrote the note. The id is still recorded, as a trailer, where a
+   * machine can find it and a human isn't forced to.
+   */
+  private commitMessage(l: Live): string {
+    const note = this.getView(l.boardId)?.notes.find((n) => n.id === l.noteId)
+    const title = note?.title.trim().split("\n")[0]?.trim()
+    return title || `kandy: ${l.noteId}`
+  }
+
+  /**
+   * Trailers for this note's commit — empty unless the board opted in.
+   *
+   * Empty is the default and it has to stay genuinely empty: commitLeftovers
+   * passes no `--trailer` flags for an empty list, so a board that never
+   * touched this setting gets the identical git command it always got.
+   */
+  private trailersFor(l: Live): string[] {
+    const view = this.getView(l.boardId)
+    if (!view?.board.attribution?.commit) return []
+    const note = view.notes.find((n) => n.id === l.noteId)
+    return commitTrailers({
+      noteId: l.noteId,
+      runId: l.runId,
+      agent: l.agent,
+      model: note?.model ?? view.board.models?.[l.agent] ?? null,
+    })
+  }
+
   private async finish(
     runId: string,
     noteId: string,
@@ -465,7 +500,7 @@ export class Runner {
     let diff = ""
     if (l) {
       try {
-        await commitLeftovers(l.worktree, `kandy: ${noteId}`)
+        await commitLeftovers(l.worktree, this.commitMessage(l), this.trailersFor(l))
         ;[stat, statText, diff] = await Promise.all([
           diffNumbers(l.worktree),
           diffStat(l.worktree),
