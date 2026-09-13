@@ -39,6 +39,8 @@ export type NoteDetailProps = {
   onEdit: (patch: { title?: string; body?: string }) => Promise<boolean>
   onSteer: (text: string, files?: Attached[]) => Promise<"live" | "queued" | undefined>
   onReview: (decision: "merge" | "discard") => void
+  /** Raise this note to full access and continue it. */
+  onEscalate: () => Promise<void>
   onOpenPr: () => Promise<void>
   onDelete: () => void
   loadDiff: () => Promise<
@@ -67,11 +69,19 @@ export function NoteDetail(p: NoteDetailProps) {
   const [pring, setPring] = useState(false)
   const [files, setFiles] = useState<Attached[]>([])
   const [full, setFull] = useState(false)
-  const [ask, setAsk] = useState<null | "merge" | "pr" | "discard" | "delete">(null)
+  const [ask, setAsk] = useState<null | "merge" | "pr" | "discard" | "delete" | "escalate">(null)
   const [busy, setBusy] = useState(false)
 
   const run = p.view.runs.find((r) => r.id === p.note.runId)
   const live = p.note.status === "running" || p.note.status === "blocked"
+  const policy = p.note.policy ?? "repo"
+
+  // What this note was actually refused. The transcript already carries it —
+  // the adapter writes each denial as a system frame tagged `permission` — so
+  // the answer to "why did this stop" is here rather than somewhere the user
+  // has to go hunting for it.
+  const refused = p.frames.filter((f) => f.meta === "permission")
+  const canEscalate = refused.length > 0 && policy !== "full" && p.note.status !== "queued"
   const reviewable = p.note.status === "review"
   const look = LOOK[p.note.status]
   const split = full && Boolean(p.note.branch)
@@ -262,7 +272,7 @@ export function NoteDetail(p: NoteDetailProps) {
             className="w-[190px]"
           />
 
-          <PolicyToggle value={p.note.policy ?? "repo"} onChange={p.onPolicy} disabled={live} />
+          <PolicyToggle value={policy} onChange={p.onPolicy} disabled={live} />
 
           {!live && !reviewable && (
             <Button variant="default" onClick={() => p.onRun()} disabled={!p.note.agent}>
@@ -297,6 +307,8 @@ export function NoteDetail(p: NoteDetailProps) {
           )}
         </div>
       </header>
+
+      {canEscalate && <Refused frames={refused} onAsk={() => setAsk("escalate")} />}
 
       {!split && (
         <nav className="flex items-center gap-1 border-y border-hairline px-4 py-1.5">
@@ -462,6 +474,35 @@ export function NoteDetail(p: NoteDetailProps) {
       />
 
       <Confirm
+        open={ask === "escalate"}
+        onOpenChange={(v) => !v && setAsk(null)}
+        title="Give this note full access"
+        body={
+          <>
+            This note's agent will be able to run <b>any shell command</b>, with no approval — the
+            build and the tests it was refused, and equally anything else a shell can do. Its
+            worktree bounds what it can damage <i>inside</i> this repository. It does not bound what
+            it can reach outside one: your home directory, your credentials, the network.
+            <br />
+            <br />
+            It then continues where it left off, in the same worktree, resuming the same session.
+            Only this note changes — the repo's default is not touched.
+          </>
+        }
+        facts={[
+          { label: "Repo", value: p.view.board.repoPath },
+          { label: "Agent", value: p.note.agent ? agentLabel(p.note.agent) : "none assigned" },
+          {
+            label: "Refused",
+            value: `${refused.length} command${refused.length === 1 ? "" : "s"}`,
+          },
+        ]}
+        confirmLabel="Grant full access and continue"
+        busy={busy}
+        onConfirm={() => confirmAction(p.onEscalate)}
+      />
+
+      <Confirm
         open={ask === "delete"}
         onOpenChange={(v) => !v && setAsk(null)}
         title="Delete this note"
@@ -483,6 +524,52 @@ export function NoteDetail(p: NoteDetailProps) {
 
 function Sep() {
   return <span className="text-muted-foreground/60">·</span>
+}
+
+/**
+ * What this note was refused, and the one thing you can do about it.
+ *
+ * Repo-only means the agent can write a test and then be refused the command
+ * that runs it — so the run ends having verified nothing. Without this the
+ * only evidence is a line buried in the stream, and the only cure was editing
+ * the policy and starting over. Here it is the first thing you see, with the
+ * exact commands, and one button that answers it.
+ */
+function Refused({ frames, onAsk }: { frames: TranscriptFrame[]; onAsk: () => void }) {
+  // The last few, newest first: a long run can be refused the same command
+  // twenty times, and twenty identical rows say nothing the first three don't.
+  const shown = [...frames].reverse().slice(0, 3)
+  const more = frames.length - shown.length
+
+  return (
+    <div className="border-y border-[#3d2621] bg-[#1a1211] px-4 py-3">
+      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-berry">
+        <span className="h-1.5 w-1.5 rounded-full bg-berry" />
+        Refused — repo only
+      </div>
+
+      <ul className="mt-2 space-y-1">
+        {shown.map((f) => (
+          <li
+            key={`${f.runId}-${f.seq}`}
+            className="truncate font-mono text-[11.5px] leading-[1.6] text-[#e8b3a8]"
+            title={f.text}
+          >
+            {f.text}
+          </li>
+        ))}
+      </ul>
+      {more > 0 && (
+        <p className="mt-1 text-[11px] text-faint">
+          and {more} more — the full list is in the stream
+        </p>
+      )}
+
+      <Button size="sm" variant="outline" className="mt-2.5 text-lemon" onClick={onAsk}>
+        Grant full access and continue
+      </Button>
+    </div>
+  )
 }
 
 /**

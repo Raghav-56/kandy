@@ -33,6 +33,9 @@ export class Projections {
           setup: e.data.setup ?? null,
           carry: e.data.carry ?? [],
           models: e.data.models ?? {},
+          // Boards created before this setting existed are repo-only, which is
+          // what they have been all along.
+          defaultPolicy: e.data.defaultPolicy ?? "repo",
           createdAt: e.ts,
         },
         columns: [],

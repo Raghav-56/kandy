@@ -16,6 +16,7 @@ function view(): BoardView {
       setup: null,
       carry: [],
       models: {},
+      defaultPolicy: "repo",
       createdAt: 0,
     },
     columns: [],
@@ -48,6 +49,27 @@ test("a created note starts as a draft with no run", () => {
   assert.equal(note.runId, null)
   assert.equal(note.model, null)
   assert.equal(note.policy, "repo")
+})
+
+test("a note inherits the board's default policy, and only from then on", () => {
+  const before = reduceAll(view(), [
+    ev({ type: "column.created", data: { columnId: "col_1", boardId: BOARD, name: "Inbox", pos: "a", lane: "inbox" } }),
+    ev({ type: "note.created", data: { noteId: "note_before", boardId: BOARD, columnId: "col_1", title: "T", body: "", pos: "a" } }),
+  ])
+  assert.equal(before.notes[0]!.policy, "repo")
+
+  const after = reduceAll(before, [
+    ev({ type: "board.policy", data: { boardId: BOARD, defaultPolicy: "full" } }),
+    ev({ type: "note.created", data: { noteId: "note_after", boardId: BOARD, columnId: "col_1", title: "T", body: "", pos: "b" } }),
+  ])
+  assert.equal(after.board.defaultPolicy, "full")
+  // The one written first keeps what it had: the setting applies forward.
+  assert.equal(after.notes.find((n) => n.id === "note_before")!.policy, "repo")
+  assert.equal(after.notes.find((n) => n.id === "note_after")!.policy, "full")
+
+  // And a note can still disagree with its board.
+  const pinned = reduce(after, ev({ type: "note.policy", data: { noteId: "note_after", policy: "repo" } }))
+  assert.equal(pinned.notes.find((n) => n.id === "note_after")!.policy, "repo")
 })
 
 test("a run carries the note through queued, running and review", () => {

@@ -213,6 +213,9 @@ export function App() {
             )?.delivery
           }
           onReview={(decision) => void act((c) => c.reviewNote(note.id, decision))}
+          onEscalate={async () => {
+            await act((c) => c.escalateNote(note.id))
+          }}
           onOpenPr={async () => {
             await act((c) => c.openPr(note.id))
           }}

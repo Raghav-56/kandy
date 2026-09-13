@@ -142,6 +142,14 @@ export class KandyClient {
   setBoardModels(boardId: string, models: Record<string, string>) {
     return this.req<{ seq: number }>("POST", `/boards/${boardId}/models`, { models })
   }
+  /** What notes written on this board start as. Existing notes keep theirs. */
+  setBoardPolicy(boardId: string, defaultPolicy: Policy) {
+    return this.req<{ seq: number }>("POST", `/boards/${boardId}/policy`, { defaultPolicy })
+  }
+  /** Raise a refused note to full access and continue it in the same worktree. */
+  escalateNote(noteId: string) {
+    return this.req<{ delivery: Delivery; seq: number }>("POST", `/notes/${noteId}/escalate`, {})
+  }
   setPolicy(noteId: string, policy: Policy) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/policy`, { policy })
   }
@@ -259,6 +267,7 @@ const EVENT_TYPES = [
   "note.policy",
   "note.model",
   "board.models",
+  "board.policy",
   "board.removed",
   "note.pr",
   "board.setup",

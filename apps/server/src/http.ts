@@ -142,8 +142,11 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
       repoPath: string
       setup?: string | null
       carry?: string[]
+      defaultPolicy?: "repo" | "full"
     }>(req)
     if (!body?.repoPath) return fail(res, 400, "bad_request", "repoPath required")
+    if (body.defaultPolicy !== undefined && body.defaultPolicy !== "repo" && body.defaultPolicy !== "full")
+      return fail(res, 400, "bad_request", "defaultPolicy must be 'repo' or 'full'")
 
     // Validate here rather than at first run. A board pointed at a
     // non-repo is a board that looks fine until the moment it matters.
@@ -176,6 +179,9 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
         setup: body.setup === undefined ? check.suggestedSetup : body.setup,
         carry: body.carry ?? check.suggestedCarry,
         models,
+        // A new repo is repo-only until someone looks at it and decides
+        // otherwise. Full access is never something we pick for you.
+        defaultPolicy: body.defaultPolicy ?? "repo",
       }),
     )
     // Seed the lifecycle lanes. Each declares the lane it represents, so the
@@ -240,6 +246,19 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     const b = await json<{ models: Record<string, string> }>(req)
     if (!deps.engine.view(parts[1]!)) return fail(res, 404, "board_not_found", "no such board")
     const e = emit(deps, event("board.models", { boardId: parts[1]!, models: b?.models ?? {} }))
+    return send(res, 200, { ok: true, seq: e.seq })
+  }
+
+  // POST /boards/:id/policy — what notes written here start as
+  if (req.method === "POST" && parts[0] === "boards" && parts[2] === "policy") {
+    const b = await json<{ defaultPolicy: "repo" | "full" }>(req)
+    if (b?.defaultPolicy !== "repo" && b?.defaultPolicy !== "full")
+      return fail(res, 400, "bad_request", "defaultPolicy must be 'repo' or 'full'")
+    if (!deps.engine.view(parts[1]!)) return fail(res, 404, "board_not_found", "no such board")
+    const e = emit(
+      deps,
+      event("board.policy", { boardId: parts[1]!, defaultPolicy: b.defaultPolicy }),
+    )
     return send(res, 200, { ok: true, seq: e.seq })
   }
 
@@ -433,6 +452,32 @@ async function noteAction(
         return fail(res, 400, "bad_request", "policy must be 'repo' or 'full'")
       const e = emit(deps, event("note.policy", { noteId, policy: b.policy }))
       return send(res, 200, { ok: true, seq: e.seq })
+    }
+
+    /**
+     * Answer a refusal, once, for this note.
+     *
+     * Deliberately not an in-flight permission answer — that needs the
+     * `canUseTool` callback and the agent running in-process, which is a
+     * different architecture (see docs/09-open-questions.md). This is the
+     * pragmatic version: the policy changes, and the agent is resumed in the
+     * same worktree with what it was refused now permitted.
+     */
+    case "escalate": {
+      if (!note.agent) return fail(res, 400, "bad_request", "note has no agent assigned")
+      // There is nothing to continue from. Setting the policy and running from
+      // scratch is what the note's own toggle and Run button are for.
+      if (!note.runId)
+        return fail(res, 409, "invalid_transition", "this note has not run yet — set its policy and run it")
+
+      if (note.policy !== "full") emit(deps, event("note.policy", { noteId, policy: "full" }))
+
+      try {
+        const delivery = deps.runner.escalate(view.board.id, noteId)
+        return send(res, 200, { ok: true, seq: deps.engine.head(), delivery })
+      } catch (err) {
+        return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))
+      }
     }
 
     case "delete": {
