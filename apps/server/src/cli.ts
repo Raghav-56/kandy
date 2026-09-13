@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import type { AgentId } from "@kandy/core"
 import { Engine } from "./engine.js"
 import { PrWatch } from "./prwatch.js"
@@ -111,6 +112,19 @@ async function main(): Promise<void> {
   const VALUED = ["--port", "--slots", "--agent"]
   const BARE = ["--no-run", "--all", "-a"]
 
+  // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
+  // and reporting "nothing here" is worse than refusing it.
+  const KNOWN = [...VALUED, ...BARE, "--help", "-h"]
+  const unknown = argv.find((a) => a.startsWith("-") && !KNOWN.includes(a))
+  if (unknown) {
+    const guess = KNOWN.find((k) => k.replace(/^-+/, "") === unknown.replace(/^-+/, ""))
+    process.stderr.write(
+      berry(`  unknown flag ${unknown}`) + (guess ? dim(`  did you mean ${guess}?`) : "") + "\n",
+    )
+    usage()
+    process.exit(1)
+  }
+
   const rest = positionals(argv, VALUED, BARE)
   const first = rest[0]
 
@@ -140,11 +154,6 @@ async function main(): Promise<void> {
     default: {
       // Anything else is the shorthand: `kandy "do the thing"` writes a note
       // here and runs it. This is the path that should feel like nothing.
-      if (first?.startsWith("-")) {
-        process.stderr.write(berry(`  unknown flag ${first}\n`))
-        usage()
-        process.exit(1)
-      }
       process.exit(await cmdNew(rest, { port, agent, run: !noRun }))
     }
   }

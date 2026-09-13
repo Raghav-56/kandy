@@ -7,7 +7,7 @@
     "kandy": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
     "dev": "node --watch --experimental-strip-types src/cli.ts",
     "start": "node dist/cli.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"

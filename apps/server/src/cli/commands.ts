@@ -89,7 +89,14 @@ export async function cmdList(opts: { port: number; all: boolean }): Promise<num
 
   const notes = here.view.notes.filter((n) => opts.all || n.status !== "done")
   if (notes.length === 0) {
-    out(dim("  nothing here. ") + `kandy new "…"`)
+    // "nothing here" is false when a board is full of finished work. Say what
+    // is being hidden and how to see it.
+    const done = here.view.notes.length
+    if (done > 0 && !opts.all) {
+      out(dim(`  nothing open — ${done} done. `) + "kandy ls --all" + dim(" to see them"))
+    } else {
+      out(dim("  nothing here. ") + `kandy new "…"`)
+    }
     return 0
   }
 
@@ -137,6 +144,7 @@ export async function cmdStatus(opts: { port: number }): Promise<number> {
 export async function cmdOpen(opts: { port: number }): Promise<number> {
   if (!(await ensureUp(opts.port))) return fail()
   const url = `http://127.0.0.1:${opts.port}`
+  out(dim("  opening ") + url)
   const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open"
   await exec(cmd, [url]).catch(() => out(dim(`  open ${url}`)))
   return 0
