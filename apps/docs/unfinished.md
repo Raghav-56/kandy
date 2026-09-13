@@ -3,32 +3,30 @@
 kandy is alpha. It runs real work every day on its own repository, and these are
 the parts that do not work yet — named here rather than left to be discovered.
 
-## `blocked` can be seen but not answered
+## A refusal can be seen and escalated, but not answered
 
-Refusals surface correctly: a headless agent denies what it cannot ask about and
-reports it, and kandy shows that. But by the time a note goes blocked the agent
-has already moved on, so there is nothing to approve.
+When an agent is refused something, kandy shows what was refused — the exact
+command — and offers to grant that note full access and continue it in the same
+worktree. That is a decision you make once, after the fact.
 
-Answering in flight needs the `canUseTool` callback, which means running the
-agent in-process rather than as a subprocess. That is an architectural fork, not
-a patch.
+What it still is not: a prompt that stops and asks you, with the choice a
+terminal would give you. The agent has already moved on by the time you see it,
+and "allow everything from here" is a blunter answer than "allow this one
+command."
 
-## Only two agents
+This used to be described here as an architectural fork requiring the agent to
+run in-process. That was wrong, and the correction is worth stating plainly:
+Claude Code takes `--permission-prompt-tool`, which routes prompts to a tool of
+our choosing rather than auto-denying them. The work is real but it is a
+feature, not a rewrite. Codex's non-interactive `exec` has no equivalent, so
+this will land for one agent before the others.
 
-Claude Code and Codex have adapters. Cursor, opencode, Gemini and Grok appear in
-the data model and the UI but do nothing.
+## Three agents, and one of them unproven
 
-## No auth on the HTTP port
-
-The daemon binds `127.0.0.1`, so nothing is exposed today. But `kandy serve
---port` has no token, and a bound port is reachable by every process on the
-machine.
-
-## No worktree collection
-
-Worktrees are kept until a note is reviewed, which is right — review needs the
-diff. But an abandoned note keeps its worktree forever, and ten `node_modules`
-is real disk.
+Claude Code and Codex are used daily. The aider adapter is written and tested
+against captured output, but has never driven a real aider install — it was
+built on a machine that did not have one. Cursor, opencode, Gemini and Grok
+appear in the data model and the UI and do nothing.
 
 ## Codex cost is an estimate
 
@@ -43,11 +41,28 @@ Fractional indexing is implemented and works, but the triage list sorts by
 urgency, so manual ordering has nowhere to show. It matters if a board view
 comes back.
 
-## No sync
+## No sync, and a spike that says why it is hard
 
-One daemon owns the state. Clients are views. That is correct for the local
-case and wrong for anything else — offline editing, two people on one board, or
-a board that exists without a daemon running would all need real sync.
+One daemon owns the state. Clients are views. That is correct for the local case
+and wrong for anything else — offline editing, two people on one board, or a
+board that exists without a daemon running.
 
-The intended answer is Yjs, and the decision that matters is already made: the
-local daemon is authoritative and the cloud would be a relay, never a copy.
+There is a spike for sharing a board over a git orphan branch, and its finding
+is the useful part: the transport holds and is boring, and the product around it
+does not. A note handed to a teammate arrives with a branch and a diffstat but
+no reachable diff, because the worktree path is a lie on their disk. Review is
+the whole point of a handoff and it is the step that does not survive the trip.
+
+## A daemon restart kills running agents
+
+Agents are child processes of the daemon. Restart it — to pick up a new build,
+say — and every run in flight dies. Startup reconciliation marks them failed
+rather than leaving the board lying about it, and the worktree survives so the
+note can be resumed, but the turn is lost.
+
+## What is no longer here
+
+Two entries were on this page this morning and are not any more: the HTTP port
+had no authentication, and worktrees were never collected. Both shipped — the
+daemon mints a token for writes, and `kandy gc` reclaims checkouts from finished
+notes.

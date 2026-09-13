@@ -40,10 +40,18 @@ adapter surfaces it.
 
 What is still open is the other half: **we can see the denial but we cannot answer it.** The
 agent has already moved on by the time the note goes blocked, so today "blocked" means "it was
-refused something" rather than "it is waiting for you." Answering in-flight needs the
-`canUseTool` callback from `@anthropic-ai/claude-agent-sdk`, which means running the agent
-in-process rather than as a subprocess — a real architectural fork, not a tweak. Codex and the
-others each express refusal differently and will need their own answer.
+refused something" rather than "it is waiting for you."
+
+*Corrected September 2026.* This said answering in-flight needed the `canUseTool` callback from
+`@anthropic-ai/claude-agent-sdk`, and therefore running the agent in-process rather than as a
+subprocess — "a real architectural fork, not a tweak." That was wrong. Claude Code accepts
+`--permission-prompt-tool <mcp tool>`, which hands the prompt to a tool of our choosing instead
+of auto-denying it, and `--permission-prompts host|none` controls whether anything is asked at
+all. Verified against the installed CLI: unknown flags are rejected outright, and this one runs.
+So the subprocess architecture stands and this is a feature, not a rewrite.
+
+Codex's non-interactive `exec` has no equivalent, so this will land for one agent before the
+others — which is its own inconsistency to explain to a user.
 
 There is now a pragmatic version of the answer, which is not the same thing. The note's detail
 pane shows what was actually refused — the exact commands, read out of the `permission` frames
