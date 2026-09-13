@@ -136,9 +136,19 @@ test("a clean merge lands on the base branch", async () => {
   await removeWorktree(dir, wt.path, true)
 })
 
-/** The full commit message of HEAD, exactly as git stored it. */
-function message(cwd: string): string {
-  return execFileSync("git", ["log", "-1", "--format=%B"], { cwd }).toString()
+/**
+ * The commit message exactly as git stored it.
+ *
+ * Deliberately not `git log --format=%B`. `--format=` is shorthand for
+ * `tformat:`, which terminates every entry with a newline of its own — so a
+ * message stored as "X\n" prints as "X\n\n", and a test comparing against a
+ * literal reads that terminator as a trailing blank line that is not in the
+ * repository. `cat-file commit` emits the raw object: headers, one blank line,
+ * then the message verbatim to the end.
+ */
+function message(cwd: string, ref = "HEAD"): string {
+  const raw = execFileSync("git", ["cat-file", "commit", ref], { cwd }).toString()
+  return raw.slice(raw.indexOf("\n\n") + 2)
 }
 
 test("with attribution off, a commit is byte-for-byte what it always was", async () => {
@@ -150,9 +160,21 @@ test("with attribution off, a commit is byte-for-byte what it always was", async
 
   assert.equal(await commitLeftovers(wt, "Guard the daemon port with a token"), true)
   assert.equal(message(wt.path), "Guard the daemon port with a token\n")
+
+  // The control: the same subject committed by plain git, no kandy in the call
+  // at all. "Inert" means indistinguishable from this — asserting against a
+  // hand-written literal only tests our idea of what git does, which is how
+  // the terminator in `--format=%B` got mistaken for a stored blank line.
+  writeFileSync(path.join(wt.path, "CONTROL.md"), "by hand\n")
+  execFileSync("git", ["add", "-A"], { cwd: wt.path })
+  execFileSync("git", ["commit", "-qm", "Guard the daemon port with a token"], { cwd: wt.path })
+  assert.equal(message(wt.path, "HEAD~1"), message(wt.path))
+
   // Not "no Kandy-Note value" — no trailer block at all.
   assert.equal(
-    execFileSync("git", ["log", "-1", "--format=%(trailers)"], { cwd: wt.path }).toString().trim(),
+    execFileSync("git", ["log", "-1", "--format=%(trailers)", "HEAD~1"], { cwd: wt.path })
+      .toString()
+      .trim(),
     "",
   )
   await removeWorktree(dir, wt.path, true)
