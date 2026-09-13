@@ -2,8 +2,8 @@
 layout: home
 hero:
   name: kandy
-  text: A board for orchestrating coding agents
-  tagline: One note is one job. It runs in its own git worktree, on its own branch, and comes back as a diff you can read.
+  text: Stop babysitting your coding agents
+  tagline: Queue a dozen jobs and walk away. Each one runs in its own git worktree, so agents never collide — and comes back as a branch and a diff you approve. Claude Code and Codex, on your machine, with the logins you already have.
   actions:
     - theme: brand
       text: Getting started
@@ -12,14 +12,14 @@ hero:
       text: The CLI
       link: /guide/cli
 features:
-  - title: Several agents, one repo
-    details: Every note gets its own worktree and branch, so six agents can work the same repository without seeing each other's writes. Your working tree is never touched.
-  - title: Work you can walk away from
-    details: A chat needs you present. A board does not. Come back to finished branches, and a list sorted by what is actually waiting on you.
-  - title: Steering, not just prompting
-    details: Send a message to a running agent, or queue a follow-up that resumes its session in the same worktree. Attach files it can open.
-  - title: Nothing is taken on trust
-    details: Every note ends as a diff and a decision — merge here, open a PR, or discard. Each asks first, and says what will happen to that branch.
+  - title: Twelve agents, one repository
+    details: Every note gets its own worktree and branch. They edit the same files at the same time and never see each other's writes — and your working tree is never touched.
+  - title: Absence is the point
+    details: A chat needs you present, watching a stream. A board does not. The list is sorted by what is actually waiting on you, so coming back takes a minute, not an afternoon.
+  - title: Argue with it mid-run
+    details: Send a message to a working agent, or queue a follow-up that resumes its session in the same worktree. Attach files it can open. It keeps its context either way.
+  - title: Nothing lands unread
+    details: Every job ends as a diff and a decision — merge here, open a PR, or discard. Each asks first, and says exactly what will happen to that branch.
 ---
 
 ## In thirty seconds

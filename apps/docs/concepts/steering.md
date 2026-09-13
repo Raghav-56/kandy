@@ -25,6 +25,8 @@ note lands in review.
 
 Steering after that point becomes a follow-up run. Same intent, one turn later.
 
+![The agent's stream, with tool calls collapsed](/shots/stream.png)
+
 ## Attachments
 
 Files can be sent with a message — dropped, pasted or picked. They are written

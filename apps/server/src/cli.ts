@@ -53,21 +53,54 @@ function positionals(args: string[], valued: string[], bare: string[]): string[]
 }
 
 function usage(): void {
-  process.stdout.write(banner())
-  const row = (cmd: string, desc: string) => `  ${bold(cmd.padEnd(30))} ${faint(desc)}\n`
-  process.stdout.write(
-    row('kandy "fix the login flash"', "write a note here and run it") +
-      row("kandy new <text>", "write a note without running it") +
-      row('  "task" $\'\\n\'"detail"', "first line names it, the rest is detail") +
-      row("kandy ls [--all]", "what's on the board for this repo") +
-      row("kandy status", "daemon, repos and agents") +
-      row("kandy stats", "what this board has actually done") +
-      row("kandy open", "open the board in a browser") +
-      row("kandy skill", "install the skill so agents can queue work") +
-      row("kandy serve [--port N]", "run the daemon in the foreground") +
-      "\n" +
-      `  ${faint("flags")}  ${dim("--agent claude|codex   --no-run   --port N")}\n\n`,
-  )
+  const w = process.stdout.write.bind(process.stdout)
+  // Pad, but never let a long command swallow its own description.
+  const cmd = (c: string, desc: string) =>
+    c.length >= 32 ? `  ${bold(c)}\n  ${" ".repeat(32)}${faint(desc)}\n` : `  ${bold(c.padEnd(32))}${faint(desc)}\n`
+  const head = (t: string) => `\n  ${dim(t.toUpperCase())}\n`
+
+  w(banner())
+
+  w(`  ${faint("One note is one job. It runs in its own git worktree, on its own")}\n`)
+  w(`  ${faint("branch, and comes back as a diff you can read.")}\n`)
+
+  w(head("start here"))
+  w(cmd('kandy "fix the login flash"', "write a note here and run it"))
+  w(`  ${dim("Run it from inside a repository. kandy adopts the repo the first")}\n`)
+  w(`  ${dim("time it sees one, and starts its own daemon if it is not running.")}\n`)
+
+  w(head("writing"))
+  w(cmd("kandy <text>", "write a note and run it"))
+  w(cmd("kandy new <text>", "write it, don't run it"))
+  w(`\n  ${dim("The first line names the note; the rest is detail. Both are given")}\n`)
+  w(`  ${dim("to the agent, so put constraints and how to verify in the detail:")}\n\n`)
+  w(`  ${faint('kandy "Add a --json flag to kandy serve')}\n`)
+  w(`  ${faint("Print port, db path and slot count as JSON.")}\n`)
+  w(`  ${faint('Verify with: pnpm build && kandy serve --json"')}\n`)
+
+  w(head("looking"))
+  w(cmd("kandy", "status: daemon, repos, agents"))
+  w(cmd("kandy ls [--all]", "what's open here; --all includes done"))
+  w(cmd("kandy stats", "what this board has actually done"))
+  w(cmd("kandy open", "the board in a browser"))
+
+  w(head("setup"))
+  w(cmd("kandy serve [--port N]", "run the daemon in the foreground"))
+  w(cmd("kandy skill", "let other agents queue work onto a board"))
+
+  w(head("flags"))
+  w(cmd("--agent claude|codex", "which agent runs it"))
+  w(cmd("--no-run", "write the note without starting it"))
+  w(cmd("--port N", "a daemon on a different port (default 4477)"))
+  w(cmd("--all", "include finished notes in `ls`"))
+  w(cmd("--slots N", "how many agents may run at once (serve)"))
+
+  w(`\n  ${dim("Notes run with repo-only permissions by default: an agent can edit")}\n`)
+  w(`  ${dim("files but most shell commands are refused. Change that per note on")}\n`)
+  w(`  ${dim("the board — a worktree bounds what it can damage inside the repo,")}\n`)
+  w(`  ${dim("not what it can reach outside one.")}\n`)
+
+  w(`\n  ${faint("docs")}  ${dim("https://github.com/hiteshbandhu/kandy")}\n\n`)
 }
 
 function serve(args: string[]): void {

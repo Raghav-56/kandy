@@ -30,6 +30,8 @@ in a fresh worktree:
 - **Say what not to touch.** Agents are literal, and a fresh worktree looks like
   fair game.
 
+![The board, sorted by what needs you](/shots/board.png)
+
 ## Run it
 
 Assign an agent and run it, either from the board or in one step:

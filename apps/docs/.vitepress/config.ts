@@ -13,6 +13,7 @@ export default defineConfig({
   description: "A board for orchestrating coding agents. Each note is one job, in its own worktree.",
   lang: "en-GB",
   cleanUrls: true,
+  head: [["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }]],
   lastUpdated: true,
   // Private for now, so no sitemap and no analytics.
   themeConfig: {

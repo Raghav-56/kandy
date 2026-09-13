@@ -12,6 +12,8 @@ before *what did it write*.
 Full screen puts the stream and the diff side by side — reading what the agent
 said it did next to what it actually did is the real review motion.
 
+![Reviewing a diff beside the note it came from](/shots/review.png)
+
 ## Three ways to finish
 
 There are exactly two destinations and a bin, so "merge" never means two

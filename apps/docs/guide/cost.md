@@ -32,6 +32,8 @@ An estimated figure is shown as `â‰ˆ$0.42`. A total made of both carries the `â‰
 and says how many runs were unpriced, rather than presenting one confident
 number that is partly a guess.
 
+![Usage, per agent and per note](/shots/usage.png)
+
 ## Where to look
 
 **Usage** in the sidebar: spend and tokens per agent and per note.
