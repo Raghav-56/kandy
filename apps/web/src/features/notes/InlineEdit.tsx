@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { Textarea } from "@/components/ui/input"
+import { Textarea } from "@/ui"
 import { cn } from "@/lib/utils"
 
 export function InlineEdit({ value, label, placeholder, required = false, rows, onSave }: {

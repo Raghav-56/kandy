@@ -13,11 +13,11 @@ export function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-[2px]" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]" />
       <DialogPrimitive.Content
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-[min(520px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2",
-          "rounded-xl border border-line bg-panel p-7 shadow-2xl shadow-black/60",
+          "fixed left-1/2 top-1/2 z-50 w-[min(560px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2",
+          "rise rounded-2xl border border-line bg-surface p-6 shadow-2xl shadow-black/60",
           className,
         )}
         {...props}
@@ -34,7 +34,7 @@ export function DialogTitle({
 }: React.ComponentProps<typeof DialogPrimitive.Title>) {
   return (
     <DialogPrimitive.Title
-      className={cn("text-[17px] font-semibold tracking-[-0.01em]", className)}
+      className={cn("text-[17px] font-semibold tracking-[-0.015em]", className)}
       {...props}
     />
   )

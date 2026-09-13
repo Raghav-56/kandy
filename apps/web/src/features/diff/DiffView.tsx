@@ -41,12 +41,12 @@ export function DiffView({
         {files.map((f) => {
           const isOpen = open === f.path
           return (
-            <div key={f.path} className="overflow-hidden rounded-xl border border-line-soft">
+            <div key={f.path} className="overflow-hidden rounded-xl border border-hairline">
               <button
                 onClick={() => setOpen(isOpen ? null : f.path)}
                 className={cn(
                   "flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors",
-                  isOpen ? "bg-panel-2" : "bg-panel hover:bg-panel-2/60",
+                  isOpen ? "bg-raised" : "bg-surface hover:bg-raised/60",
                 )}
               >
                 <span
@@ -61,13 +61,13 @@ export function DiffView({
                   {f.path}
                 </span>
                 <span className="ml-auto shrink-0 text-[11px] tabular-nums">
-                  <span className="text-sage">+{f.added}</span>{" "}
-                  <span className="text-coral">−{f.removed}</span>
+                  <span className="text-mint">+{f.added}</span>{" "}
+                  <span className="text-berry">−{f.removed}</span>
                 </span>
               </button>
 
               {isOpen && (
-                <pre className="overflow-x-auto border-t border-line-soft bg-[#0c0c0e] py-2 font-mono text-[11.5px] leading-[1.6]">
+                <pre className="overflow-x-auto border-t border-hairline bg-[#0c0c0e] py-2 font-mono text-[11.5px] leading-[1.6]">
                   {f.lines.map((l, i) => (
                     <div
                       key={i}
@@ -75,7 +75,7 @@ export function DiffView({
                         "px-3.5 whitespace-pre",
                         l.startsWith("+") && "bg-[#0f1c0d] text-[#a5d68f]",
                         l.startsWith("-") && "bg-[#1e0f0e] text-[#e0918a]",
-                        l.startsWith("@@") && "my-1 bg-panel-2 text-azure",
+                        l.startsWith("@@") && "my-1 bg-raised text-sky",
                         !/^[-+@]/.test(l) && "text-dim",
                       )}
                     >

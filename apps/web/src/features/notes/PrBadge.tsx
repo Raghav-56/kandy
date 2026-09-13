@@ -23,7 +23,7 @@ export function PrBadge({
         ? "text-faint"
         : pr.draft
           ? "text-dim"
-          : "text-sage"
+          : "text-mint"
 
   return (
     <a
@@ -35,7 +35,7 @@ export function PrBadge({
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md transition-colors",
         size === "md" ? "px-2 py-1 text-[12px]" : "px-1.5 py-0.5 text-[11px]",
-        onDark ? "bg-panel-2 hover:bg-[#1e1e25]" : "bg-black/[0.06] hover:bg-black/[0.1]",
+        onDark ? "bg-raised hover:bg-[#1e1e25]" : "bg-black/[0.06] hover:bg-black/[0.1]",
         tone,
       )}
     >
@@ -78,9 +78,9 @@ function Checks({ checks }: { checks: NonNullable<PullRequest["checks"]> }) {
       title={`Checks ${checks}`}
       className={cn(
         "h-1.5 w-1.5 shrink-0 rounded-full",
-        checks === "passing" && "bg-sage",
-        checks === "failing" && "bg-coral",
-        checks === "pending" && "breathe bg-amber",
+        checks === "passing" && "bg-mint",
+        checks === "failing" && "bg-berry",
+        checks === "pending" && "breathe bg-lemon",
       )}
     />
   )

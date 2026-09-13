@@ -18,14 +18,14 @@ export function Markdown({ children, className }: { children: string; className?
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ node: _node, ...props }) => (
-            <a {...props} target="_blank" rel="noreferrer noopener" className="text-azure underline underline-offset-2" />
+            <a {...props} target="_blank" rel="noreferrer noopener" className="text-sky underline underline-offset-2" />
           ),
           code: ({ node: _node, className: cls, children, ...props }) => {
             const inline = !String(cls ?? "").includes("language-")
             return inline ? (
               <code
                 {...props}
-                className="rounded bg-panel-2 px-1 py-px font-mono text-[11.5px] text-[#d9c8a0]"
+                className="rounded bg-raised px-1 py-px font-mono text-[11.5px] text-[#d9c8a0]"
               >
                 {children}
               </code>

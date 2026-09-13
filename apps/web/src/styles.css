@@ -1,30 +1,42 @@
 @import "tailwindcss";
 
-/* kandy — a dark desk with paper on it.
-   Restraint is the point: one warm paper tone, three muted accents, and a lot
-   of near-black. Status is a dot and a word, not a coloured card. */
+/*
+ * kandy — a warm dark desk with paper on it.
+ *
+ * Easy on the eyes means: nothing is pure black or pure white, contrast is
+ * enough and not more, corners are round, and the accents are candy colours
+ * held at low saturation so a screen full of them still reads calm.
+ */
 @theme {
-  --color-bg: #0a0a0b;
-  --color-panel: #0f0f11;
-  --color-panel-2: #151519;
-  --color-line: #202026;
-  --color-line-soft: #191920;
+  /* Surfaces — warm, never #000. A true black desk is harsh under long use. */
+  --color-bg: #131219;
+  --color-surface: #1a1922;
+  --color-raised: #22212d;
+  --color-line: #2c2a38;
+  --color-hairline: #232230;
 
-  --color-ink: #ededf0;
-  --color-dim: #8b8b96;
-  --color-faint: #56565f;
+  /* Ink — off-white, so nothing glares. */
+  --color-ink: #ece9f4;
+  --color-dim: #9a95ad;
+  --color-faint: #635e78;
 
-  --color-paper: #f7f2e6;
-  --color-paper-2: #ebe5d6;
-  --color-paper-ink: #1a1a17;
+  /* Paper — the notes themselves. */
+  --color-paper: #f7f1e3;
+  --color-paper-2: #ece4d3;
+  --color-paper-ink: #201d17;
 
-  --color-amber: #d9a33a;
-  --color-coral: #e0705c;
-  --color-sage: #7aa87e;
-  --color-azure: #6f8fd6;
+  /* Candy accents. Muted on purpose: saturated versions of these are a toy. */
+  --color-berry: #e87fa4;
+  --color-mint: #74d6ac;
+  --color-lemon: #e8c56a;
+  --color-sky: #7db4f0;
+  --color-grape: #a794f0;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 }
 
 :root { color-scheme: dark; }
@@ -38,97 +50,75 @@ body {
   font-size: 13px;
   font-feature-settings: "cv05", "ss01";
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* A small-caps label used for every piece of metadata in the app. */
+/* Metadata voice: small caps, never shouty. */
 .label {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 500;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--color-faint);
 }
 
+/* Paper lifting off a desk, not a drop shadow. */
 .paper {
-  /* Layered, soft, and dark — paper lifting off a desk, not a drop shadow. */
   box-shadow:
-    0 1px 1px rgb(0 0 0 / 0.5),
-    0 4px 10px -2px rgb(0 0 0 / 0.45),
-    0 12px 28px -8px rgb(0 0 0 / 0.5);
+    0 1px 1px rgb(0 0 0 / 0.4),
+    0 4px 10px -3px rgb(0 0 0 / 0.4),
+    0 14px 30px -12px rgb(0 0 0 / 0.45);
 }
 
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-thumb { background: #26262d; border-radius: 999px; }
-*::-webkit-scrollbar-thumb:hover { background: #33333c; }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb { background: #2e2c3c; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: #3a3850; background-clip: padding-box; }
 *::-webkit-scrollbar-track { background: transparent; }
-* { scrollbar-width: thin; scrollbar-color: #26262d transparent; }
+* { scrollbar-width: thin; scrollbar-color: #2e2c3c transparent; }
 
 :where(button, a, input, textarea, select, [tabindex]):focus-visible {
-  outline: 1.5px solid var(--color-azure);
+  outline: 2px solid var(--color-sky);
   outline-offset: 1px;
+  border-radius: 6px;
 }
 
-@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
-.sweep::after {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  left: 0;
-  width: 34%;
-  background: linear-gradient(90deg, transparent, var(--color-amber), transparent);
-  animation: sweep 1.9s ease-in-out infinite;
-}
-
-/* Liveness as motion along a line rather than a blinking dot: it reads as
-   "work is moving" instead of "notice me". */
-@keyframes shimmer {
-  from { transform: translateX(-100%); }
-  to   { transform: translateX(100%); }
-}
+/* Liveness as motion along a line: "work is moving", not "notice me". */
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.shimmer { position: relative; overflow: hidden; }
 .shimmer::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, var(--color-amber), transparent);
-  animation: shimmer 1.8s linear infinite;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  opacity: 0.6;
+  animation: shimmer 1.9s linear infinite;
 }
 
-@keyframes breathe { 50% { opacity: 0.45; } }
+@keyframes breathe { 50% { opacity: 0.4; } }
 .breathe { animation: breathe 2s ease-in-out infinite; }
 
-/* Markdown from agents. Tight vertical rhythm — these are messages in a
-   stream, not documents, and default prose spacing makes six of them
-   unreadable. */
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise 160ms ease-out both; }
+
+/* Markdown from agents: tight rhythm, because these are messages in a stream
+   rather than documents. */
+.md { line-height: 1.65; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
 .md p { margin: 0 0 0.6em; }
-.md ul, .md ol { margin: 0 0 0.6em; padding-left: 1.2em; }
+.md ul, .md ol { margin: 0 0 0.6em; padding-left: 1.25em; }
 .md li { margin: 0.15em 0; }
 .md ul { list-style: disc; }
 .md ol { list-style: decimal; }
-.md h1, .md h2, .md h3, .md h4 {
-  margin: 1em 0 0.4em;
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
+.md h1, .md h2, .md h3, .md h4 { margin: 1em 0 0.4em; font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; }
 .md strong { font-weight: 600; color: #fff; }
 .md em { font-style: italic; }
 .md pre {
-  margin: 0 0 0.7em;
-  padding: 8px 10px;
-  overflow-x: auto;
-  border-radius: 8px;
-  border: 1px solid var(--color-line-soft);
-  background: #0c0c0e;
+  margin: 0 0 0.7em; padding: 9px 11px; overflow-x: auto;
+  border-radius: 10px; border: 1px solid var(--color-hairline); background: #100f16;
 }
-.md blockquote {
-  margin: 0 0 0.6em;
-  padding-left: 0.8em;
-  border-left: 2px solid var(--color-line);
-  color: var(--color-dim);
-}
-.md hr { margin: 0.9em 0; border: 0; border-top: 1px solid var(--color-line-soft); }
+.md blockquote { margin: 0 0 0.6em; padding-left: 0.85em; border-left: 2px solid var(--color-line); color: var(--color-dim); }
+.md hr { margin: 0.9em 0; border: 0; border-top: 1px solid var(--color-hairline); }
 .md table { margin: 0 0 0.7em; border-collapse: collapse; font-size: 12px; }
-.md th, .md td { border: 1px solid var(--color-line-soft); padding: 3px 7px; text-align: left; }
-.md th { background: var(--color-panel-2); font-weight: 600; }
+.md th, .md td { border: 1px solid var(--color-hairline); padding: 4px 8px; text-align: left; }
+.md th { background: var(--color-raised); font-weight: 600; }

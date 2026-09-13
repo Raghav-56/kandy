@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react"
 import type { KandyClient } from "@kandy/client"
 import type { RepoCheck } from "@kandy/core"
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
-import { FolderPicker } from "./FolderPicker"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/ui"
+import { FolderPicker } from "@/features/boards/FolderPicker"
+import { Button } from "@/ui"
+import { Input } from "@/ui"
 
 /**
  * A board is a repo. Validating the path while it's typed — rather than at the
@@ -129,14 +129,14 @@ export function NewBoardDialog({
 
         <div className="mt-6 flex items-center gap-2">
           <Button
-            variant="solid"
+            tone="primary"
             size="md"
             disabled={!check?.isRepo || busy}
             onClick={() => void create()}
           >
             {busy ? "Creating…" : "Create board"}
           </Button>
-          <Button variant="ghost" size="md" onClick={() => onOpenChange(false)}>
+          <Button tone="ghost" size="md" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
         </div>
@@ -151,13 +151,13 @@ function RepoStatus({ path, check }: { path: string; check: RepoCheck | null }) 
   if (!check) return <p className="mt-2 text-[11.5px] text-faint">Checking…</p>
 
   if (!check.isRepo) {
-    return <p className="mt-2 text-[11.5px] text-coral">{check.error ?? "Not a git repository."}</p>
+    return <p className="mt-2 text-[11.5px] text-berry">{check.error ?? "Not a git repository."}</p>
   }
 
   return (
     <div className="mt-2 space-y-1 text-[11.5px]">
-      <div className="flex items-center gap-1.5 text-sage">
-        <span className="h-1.5 w-1.5 rounded-full bg-sage" />
+      <div className="flex items-center gap-1.5 text-mint">
+        <span className="h-1.5 w-1.5 rounded-full bg-mint" />
         <span className="font-mono text-dim">{check.path}</span>
       </div>
       <div className="text-faint">
@@ -166,7 +166,7 @@ function RepoStatus({ path, check }: { path: string; check: RepoCheck | null }) 
       {/* Worth saying plainly: notes branch from HEAD and will not see
           uncommitted work. Discovering that later feels like a betrayal. */}
       {check.dirty && (
-        <div className="text-amber">
+        <div className="text-lemon">
           Uncommitted changes — agents branch from HEAD and won't see them.
         </div>
       )}

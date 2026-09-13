@@ -20,6 +20,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@kandy/client':
+        specifier: workspace:*
+        version: link:../../packages/client
       '@kandy/core':
         specifier: workspace:*
         version: link:../../packages/core

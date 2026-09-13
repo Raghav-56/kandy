@@ -26,16 +26,16 @@ export function DiffBar({ stat, onDark }: { stat: DiffStat; onDark?: boolean }) 
             key={i}
             className={cn(
               "h-[9px] w-[9px] rounded-[2px]",
-              i < added ? "bg-sage" : i < added + (stat.deletions > 0 ? blocks : 0) ? "bg-coral" : "",
+              i < added ? "bg-mint" : i < added + (stat.deletions > 0 ? blocks : 0) ? "bg-berry" : "",
               i >= added && stat.deletions === 0 && (onDark ? "bg-line" : "bg-black/10"),
-              i >= added && stat.deletions > 0 && "bg-coral",
+              i >= added && stat.deletions > 0 && "bg-berry",
             )}
           />
         ))}
       </span>
       <span className="tabular-nums">
-        <span className="text-sage">+{stat.insertions}</span>{" "}
-        <span className="text-coral">−{stat.deletions}</span>
+        <span className="text-mint">+{stat.insertions}</span>{" "}
+        <span className="text-berry">−{stat.deletions}</span>
       </span>
     </span>
   )

@@ -1,7 +1,7 @@
 import { useState } from "react"
 import type { AgentId, AgentInfo } from "@kandy/core"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/input"
+import { Button } from "@/ui"
+import { Textarea } from "@/ui"
 
 /**
  * Writing a note is writing a prompt. The field is the size of the thing you
@@ -36,7 +36,7 @@ export function Composer({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[min(620px,100%)] rounded-xl border border-line bg-panel p-5 shadow-2xl shadow-black/60"
+        className="w-[min(620px,100%)] rounded-xl border border-line bg-surface p-5 shadow-2xl shadow-black/60"
       >
         <Textarea
           autoFocus
@@ -51,11 +51,11 @@ export function Composer({
           }}
         />
 
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line-soft pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-hairline pt-3">
           <select
             value={agent}
             onChange={(e) => setAgent(e.target.value as AgentId)}
-            className="h-7 rounded-lg border border-line bg-panel-2 px-2 text-[12px] text-ink"
+            className="h-7 rounded-lg border border-line bg-raised px-2 text-[12px] text-ink"
           >
             <option value="">no agent</option>
             {agents.map((a) => (
@@ -66,10 +66,10 @@ export function Composer({
             ))}
           </select>
 
-          <Button variant="ghost" onClick={() => submit(false)} disabled={!text.trim()}>
+          <Button tone="ghost" onClick={() => submit(false)} disabled={!text.trim()}>
             Add
           </Button>
-          <Button variant="solid" onClick={() => submit(true)} disabled={!text.trim() || !agent}>
+          <Button tone="primary" onClick={() => submit(true)} disabled={!text.trim() || !agent}>
             Add &amp; run
           </Button>
           <span className="ml-auto text-[11px] text-faint">⌘↵ run · ⇧⌘↵ add · esc</span>
