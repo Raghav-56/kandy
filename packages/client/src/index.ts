@@ -127,6 +127,9 @@ export class KandyClient {
   setModel(noteId: string, model: string | null) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/model`, { model })
   }
+  removeBoard(boardId: string) {
+    return this.req<{ seq: number }>("POST", `/boards/${boardId}/remove`, {})
+  }
   setBoardModels(boardId: string, models: Record<string, string>) {
     return this.req<{ seq: number }>("POST", `/boards/${boardId}/models`, { models })
   }
@@ -241,6 +244,7 @@ const EVENT_TYPES = [
   "note.policy",
   "note.model",
   "board.models",
+  "board.removed",
   "note.pr",
   "board.setup",
   "run.blocked",

@@ -32,7 +32,7 @@ export class Projections {
           repoPath: e.data.repoPath,
           setup: e.data.setup ?? null,
           carry: e.data.carry ?? [],
-          models: {},
+          models: e.data.models ?? {},
           createdAt: e.ts,
         },
         columns: [],
@@ -40,6 +40,14 @@ export class Projections {
         runs: [],
         seq: e.seq,
       })
+      return
+    }
+
+    if (e.type === "board.removed") {
+      this.views.delete(e.data.boardId)
+      for (const [noteId, boardId] of this.noteHome) {
+        if (boardId === e.data.boardId) this.noteHome.delete(noteId)
+      }
       return
     }
 

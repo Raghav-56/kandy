@@ -104,7 +104,9 @@ export function App() {
   async function refreshBoards(nextId?: string) {
     const r = await client.boards()
     setBoards(r.boards)
-    if (nextId) setBoardId(nextId)
+    // Fall through to whatever is left, so removing the open board doesn't
+    // leave the app staring at nothing.
+    setBoardId((cur) => nextId ?? (r.boards.some((b) => b.id === cur) ? cur : (r.boards[0]?.id ?? null)))
   }
 
   return (
@@ -133,7 +135,7 @@ export function App() {
         {error && (
           <button
             onClick={clearError}
-            className="shrink-0 border-b border-[#4a2b38] bg-[#241419] px-5 py-2.5 text-left text-[12px] text-[#efb9cb]"
+            className="shrink-0 border-b border-[#4a2b38] bg-[#241419] px-4 py-2.5 text-left text-[12px] text-[#efb9cb]"
           >
             {error} <span className="ml-2 text-faint">dismiss</span>
           </button>
@@ -150,6 +152,12 @@ export function App() {
               theme={theme}
               onTheme={setTheme}
               onSaved={() => void refreshBoards()}
+              onRemoved={() => {
+                setPage("board")
+                setSelected(null)
+                setBoardId(null)
+                void refreshBoards()
+              }}
             />
           ) : view ? (
             <TriageList

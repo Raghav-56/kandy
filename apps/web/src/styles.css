@@ -349,3 +349,12 @@ body {
     @apply font-sans;
   }
 }
+/*
+ * Spacing rule, so panels stop each picking their own.
+ *   page container   px-6  py-8
+ *   panel section    px-4  py-3
+ *   list row         px-3  py-2.5
+ *   control padding  keeps its own smaller scale (px-2 / px-2.5)
+ * Written down because the drift was five different horizontal paddings for
+ * the same kind of edge.
+ */

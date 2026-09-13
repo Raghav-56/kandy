@@ -32,6 +32,8 @@ export function reduceAll(view: BoardView, events: readonly KandyEvent[]): Board
 function apply(view: BoardView, e: KandyEvent): BoardView {
   switch (e.type) {
     case "board.created":
+    // Removal is handled where boards are held, not inside one board's view.
+    case "board.removed":
       return view
 
     case "board.models": {

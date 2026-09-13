@@ -49,7 +49,7 @@ export function Composer({
       onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
     >
       <div className="rise bg-card w-[min(680px,100%)] overflow-hidden rounded-2xl border shadow-2xl shadow-black/50">
-        <div className="px-5 pt-4">
+        <div className="px-4 pt-4">
           <Textarea
             autoFocus
             rows={5}

@@ -1,4 +1,19 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
+import { cn } from "@/lib/utils"
+
+/** Tracks the resolved theme, so the canvas can pick a blend mode. */
+function useIsLight(): boolean {
+  const [light, setLight] = useState(
+    () => document.documentElement.dataset["theme"] === "light",
+  )
+  useEffect(() => {
+    const el = document.documentElement
+    const obs = new MutationObserver(() => setLight(el.dataset["theme"] === "light"))
+    obs.observe(el, { attributes: true, attributeFilter: ["data-theme"] })
+    return () => obs.disconnect()
+  }, [])
+  return light
+}
 
 /**
  * An ambient candy haze behind the whole app.
@@ -69,7 +84,8 @@ void main() {
   // A little grain, so a wide flat gradient does not band on an 8-bit display.
   float grain = (hash(gl_FragCoord.xy * 0.7 + uTime) - 0.5) * 0.012;
 
-  float strength = mix(0.115, 0.085, uLight);
+  // Multiply needs more signal than screen to be visible at all.
+  float strength = mix(0.115, 0.30, uLight);
   gl_FragColor = vec4(col + grain, 1.0) * strength * edge;
 }`
 
@@ -79,6 +95,7 @@ void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`
 
 export function Backdrop() {
   const ref = useRef<HTMLCanvasElement>(null)
+  const light = useIsLight()
 
   useEffect(() => {
     const canvas = ref.current
@@ -148,11 +165,18 @@ export function Backdrop() {
     }
   }, [])
 
+  // Blend rather than paint. Additive colour over a white page is invisible —
+  // which is why light mode looked like it had no backdrop at all. `screen`
+  // lightens a dark desk, `multiply` tints a pale one; the same shader then
+  // reads correctly in both.
   return (
     <canvas
       ref={ref}
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 -z-10 h-full w-full"
+      className={cn(
+        "pointer-events-none fixed inset-0 -z-10 h-full w-full",
+        light ? "mix-blend-multiply" : "mix-blend-screen",
+      )}
     />
   )
 }

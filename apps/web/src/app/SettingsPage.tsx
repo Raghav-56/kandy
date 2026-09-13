@@ -21,6 +21,7 @@ export function SettingsPage({
   theme,
   onTheme,
   onSaved,
+  onRemoved,
 }: {
   view: BoardView | null
   agents: AgentInfo[]
@@ -28,11 +29,13 @@ export function SettingsPage({
   theme: Theme
   onTheme: (t: Theme) => void
   onSaved: () => void
+  onRemoved: () => void
 }) {
   const [models, setModels] = useState<Record<string, string>>({})
   const [setup, setSetup] = useState("")
   const [carry, setCarry] = useState("")
   const [saving, setSaving] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
 
   useEffect(() => {
     if (!view) return
@@ -168,6 +171,44 @@ export function SettingsPage({
 
       <Section title="Repository" body="Where this board's work happens.">
         <p className="bg-muted rounded-lg px-3 py-2 font-mono text-[12px]">{view.board.repoPath}</p>
+
+        <div className="border-berry/25 mt-5 rounded-xl border p-4">
+          <p className="text-[12.5px] font-medium">Remove this repo from kandy</p>
+          <p className="text-muted-foreground mt-1 max-w-[52ch] text-[12px] leading-relaxed">
+            Forgets the board, its notes and any leftover worktrees. The repository itself, and
+            anything you already merged, is untouched.
+          </p>
+          {confirming ? (
+            <div className="mt-3 flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-berry/50 text-berry"
+                disabled={saving === "remove"}
+                onClick={() =>
+                  void save("remove", async () => {
+                    await client.removeBoard(view.board.id)
+                    onRemoved()
+                  })
+                }
+              >
+                {saving === "remove" ? "Removing…" : "Yes, remove it"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-berry mt-3"
+              onClick={() => setConfirming(true)}
+            >
+              Remove
+            </Button>
+          )}
+        </div>
       </Section>
     </div>
   )

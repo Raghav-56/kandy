@@ -90,7 +90,8 @@ export function TriageList({
                 run={view.runs.find((r) => r.id === note.runId)}
                 activity={note.runId ? activity[note.runId] : undefined}
                 selected={selectedId === note.id}
-                onSelect={() => onSelect(note.id)}
+                statusImplied={g.statuses.length === 1}
+                onSelect={onSelect}
               />
             ))}
           </div>

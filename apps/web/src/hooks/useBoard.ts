@@ -27,6 +27,7 @@ export function useBoard(boardId: string | null) {
 
     setTranscript({})
     setActivity({})
+    fetched.current.clear()
     client
       .view(boardId)
       .then((snapshot) => {
@@ -64,9 +65,18 @@ export function useBoard(boardId: string | null) {
     }
   }, [boardId, client])
 
-  /** Backfill a run's transcript from disk when its note is opened. */
+  /**
+   * Backfill a run's transcript from disk when its note is opened.
+   *
+   * Tracked so reopening a note doesn't refetch what we already hold — that
+   * showed as the stream blanking and repopulating on every click.
+   */
+  const fetched = useRef(new Set<string>())
+
   const loadTranscript = useCallback(
     async (runId: string) => {
+      if (fetched.current.has(runId)) return
+      fetched.current.add(runId)
       try {
         const { frames } = await client.transcript(runId)
         setTranscript((t) => {
@@ -76,7 +86,8 @@ export function useBoard(boardId: string | null) {
         })
       } catch {
         // A missing transcript is not worth an error banner; the note may
-        // simply never have run.
+        // simply never have run. Allow a retry if it was a blip.
+        fetched.current.delete(runId)
       }
     },
     [client],

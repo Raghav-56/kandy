@@ -23,8 +23,11 @@ export type KandyEventMap = {
     repoPath: string
     setup?: string | null
     carry?: string[]
+    models?: Partial<Record<AgentId, string>>
   }
   "board.setup": { boardId: BoardId; setup: string | null; carry?: string[] }
+  /** Removes the board from kandy. The repository itself is never touched. */
+  "board.removed": { boardId: BoardId }
   "board.models": { boardId: BoardId; models: Partial<Record<AgentId, string>> }
 
   "column.created": {

@@ -1,3 +1,4 @@
+import { memo } from "react"
 import type { ActivityFrame, Note, Run } from "@kandy/core"
 import { ActivityLine, Hint, StatusPill } from "@/ui"
 import { AgentMark } from "@/features/agents/AgentMark"
@@ -16,19 +17,26 @@ import { useTick } from "@/hooks/useTick"
  *
  * A running row shows what the agent is doing right now instead of its
  * eventual result; a finished one shows the result instead of its history.
+ *
+ * Memoised, because the list re-renders on every streamed event and every
+ * one-second tick. Without this, one running note repaints eighty rows a
+ * minute and the whole list visibly flickers.
  */
-export function NoteRow({
+export const NoteRow = memo(function NoteRow({
   note,
   run,
   activity,
   selected,
+  statusImplied,
   onSelect,
 }: {
   note: Note
   run: Run | undefined
   activity: ActivityFrame | undefined
   selected: boolean
-  onSelect: () => void
+  /** The group heading already names this status; don't repeat it on the row. */
+  statusImplied?: boolean
+  onSelect: (id: string) => void
 }) {
   const look = LOOK[note.status]
   const live = note.status === "running" || note.status === "queued"
@@ -37,7 +45,7 @@ export function NoteRow({
 
   return (
     <button
-      onClick={onSelect}
+      onClick={() => onSelect(note.id)}
       data-note={note.id}
       aria-current={selected}
       className={cn(
@@ -90,9 +98,11 @@ export function NoteRow({
           </span>
         ) : (
           <span className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <StatusPill tone={look.tone} pulse={note.status === "running"}>
-              {look.label}
-            </StatusPill>
+            {!statusImplied && (
+              <StatusPill tone={look.tone} pulse={note.status === "running"}>
+                {look.label}
+              </StatusPill>
+            )}
 
             {note.stat && note.stat.files > 0 && (
               <Hint text={`${note.stat.files} file${note.stat.files > 1 ? "s" : ""} changed`}>
@@ -105,6 +115,14 @@ export function NoteRow({
 
             {note.pr && <PrBadge pr={note.pr} onDark />}
 
+            {/* Which model actually did the work — the harnesses tell us, and
+                it is the first thing you want when a result looks off. */}
+            {run?.model && (
+              <span className="text-muted-foreground/50 truncate font-mono text-[10.5px]">
+                {run.model}
+              </span>
+            )}
+
             {/* Only worth saying once it is worth saying. */}
             {run?.costUsd != null && run.costUsd >= 0.01 && (
               <span className="text-muted-foreground/60 text-[11px] tabular-nums">
@@ -116,4 +134,4 @@ export function NoteRow({
       </span>
     </button>
   )
-}
+})

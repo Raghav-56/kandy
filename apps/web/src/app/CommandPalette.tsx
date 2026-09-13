@@ -126,7 +126,7 @@ export function CommandPalette({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search notes, repos, actions…"
-          className="w-full border-b border-hairline bg-transparent px-4 py-3.5 text-[14px] text-ink placeholder:text-faint focus:outline-none"
+          className="w-full border-b border-hairline bg-transparent px-4 py-3 text-[14px] text-ink placeholder:text-faint focus:outline-none"
           onKeyDown={(e) => {
             if (e.key === "Escape") onClose()
             if (e.key === "ArrowDown") {

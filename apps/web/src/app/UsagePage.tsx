@@ -132,7 +132,7 @@ export function UsagePage({ view }: { view: BoardView | null }) {
 
 function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="bg-card rounded-xl border px-4 py-3.5">
+    <div className="bg-card rounded-xl border px-4 py-3">
       <p className="label">{label}</p>
       <p className="mt-1.5 text-[19px] font-medium tracking-[-0.02em] tabular-nums">{value}</p>
       {note && <p className="text-muted-foreground/70 mt-0.5 text-[11px]">{note}</p>}

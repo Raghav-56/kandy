@@ -17,7 +17,7 @@ import type { PrWatch } from "./prwatch.js"
 import { detectForge, openPr } from "./forge.js"
 import { serveStatic } from "./static.js"
 import { describe, saveAttachments } from "./attach.js"
-import { modelsFor, warmPrices } from "./pricing.js"
+import { defaultModelFor, modelsFor, warmPrices } from "./pricing.js"
 import { list as listDir, nativePick, suggestions } from "./browse.js"
 import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
@@ -127,6 +127,17 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
 
     const boardId = id("board")
     const name = body.name?.trim() || check.name || "board"
+
+    // Pick a default model per installed agent rather than leaving every new
+    // board on "whatever the agent feels like". A stated default is something
+    // you can disagree with; an unstated one is something you discover.
+    await warmPrices()
+    const models: Record<string, string> = {}
+    for (const a of await detectAll()) {
+      if (!a.installed) continue
+      const pick = defaultModelFor(a.id)
+      if (pick) models[a.id] = pick
+    }
     emit(
       deps,
       event("board.created", {
@@ -137,6 +148,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
         // first run without anyone having to know this setting exists.
         setup: body.setup === undefined ? check.suggestedSetup : body.setup,
         carry: body.carry ?? check.suggestedCarry,
+        models,
       }),
     )
     // Seed the lifecycle lanes. Each declares the lane it represents, so the
@@ -169,6 +181,24 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     const view = deps.engine.view(parts[1]!)
     if (!view) return fail(res, 404, "board_not_found", "no such board")
     return send(res, 200, await detectForge(view.board.repoPath))
+  }
+
+  // POST /boards/:id/remove
+  if (req.method === "POST" && parts[0] === "boards" && parts[2] === "remove") {
+    const board = deps.engine.view(parts[1]!)
+    if (!board) return fail(res, 404, "board_not_found", "no such board")
+    // Worktrees live inside the user's repo; leaving them behind would be
+    // litter in a directory kandy no longer tracks.
+    for (const note of board.notes) {
+      const wt = deps.runner.worktreeOf(note.id)
+      if (wt) {
+        await removeWorktree(board.board.repoPath, wt.path, true).catch(() => {})
+        await deleteBranch(board.board.repoPath, wt.branch)
+        deps.runner.forget(note.id)
+      }
+    }
+    const e = emit(deps, event("board.removed", { boardId: parts[1]! }))
+    return send(res, 200, { ok: true, seq: e.seq })
   }
 
   // POST /boards/:id/models

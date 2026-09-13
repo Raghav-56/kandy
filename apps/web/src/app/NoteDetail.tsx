@@ -70,10 +70,23 @@ export function NoteDetail(p: NoteDetailProps) {
   useTick(live)
 
   useEffect(() => {
-    setDiff(null)
-    if (tab === "diff" || split)
-      void p.loadDiff().then((d) => d && setDiff({ text: d.diff, capturedAt: d.capturedAt }))
+    // Keep whatever we already have on screen while the next one loads:
+    // clearing first made the panel blink white on every tab switch.
+    let stale = false
+    if (tab === "diff" || split) {
+      void p.loadDiff().then((d) => {
+        if (!stale && d) setDiff({ text: d.diff, capturedAt: d.capturedAt })
+      })
+    }
+    return () => {
+      stale = true
+    }
   }, [tab, split, p.note.id])
+
+  // A different note's diff must not be shown under this note's title.
+  useEffect(() => {
+    setDiff(null)
+  }, [p.note.id])
 
   useEffect(() => {
     if (reviewable) setTab("diff")
@@ -95,7 +108,7 @@ export function NoteDetail(p: NoteDetailProps) {
 
   const body = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="px-5 pb-3.5 pt-4">
+      <header className="px-4 pb-3.5 pt-4">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -139,6 +152,12 @@ export function NoteDetail(p: NoteDetailProps) {
             <span className={cn("tabular-nums", live && "text-lemon")}>
               {duration(run.startedAt, run.endedAt)}
             </span>
+            {run.model && (
+              <>
+                <Sep />
+                <span className="font-mono text-[11px]">{run.model}</span>
+              </>
+            )}
             {run.turns !== null && <><Sep /><span className="tabular-nums">{run.turns} turns</span></>}
             {run.tokens !== null && <><Sep /><span className="tabular-nums">{compact(run.tokens)} tok</span></>}
             {run.costUsd !== null ? (

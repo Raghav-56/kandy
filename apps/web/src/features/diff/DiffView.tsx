@@ -27,7 +27,7 @@ export function DiffView({
   const [open, setOpen] = useState<string | null>(files[0]?.path ?? null)
 
   if (files.length === 0) {
-    return <p className="flex-1 px-5 py-6 text-center text-[12px] text-faint">No changes yet.</p>
+    return <p className="flex-1 px-4 py-6 text-center text-[12px] text-faint">No changes yet.</p>
   }
 
   return (
@@ -45,7 +45,7 @@ export function DiffView({
               <button
                 onClick={() => setOpen(isOpen ? null : f.path)}
                 className={cn(
-                  "flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors",
+                  "flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors",
                   isOpen ? "bg-raised" : "bg-surface hover:bg-raised/60",
                 )}
               >
@@ -72,7 +72,7 @@ export function DiffView({
                     <div
                       key={i}
                       className={cn(
-                        "px-3.5 whitespace-pre",
+                        "px-3 whitespace-pre",
                         l.startsWith("+") && "bg-[#0f1c0d] text-[#a5d68f]",
                         l.startsWith("-") && "bg-[#1e0f0e] text-[#e0918a]",
                         l.startsWith("@@") && "my-1 bg-raised text-sky",

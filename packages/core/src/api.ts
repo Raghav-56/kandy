@@ -13,6 +13,8 @@ export type Commands = {
     res: { board: Board }
   }
   "POST /boards/:id/setup": { req: { setup: string | null; carry?: string[] }; res: {} }
+  /** Forget a board. Notes go with it; the repository does not. */
+  "POST /boards/:id/remove": { req: {}; res: {} }
   "POST /notes": {
     req: { boardId: BoardId; columnId: ColumnId; title: string; body?: string }
     res: { noteId: NoteId }

@@ -146,6 +146,23 @@ export function modelsFor(agent: string): string[] {
   return [...menu.aliases, ...named]
 }
 
+/**
+ * The model a fresh board should use for an agent.
+ *
+ * The strongest coding model each vendor offers, by alias where one exists —
+ * an alias keeps pointing at the current model when a new one ships, which a
+ * pinned id does not.
+ */
+export function defaultModelFor(agent: string): string | null {
+  if (agent === "claude") return "opus"
+  const menu = modelsFor(agent)
+  if (agent === "codex") {
+    // Prefer a codex-tuned model, else the newest general one on the menu.
+    return menu.find((m) => m.includes("codex")) ?? menu[0] ?? null
+  }
+  return menu[0] ?? null
+}
+
 /** Rates for a model, trying the most specific name first. */
 function ratesFor(model: string): Rates | null {
   if (!table) return null
