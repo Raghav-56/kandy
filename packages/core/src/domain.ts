@@ -1,6 +1,6 @@
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
-export const AGENTS = ["claude", "codex", "cursor", "opencode", "gemini", "grok"] as const
+export const AGENTS = ["claude", "codex", "aider", "cursor", "opencode", "gemini", "grok"] as const
 export type AgentId = (typeof AGENTS)[number]
 
 /**

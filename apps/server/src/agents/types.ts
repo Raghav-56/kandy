@@ -70,7 +70,7 @@ export type AgentAdapter = {
   id: AgentId
   /** Binary to look for on PATH. */
   bin: string
-  /** Credential paths, checked for existence only — never read. */
+  /** Credential paths, checked for existence only — never read. Empty delegates auth to the CLI. */
   credentials: string[]
   spawn(opts: SpawnOptions): SpawnSpec
   /** One line of stdout → zero or more events. */
