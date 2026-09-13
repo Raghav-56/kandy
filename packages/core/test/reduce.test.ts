@@ -17,6 +17,7 @@ function view(): BoardView {
       carry: [],
       models: {},
       defaultPolicy: "repo",
+      attribution: { commit: false, pr: false },
       createdAt: 0,
     },
     columns: [],

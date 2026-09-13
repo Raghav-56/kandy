@@ -46,6 +46,11 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
       return { ...view, board: { ...view.board, defaultPolicy: e.data.defaultPolicy } }
     }
 
+    case "board.attribution": {
+      if (e.data.boardId !== view.board.id) return view
+      return { ...view, board: { ...view.board, attribution: e.data.attribution } }
+    }
+
     case "board.setup": {
       if (e.data.boardId !== view.board.id) return view
       return {

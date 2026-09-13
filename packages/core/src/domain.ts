@@ -42,6 +42,31 @@ export type RunStatus =
  */
 export type Policy = "repo" | "full"
 
+/**
+ * Whether kandy signs the history it produces.
+ *
+ * Two switches rather than one, because they are not the same decision. A
+ * commit trailer is permanent: it is in the history forever, it is what
+ * `git log --format=%(trailers)` and DCO/commit-lint checks read, and it
+ * survives every rebase of that commit. A PR footer is a paragraph in a
+ * description anyone can edit or delete.
+ *
+ * Both default off. Tools that turned this on for people without asking
+ * (opencode shipped it unconditionally and spent three issues walking it
+ * back) taught us that writing someone's history uninvited is not a default
+ * to claim. When both are false kandy behaves exactly as it did before this
+ * existed — no trailers, no footer, not even empty ones.
+ */
+export type Attribution = {
+  /** Git trailers on the commits kandy makes: leftovers, and the merge. */
+  commit: boolean
+  /** A short footer on PR bodies kandy opens. */
+  pr: boolean
+}
+
+/** The default, and what an older log with no attribution event replays to. */
+export const NO_ATTRIBUTION: Attribution = { commit: false, pr: false }
+
 export type Board = {
   id: BoardId
   name: string
@@ -74,6 +99,8 @@ export type Board = {
    * the same answer, and a single global switch would force one.
    */
   defaultPolicy: Policy
+  /** Whether commits and PRs say kandy made them. Off unless asked for. */
+  attribution: Attribution
   createdAt: number
 }
 

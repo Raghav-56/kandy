@@ -2,6 +2,7 @@ import type {
   ActivityFrame,
   AgentId,
   AgentInfo,
+  Attribution,
   Board,
   BoardView,
   Delivery,
@@ -149,6 +150,10 @@ export class KandyClient {
   /** Raise a refused note to full access and continue it in the same worktree. */
   escalateNote(noteId: string) {
     return this.req<{ delivery: Delivery; seq: number }>("POST", `/notes/${noteId}/escalate`, {})
+  }
+  /** Commit trailers and the PR footer, independently. Both off by default. */
+  setBoardAttribution(boardId: string, attribution: Attribution) {
+    return this.req<{ seq: number }>("POST", `/boards/${boardId}/attribution`, { attribution })
   }
   setPolicy(noteId: string, policy: Policy) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/policy`, { policy })

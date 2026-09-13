@@ -5,7 +5,8 @@ import { mkdtempSync, writeFileSync, existsSync, readFileSync, realpathSync } fr
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-import { carryInto, checkRepo, createWorktree, diffNumbers, isDirty, mergeBranch, removeWorktree } from "../dist/worktree.js"
+import { carryInto, checkRepo, commitLeftovers, createWorktree, diffNumbers, isDirty, mergeBranch, removeWorktree } from "../dist/worktree.js"
+import { commitTrailers } from "../dist/attribution.js"
 
 /** A real repository, because the thing under test is git behaviour. */
 function repo(): string {
@@ -133,4 +134,112 @@ test("a clean merge lands on the base branch", async () => {
   assert.equal(result.merged, true)
   assert.equal(existsSync(path.join(dir, "ADDED.md")), true)
   await removeWorktree(dir, wt.path, true)
+})
+
+/**
+ * The commit message exactly as git stored it.
+ *
+ * Deliberately not `git log --format=%B`. `--format=` is shorthand for
+ * `tformat:`, which terminates every entry with a newline of its own — so a
+ * message stored as "X\n" prints as "X\n\n", and a test comparing against a
+ * literal reads that terminator as a trailing blank line that is not in the
+ * repository. `cat-file commit` emits the raw object: headers, one blank line,
+ * then the message verbatim to the end.
+ */
+function message(cwd: string, ref = "HEAD"): string {
+  const raw = execFileSync("git", ["cat-file", "commit", ref], { cwd }).toString()
+  return raw.slice(raw.indexOf("\n\n") + 2)
+}
+
+test("with attribution off, a commit is byte-for-byte what it always was", async () => {
+  // The default has to be genuinely inert: the same git command, the same
+  // stored message, no empty trailers, no extra newline.
+  const dir = repo()
+  const wt = await createWorktree(dir, "note_h", "quiet")
+  writeFileSync(path.join(wt.path, "LEFT.md"), "left behind\n")
+
+  assert.equal(await commitLeftovers(wt, "Guard the daemon port with a token"), true)
+  assert.equal(message(wt.path), "Guard the daemon port with a token\n")
+
+  // The control: the same subject committed by plain git, no kandy in the call
+  // at all. "Inert" means indistinguishable from this — asserting against a
+  // hand-written literal only tests our idea of what git does, which is how
+  // the terminator in `--format=%B` got mistaken for a stored blank line.
+  writeFileSync(path.join(wt.path, "CONTROL.md"), "by hand\n")
+  execFileSync("git", ["add", "-A"], { cwd: wt.path })
+  execFileSync("git", ["commit", "-qm", "Guard the daemon port with a token"], { cwd: wt.path })
+  assert.equal(message(wt.path, "HEAD~1"), message(wt.path))
+
+  // Not "no Kandy-Note value" — no trailer block at all.
+  assert.equal(
+    execFileSync("git", ["log", "-1", "--format=%(trailers)", "HEAD~1"], { cwd: wt.path })
+      .toString()
+      .trim(),
+    "",
+  )
+  await removeWorktree(dir, wt.path, true)
+})
+
+test("the commit message is the note's title, not its id", async () => {
+  const dir = repo()
+  const wt = await createWorktree(dir, "note_i", "titled")
+  writeFileSync(path.join(wt.path, "LEFT.md"), "x\n")
+  await commitLeftovers(wt, "Rebuild the hero around the thing itself")
+  // git log --oneline has to be readable by the person who wrote the note.
+  assert.match(
+    execFileSync("git", ["log", "-1", "--format=%s"], { cwd: wt.path }).toString(),
+    /^Rebuild the hero around the thing itself$/m,
+  )
+  await removeWorktree(dir, wt.path, true)
+})
+
+test("with attribution on, trailers are real trailers git can read back", async () => {
+  const dir = repo()
+  const wt = await createWorktree(dir, "note_j", "signed")
+  writeFileSync(path.join(wt.path, "LEFT.md"), "x\n")
+
+  await commitLeftovers(
+    wt,
+    "Add commit trailers",
+    commitTrailers({ noteId: "note_j", runId: "run_k", agent: "claude", model: "opus" }),
+  )
+
+  const read = (key: string) =>
+    execFileSync("git", ["log", "-1", `--format=%(trailers:key=${key},valueonly)`], {
+      cwd: wt.path,
+    })
+      .toString()
+      .trim()
+
+  assert.equal(read("Kandy-Note"), "note_j")
+  assert.equal(read("Kandy-Run"), "run_k")
+  assert.equal(read("Kandy-Agent"), "claude (opus)")
+  assert.equal(read("Co-Authored-By"), "Claude <noreply@anthropic.com>")
+  // Subject is untouched; the trailers sit in their own block below it.
+  assert.match(message(wt.path), /^Add commit trailers\n\nKandy-Note: note_j\n/)
+  await removeWorktree(dir, wt.path, true)
+})
+
+test("a merge commit is unsigned by default and signed on request", async () => {
+  const dir = repo()
+
+  const plain = await createWorktree(dir, "note_k", "plain")
+  writeFileSync(path.join(plain.path, "ONE.md"), "1\n")
+  await commitLeftovers(plain, "one")
+  assert.equal((await mergeBranch(dir, plain.branch)).merged, true)
+  assert.equal(message(dir), `kandy: merge ${plain.branch}\n`)
+  await removeWorktree(dir, plain.path, true)
+
+  const signed = await createWorktree(dir, "note_l", "signed")
+  writeFileSync(path.join(signed.path, "TWO.md"), "2\n")
+  await commitLeftovers(signed, "two")
+  const trailers = commitTrailers({ noteId: "note_l", runId: "run_m", agent: "codex" })
+  assert.equal((await mergeBranch(dir, signed.branch, trailers)).merged, true)
+  assert.equal(
+    execFileSync("git", ["log", "-1", "--format=%(trailers:key=Kandy-Note,valueonly)"], { cwd: dir })
+      .toString()
+      .trim(),
+    "note_l",
+  )
+  await removeWorktree(dir, signed.path, true)
 })

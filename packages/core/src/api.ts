@@ -1,4 +1,4 @@
-import type { AgentId, Board, BoardView, Policy, PullRequest } from "./domain.js"
+import type { AgentId, Attribution, Board, BoardView, Policy, PullRequest } from "./domain.js"
 import type { TranscriptFrame } from "./events.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
@@ -40,6 +40,8 @@ export type Commands = {
    * agent is resumed in the same worktree, one turn later.
    */
   "POST /notes/:id/escalate": { req: {}; res: { delivery: Delivery } }
+  /** Turn commit trailers and the PR footer on or off, independently. */
+  "POST /boards/:id/attribution": { req: { attribution: Partial<Attribution> }; res: {} }
   /** Push the note's branch and open a PR for it. */
   "POST /notes/:id/pr": { req: { draft?: boolean }; res: { pr: PullRequest } }
   "POST /notes/:id/delete": { req: {}; res: {} }

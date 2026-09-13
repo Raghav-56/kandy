@@ -1,4 +1,4 @@
-import { reduce, type Board, type BoardView, type KandyEvent } from "@kandy/core"
+import { NO_ATTRIBUTION, reduce, type Board, type BoardView, type KandyEvent } from "@kandy/core"
 import type { Store } from "./store.js"
 
 /**
@@ -36,6 +36,9 @@ export class Projections {
           // Boards created before this setting existed are repo-only, which is
           // what they have been all along.
           defaultPolicy: e.data.defaultPolicy ?? "repo",
+          // Off unless a board.attribution event says otherwise — boards
+          // created before this existed replay to silence, as they behaved.
+          attribution: e.data.attribution ?? { ...NO_ATTRIBUTION },
           createdAt: e.ts,
         },
         columns: [],

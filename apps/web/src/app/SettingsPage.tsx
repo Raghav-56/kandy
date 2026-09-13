@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import type { KandyClient } from "@kandy/client"
 import type { AgentId, AgentInfo, BoardView, Policy } from "@kandy/core"
-import { Button, Confirm, Input, Separator } from "@/ui"
+import { Button, Confirm, Input, Separator, Switch } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { ModelSelect } from "@/features/agents/ModelSelect"
 import type { Theme } from "@/hooks/useTheme"
@@ -44,6 +44,8 @@ export function SettingsPage({
     setSetup(view.board.setup ?? "")
     setCarry((view.board.carry ?? []).join(", "))
   }, [view?.board.id])
+
+  const attribution = view?.board.attribution ?? { commit: false, pr: false }
 
   if (!view) {
     return <p className="text-muted-foreground px-6 py-12 text-center text-[12.5px]">No repo selected.</p>
@@ -219,6 +221,35 @@ export function SettingsPage({
         </Button>
       </Section>
 
+      <Section
+        title="Attribution"
+        body="Whether kandy signs the work it produces. Both are off, and stay off unless you turn them on — your history is yours."
+      >
+        <Toggle
+          label="Commit trailers"
+          note="Adds Kandy-Note, Kandy-Run, Kandy-Agent and a Co-Authored-By naming the agent. These are permanent: they are in the history for good, they survive rebases, and a repo with commit-lint or a DCO check may reject them."
+          checked={attribution.commit}
+          disabled={saving === "attribution"}
+          onChange={(commit) =>
+            void save("attribution", () =>
+              client.setBoardAttribution(view.board.id, { ...attribution, commit }),
+            )
+          }
+        />
+        <Toggle
+          className="mt-4"
+          label="Pull request footer"
+          note="Adds a line to PR descriptions saying which agent and model wrote the branch. Cosmetic and reversible — anyone can edit it out, and nothing is written to your history."
+          checked={attribution.pr}
+          disabled={saving === "attribution"}
+          onChange={(pr) =>
+            void save("attribution", () =>
+              client.setBoardAttribution(view.board.id, { ...attribution, pr }),
+            )
+          }
+        />
+      </Section>
+
       <Section title="Repository" body="Where this board's work happens.">
         <p className="bg-muted rounded-lg px-3 py-2 font-mono text-[12px]">{view.board.repoPath}</p>
 
@@ -285,6 +316,48 @@ export function SettingsPage({
         busy={saving === "policy"}
         onConfirm={() => void setPolicy("full")}
       />
+    </div>
+  )
+}
+
+/**
+ * One switch with the sentence that makes it an informed choice.
+ *
+ * The note text is not decoration. A commit trailer and a PR footer look like
+ * the same setting and are not: one is permanent and machine-read, the other
+ * is a paragraph someone can delete. Saying so here is the difference between
+ * a toggle and a trap.
+ */
+function Toggle({
+  label,
+  note,
+  checked,
+  disabled,
+  onChange,
+  className,
+}: {
+  label: string
+  note: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (v: boolean) => void
+  className?: string
+}) {
+  return (
+    <div className={cn("flex items-start gap-3", className)}>
+      <Switch
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onChange}
+        aria-label={label}
+        className="mt-0.5 shrink-0"
+      />
+      <div className="min-w-0">
+        <p className="text-[12.5px] font-medium">{label}</p>
+        <p className="text-muted-foreground mt-1 max-w-[52ch] text-[12px] leading-relaxed">
+          {note}
+        </p>
+      </div>
     </div>
   )
 }
