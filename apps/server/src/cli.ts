@@ -4,6 +4,7 @@ import { Engine } from "./engine.js"
 import { PrWatch } from "./prwatch.js"
 import { Runner } from "./runner.js"
 import { createHttpServer } from "./http.js"
+import { ASK_TIMEOUT_MS, Permissions } from "./permission.js"
 import { loadToken } from "./auth.js"
 import { DB_PATH, TOKEN_PATH } from "./paths.js"
 import { hasWebBuild } from "./static.js"
@@ -124,9 +125,24 @@ function serve(args: string[]): void {
   const prs: PrWatch = new PrWatch(engine, 60_000, (boardId, noteId) => {
     runner.landed(boardId, noteId)
   })
-  const runner = new Runner(engine, slots, (boardId, noteId) => {
-    void prs.refresh(boardId, noteId).catch(() => {})
-  })
+  // The broker asks the runner where a run lives; the runner hands the broker
+  // back so it can settle questions when a run ends. Each references the other,
+  // so both are annotated explicitly — inference cannot untangle a cycle and
+  // silently falls back to `any` (TS7022/TS7024). Same reason `prs` above is
+  // annotated. Neither callback fires until an agent is actually running, so
+  // the temporal dead zone is not a problem at runtime.
+  const permissions: Permissions = new Permissions(
+    engine,
+    (runId: string): { boardId: string; noteId: string } | null => runner.locate(runId),
+  )
+  const runner: Runner = new Runner(
+    engine,
+    slots,
+    (boardId, noteId) => {
+      void prs.refresh(boardId, noteId).catch(() => {})
+    },
+    { permissions, port, token },
+  )
 
   // A daemon that died mid-run leaves notes claiming to be running. They
   // aren't. Fail them loudly rather than showing a board that lies.
@@ -139,7 +155,12 @@ function serve(args: string[]): void {
   // Fetched once a day and cached; failing is silent, since pricing a turn
   // must never be able to stop an agent from running.
   void warmPrices()
-  const server = createHttpServer({ engine, runner, prs, token })
+  const server = createHttpServer({ engine, runner, prs, token, permissions })
+  // A permission prompt is held open for as long as the question is on the
+  // board, which is minutes. Node's 5-minute default would sever that
+  // connection under us and the agent would be told kandy was unreachable —
+  // a lie, and one that reads like a bug in the board rather than a timeout.
+  server.requestTimeout = ASK_TIMEOUT_MS + 60_000
   server.listen(port, "127.0.0.1", () => {
     // One line of JSON on start, for a supervisor or a script that needs to
     // know where the daemon landed without scraping a banner. The token is

@@ -23,6 +23,7 @@ function view(): BoardView {
     columns: [],
     notes: [],
     runs: [],
+    prompts: [],
     seq: 0,
   }
 }

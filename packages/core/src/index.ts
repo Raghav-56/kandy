@@ -1,6 +1,7 @@
 export * from "./id.js"
 export * from "./position.js"
 export * from "./domain.js"
+export * from "./permission.js"
 export * from "./events.js"
 export * from "./reduce.js"
 export * from "./api.js"

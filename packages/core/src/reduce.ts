@@ -9,6 +9,7 @@ import {
   type Run,
 } from "./domain.js"
 import type { KandyEvent } from "./events.js"
+import { kindOf, type PermissionPrompt, type PermissionRule } from "./permission.js"
 
 /**
  * The single implementation of "what does this event do to the board".
@@ -84,6 +85,7 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         // the view rather than stamped into the event, so replay gives the
         // same answer: `board.policy` events are ordered against this one.
         policy: view.board.defaultPolicy ?? "repo",
+        rules: [],
         runId: null,
         branch: null,
         worktree: null,
@@ -122,12 +124,24 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
     case "note.policy":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, policy: e.data.policy }))
 
+    case "note.permission": {
+      const rule = e.data.rule
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({
+        ...n,
+        // The same rule twice is the same rule. Replayed logs and a
+        // double-clicked button both produce it, and neither should make the
+        // list of standing answers grow forever.
+        rules: n.rules.some((r) => same(r, rule)) ? n.rules : [...n.rules, rule],
+      }))
+    }
+
     case "note.status":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, status: e.data.status }))
 
     case "note.deleted": {
       if (!view.notes.some((n) => n.id === e.data.noteId)) return view
-      return { ...view, notes: view.notes.filter((n) => n.id !== e.data.noteId) }
+      const gone = { ...view, notes: view.notes.filter((n) => n.id !== e.data.noteId) }
+      return without(gone, (p) => p.noteId === e.data.noteId)
     }
 
     case "run.requested": {
@@ -198,12 +212,39 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
 
     case "run.blocked": {
       const withRun = patchRun(view, e.data.runId, (r) => ({ ...r, status: "blocked" }))
-      return patchRunNote(withRun, e.data.runId, e.ts, (n) => ({ ...n, status: "blocked" }))
+      const blocked = patchRunNote(withRun, e.data.runId, e.ts, (n) => ({
+        ...n,
+        status: "blocked",
+      }))
+      // Without `ask` this is the old shape: a refusal the agent has already
+      // walked away from. Nothing is waiting, so nothing goes on the list.
+      if (!e.data.ask) return blocked
+
+      const run = blocked.runs.find((r) => r.id === e.data.runId)
+      if (!run) return blocked
+      if (blocked.prompts.some((p) => p.requestId === e.data.requestId)) return blocked
+
+      const tool = e.data.tool ?? "tool"
+      const command = e.data.command ?? e.data.detail
+      const prompt: PermissionPrompt = {
+        requestId: e.data.requestId,
+        runId: e.data.runId,
+        noteId: run.noteId,
+        tool,
+        command,
+        rule: kindOf({ tool, command }),
+        askedAt: e.ts,
+      }
+      return { ...blocked, prompts: [...blocked.prompts, prompt] }
     }
 
     case "run.unblocked": {
       const withRun = patchRun(view, e.data.runId, (r) => ({ ...r, status: "running" }))
-      return patchRunNote(withRun, e.data.runId, e.ts, (n) => ({ ...n, status: "running" }))
+      const running = patchRunNote(withRun, e.data.runId, e.ts, (n) => ({
+        ...n,
+        status: "running",
+      }))
+      return without(running, (p) => p.requestId === e.data.requestId)
     }
 
     case "run.finished": {
@@ -216,7 +257,10 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
       }))
       // A successful run lands in review, not done. A human decides done.
       const status = e.data.status === "succeeded" ? "review" : "failed"
-      return patchNote(withRun, e.data.noteId, e.ts, (n) => ({ ...n, status }))
+      const finished = patchNote(withRun, e.data.noteId, e.ts, (n) => ({ ...n, status }))
+      // The process this question was asked on behalf of is gone. Leaving the
+      // prompt up would offer an answer that can no longer reach anything.
+      return without(finished, (p) => p.runId === e.data.runId)
     }
 
     case "review.decided": {
@@ -241,6 +285,27 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
     case "run.tool":
       return view
   }
+}
+
+/** Drop the prompts a change has just made unanswerable. */
+function without(view: BoardView, gone: (p: PermissionPrompt) => boolean): BoardView {
+  const prompts = view.prompts.filter((p) => !gone(p))
+  return prompts.length === view.prompts.length ? view : { ...view, prompts }
+}
+
+function same(a: PermissionRule, b: PermissionRule): boolean {
+  return a.tool === b.tool && a.pattern === b.pattern && a.decision === b.decision
+}
+
+/**
+ * Questions waiting on this note, newest last.
+ *
+ * There is normally exactly one — an agent asks and then stops — but a run
+ * that made two tool calls in a turn can have two, and showing only the first
+ * would leave the second waiting silently.
+ */
+export function promptsFor(view: BoardView, noteId: string): PermissionPrompt[] {
+  return view.prompts.filter((p) => p.noteId === noteId)
 }
 
 function asDiffStat(v: unknown): DiffStat | null {

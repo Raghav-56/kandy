@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { ChevronRight } from "lucide-react"
-import type { ActivityFrame, BoardView, Note } from "@kandy/core"
+import type { ActivityFrame, BoardView, Note, PermissionPrompt } from "@kandy/core"
 import { Button, Empty, Kbd } from "@/ui"
 import { Logo } from "@/brand/Logo"
 import { GROUPS, LOOK } from "@/features/notes/status"
@@ -75,6 +75,27 @@ export function TriageList({
         <Kbd>C</Kbd>
       </button>
 
+      {/* Above every group, including "Needs you". A blocked note was refused
+          and carried on; these are agents standing still with a person in the
+          loop, and nothing else on the board outranks that. */}
+      {view.prompts.length > 0 && (
+        <section className="mb-5">
+          <h2 className="mb-2 px-3 text-[12px] font-semibold tracking-[-0.005em] text-lemon">
+            Waiting for your answer
+          </h2>
+          <div className="space-y-1.5">
+            {view.prompts.map((prompt) => (
+              <Waiting
+                key={prompt.requestId}
+                prompt={prompt}
+                title={view.notes.find((n) => n.id === prompt.noteId)?.title ?? "a note"}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {open > 0 && (
         <p className="text-muted-foreground/60 mb-3 px-3 text-[11.5px]">
           {open} open · {view.notes.length - open} done
@@ -122,6 +143,44 @@ export function TriageList({
       })}
 
     </div>
+  )
+}
+
+/**
+ * One waiting question, on the board rather than buried in a note.
+ *
+ * It names the tool and shows the command, because "an agent needs permission"
+ * is not enough to decide anything from. Answering happens in the note pane —
+ * a decision with a message attached needs more room than a list row — so this
+ * opens it.
+ */
+function Waiting({
+  prompt,
+  title,
+  onSelect,
+}: {
+  prompt: PermissionPrompt
+  title: string
+  onSelect: (id: string) => void
+}) {
+  return (
+    <button
+      data-note={prompt.noteId}
+      onClick={() => onSelect(prompt.noteId)}
+      className="flex w-full items-start gap-3 rounded-2xl border border-[#4a3a20] bg-[#1c180f] px-4 py-3 text-left transition-colors hover:border-lemon/50"
+    >
+      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-lemon" />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-2">
+          <span className="truncate text-[13px] text-ink">{title}</span>
+          <span className="shrink-0 text-[11px] text-lemon">{prompt.tool}</span>
+        </span>
+        <span className="mt-1 block truncate font-mono text-[11.5px] text-[#b9a06a]" title={prompt.command}>
+          {prompt.command}
+        </span>
+      </span>
+      <span className="shrink-0 self-center text-[11.5px] text-lemon">Answer</span>
+    </button>
   )
 }
 

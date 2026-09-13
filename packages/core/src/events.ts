@@ -9,6 +9,7 @@ import type {
   PullRequest,
   RunStatus,
 } from "./domain.js"
+import type { PermissionRule } from "./permission.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
 /** Envelope fields the server stamps on every event. */
@@ -77,8 +78,42 @@ export type KandyEventMap = {
   "run.output": { runId: RunId; channel: "stdout" | "stderr"; text: string }
   "run.tool": { runId: RunId; tool: string; status: "started" | "completed" | "failed" }
   "run.session": { runId: RunId; agentSessionId: string }
-  "run.blocked": { runId: RunId; requestId: string; kind: string; detail: string }
-  "run.unblocked": { runId: RunId; requestId: string; decision: "allow" | "deny" }
+  /**
+   * The agent could not do something.
+   *
+   * Two different situations share this event, told apart by `ask`. Without
+   * it, the agent was auto-denied and has already moved on — the historical
+   * meaning of `blocked`. With it, the agent is standing still and a
+   * `run.unblocked` is what lets it continue.
+   */
+  "run.blocked": {
+    runId: RunId
+    requestId: string
+    kind: string
+    detail: string
+    /** Tool name as the agent spells it, when we know it. */
+    tool?: string
+    /** The exact command, verbatim. What the user is shown and approves. */
+    command?: string
+    /** True when something is actually waiting on an answer. */
+    ask?: boolean
+  }
+  "run.unblocked": {
+    runId: RunId
+    requestId: string
+    /**
+     * `timeout` is a denial too, but a different story: nobody answered. It is
+     * recorded as itself so a transcript can say so rather than implying
+     * someone made a decision.
+     */
+    decision: "allow" | "deny" | "timeout"
+    /** What the user said to do instead, on a denial. */
+    comment?: string
+    /** Whether the answer also wrote a rule for this note. */
+    scope?: "once" | "note"
+  }
+  /** A standing answer for this note: "don't ask me about that again". */
+  "note.permission": { noteId: NoteId; rule: PermissionRule }
   "run.finished": {
     runId: RunId
     noteId: NoteId

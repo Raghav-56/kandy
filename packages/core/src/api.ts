@@ -47,10 +47,12 @@ export type Commands = {
   /** What notes created on this board start as. */
   "POST /boards/:id/policy": { req: { defaultPolicy: Policy }; res: {} }
   /**
-   * Answer a refusal: raise this note to full access and continue it.
+   * Raise this note to full access and continue it.
    *
-   * Not an in-flight permission answer — the note's policy changes and the
-   * agent is resumed in the same worktree, one turn later.
+   * The blunt instrument, kept deliberately: not an answer to one question
+   * (that is `POST /runs/:id/respond`) but a decision about the whole note,
+   * made after the fact. Still the right call for an agent that cannot be
+   * asked, or a run you have stopped wanting to be asked about.
    */
   "POST /notes/:id/escalate": { req: {}; res: { delivery: Delivery } }
   /** Turn commit trailers and the PR footer on or off, independently. */
@@ -69,9 +71,41 @@ export type Commands = {
     req: { text: string; files?: UploadFile[] }
     res: { delivery: Delivery; rejected: Rejection[] }
   }
+  /**
+   * Answer a question an agent is standing still waiting for.
+   *
+   * The three options a terminal already trains people to expect: allow once
+   * (`decision: "allow"`), allow this kind of thing for this note and stop
+   * asking (`scope: "note"`), and deny with a message saying what to do
+   * instead (`comment`). The third is why this is better than a policy
+   * toggle — "no, run the tests with pnpm not npm" is an answer, and bare
+   * "deny" is not.
+   *
+   * `answered` is false when there was nothing left to answer: the run ended,
+   * the question timed out, or another client got there first. Not an error —
+   * two tabs on one board is the normal case.
+   */
   "POST /runs/:id/respond": {
-    req: { requestId: string; decision: "allow" | "deny"; comment?: string }
-    res: {}
+    req: {
+      requestId: string
+      decision: "allow" | "deny"
+      scope?: "once" | "note"
+      comment?: string
+    }
+    res: { answered: boolean }
+  }
+  /**
+   * The agent asking, through the MCP sidecar kandy points it at. Held open
+   * until the question is answered or times out — minutes, not milliseconds.
+   * Never called by a UI.
+   */
+  "POST /runs/:id/permission": {
+    req: { tool: string; input?: Record<string, unknown> }
+    res: {
+      verdict:
+        | { behavior: "allow"; updatedInput: Record<string, unknown> }
+        | { behavior: "deny"; message: string }
+    }
   }
 }
 

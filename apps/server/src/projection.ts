@@ -44,6 +44,10 @@ export class Projections {
         columns: [],
         notes: [],
         runs: [],
+        // Replay can leave a question standing whose agent died with the last
+        // daemon; `Runner.reconcile` fails those runs, and a finished run's
+        // prompts are dropped by the reducer. Nothing here has to know that.
+        prompts: [],
         seq: e.seq,
       })
       return

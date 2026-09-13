@@ -205,6 +205,7 @@ export function App() {
           frames={note.runId ? (transcript[note.runId] ?? []) : []}
           activity={note.runId ? activity[note.runId] : undefined}
           forge={forge}
+          prompts={view.prompts.filter((q) => q.noteId === note.id)}
           onClose={() => setSelected(null)}
           onRun={(agent) => void act((c) => c.runNote(note.id, agent))}
           onCancel={(runId) => void act((c) => c.cancelRun(runId))}
@@ -228,6 +229,20 @@ export function App() {
             (await act((c) => c.unattach(note.id, name)))?.attachments ?? []
           }
           onReview={(decision) => void act((c) => c.reviewNote(note.id, decision))}
+          onAnswer={async (prompt, answer) => {
+            const res = await act((c) =>
+              c.respond(prompt.runId, prompt.requestId, answer.decision, {
+                ...(answer.scope ? { scope: answer.scope } : {}),
+                ...(answer.comment ? { comment: answer.comment } : {}),
+              }),
+            )
+            // The prompt is gone either way — the stream will drop it. Only an
+            // answer that arrived too late needs saying out loud, since the
+            // card vanishing would otherwise read as "done".
+            if (res && !res.answered) {
+              setNotice("That question was already answered or had timed out.")
+            }
+          }}
           onEscalate={async () => {
             await act((c) => c.escalateNote(note.id))
           }}

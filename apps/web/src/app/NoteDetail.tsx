@@ -6,16 +6,19 @@ import type {
   BoardView,
   Forge,
   Note,
+  PermissionPrompt,
   Policy,
   StagedFile,
   TranscriptFrame,
 } from "@kandy/core"
+import { canAsk } from "@kandy/core"
 import { Maximize2, Minimize2, Paperclip, X } from "lucide-react"
 import { ActivityLine, Button, Confirm, Hint, LoadingBlock, StatusPill, Textarea } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { AgentSelect } from "@/features/agents/AgentSelect"
 import { ModelSelect } from "@/features/agents/ModelSelect"
 import { DiffView } from "@/features/diff/DiffView"
+import { Ask, type Answer } from "@/features/notes/Ask"
 import { Attachments, type Attached } from "@/features/notes/Attachments"
 import { InlineEdit } from "@/features/notes/InlineEdit"
 import { PrBadge } from "@/features/notes/PrBadge"
@@ -31,6 +34,8 @@ export type NoteDetailProps = {
   frames: TranscriptFrame[]
   activity: ActivityFrame | undefined
   forge: Forge | null
+  /** Questions this note's agent is standing still waiting for. Usually empty. */
+  prompts: PermissionPrompt[]
   onClose: () => void
   onRun: (agent?: AgentId) => void
   onCancel: (runId: string) => void
@@ -43,6 +48,8 @@ export type NoteDetailProps = {
   loadStaged: () => Promise<StagedFile[]>
   onUnstage: (name: string) => Promise<StagedFile[]>
   onReview: (decision: "merge" | "discard") => void
+  /** Answer one waiting question. */
+  onAnswer: (prompt: PermissionPrompt, answer: Answer) => Promise<void>
   /** Raise this note to full access and continue it. */
   onEscalate: () => Promise<void>
   onOpenPr: () => Promise<void>
@@ -86,6 +93,9 @@ export function NoteDetail(p: NoteDetailProps) {
   // the answer to "why did this stop" is here rather than somewhere the user
   // has to go hunting for it.
   const refused = p.frames.filter((f) => f.meta === "permission")
+  // An agent that cannot be asked is a different situation from one that
+  // hasn't been asked yet, and the pane should not imply otherwise.
+  const askable = canAsk(p.note.agent)
   const canEscalate = refused.length > 0 && policy !== "full" && p.note.status !== "queued"
   const reviewable = p.note.status === "review"
   const look = LOOK[p.note.status]
@@ -289,7 +299,7 @@ export function NoteDetail(p: NoteDetailProps) {
             className="w-[190px]"
           />
 
-          <PolicyToggle value={policy} onChange={p.onPolicy} disabled={live} />
+          <PolicyToggle value={policy} onChange={p.onPolicy} disabled={live} askable={askable} />
 
           {!live && !reviewable && (
             <Button variant="default" onClick={() => p.onRun()} disabled={!p.note.agent}>
@@ -325,7 +335,19 @@ export function NoteDetail(p: NoteDetailProps) {
         </div>
       </header>
 
-      {canEscalate && <Refused frames={refused} onAsk={() => setAsk("escalate")} />}
+      {/* Above everything, including the refusals: a question with someone
+          waiting behind it outranks a list of things already refused. */}
+      {p.prompts.map((prompt) => (
+        <Ask
+          key={prompt.requestId}
+          prompt={prompt}
+          onAnswer={(answer) => p.onAnswer(prompt, answer)}
+        />
+      ))}
+
+      {canEscalate && (
+        <Refused frames={refused} askable={askable} onAsk={() => setAsk("escalate")} />
+      )}
 
       {!split && (
         <nav className="flex items-center gap-1 border-y border-hairline px-4 py-1.5">
@@ -581,7 +603,16 @@ function Sep() {
  * the policy and starting over. Here it is the first thing you see, with the
  * exact commands, and one button that answers it.
  */
-function Refused({ frames, onAsk }: { frames: TranscriptFrame[]; onAsk: () => void }) {
+function Refused({
+  frames,
+  askable,
+  onAsk,
+}: {
+  frames: TranscriptFrame[]
+  /** Whether this agent could have been asked, rather than just refused. */
+  askable: boolean
+  onAsk: () => void
+}) {
   // The last few, newest first: a long run can be refused the same command
   // twenty times, and twenty identical rows say nothing the first three don't.
   const shown = [...frames].reverse().slice(0, 3)
@@ -611,6 +642,15 @@ function Refused({ frames, onAsk }: { frames: TranscriptFrame[]; onAsk: () => vo
         </p>
       )}
 
+      {/* Codex decides alone and tells us afterwards — there was never a
+          moment at which anyone could have been asked. Saying so beats
+          leaving the reader to wonder why nothing asked them. */}
+      <p className="mt-2 text-[11px] text-faint">
+        {askable
+          ? "These were refused before the question could reach you."
+          : "This agent runs non-interactively — it cannot ask, so anything outside the repo is refused outright."}
+      </p>
+
       <Button size="sm" variant="outline" className="mt-2.5 text-lemon" onClick={onAsk}>
         Grant full access and continue
       </Button>
@@ -626,10 +666,13 @@ function PolicyToggle({
   value,
   onChange,
   disabled,
+  askable,
 }: {
   value: Policy
   onChange: (p: Policy) => void
   disabled: boolean
+  /** Whether "repo only" means "it will ask" or "it will simply be refused". */
+  askable: boolean
 }) {
   const full = value === "full"
   return (
@@ -637,7 +680,9 @@ function PolicyToggle({
       text={
         full
           ? "Full access: this agent can run any command, including outside the repo."
-          : "Repo only: it can edit files, but most shell commands are refused — including running tests."
+          : askable
+            ? "Repo only: it can edit files, and anything else stops and asks you."
+            : "Repo only: it can edit files, but most shell commands are refused — this agent cannot ask, so it is refused outright."
       }
     >
       <Button

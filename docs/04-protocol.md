@@ -8,6 +8,13 @@ All command endpoints are `POST`, take a JSON body, and return `{ ok: true, seq 
 sequence number of the resulting event. A client that wants read-your-writes waits for that seq
 to arrive on the event stream rather than optimistically merging a response body.
 
+One endpoint breaks the "returns immediately" rule on purpose. `POST /runs/:id/permission` is
+the agent asking whether it may do something, routed in from the MCP sidecar we point Claude
+Code at with `--permission-prompt-tool`. It is held open for as long as the question is on the
+board — minutes, not milliseconds — because the agent genuinely waits. It resolves when someone
+answers via `/runs/:id/respond`, when the question times out, or when the agent's own connection
+drops. No UI ever calls it.
+
 ```
 GET  /health                      → { version, uptime, pid }
 
@@ -23,7 +30,8 @@ POST /notes/:id/delete
 
 POST /notes/:id/run               { agent? }        → queue for execution
 POST /runs/:id/cancel
-POST /runs/:id/respond            { requestId, decision, comment? }
+POST /runs/:id/respond            { requestId, decision, scope?, comment? }
+POST /runs/:id/permission         { tool, input }   → held open; the agent asking
 GET  /runs/:id/output             ?after=&limit=    → paginated transcript
 
 POST /notes/:id/review            { decision, comment? }

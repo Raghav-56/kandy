@@ -18,6 +18,13 @@ import type { AgentAdapter, AgentEvent } from "./types.js"
  *    auto-denies anything it cannot ask about and reports it in
  *    `result.permission_denials`; we surface those rather than letting them
  *    vanish into a transcript nobody reads.
+ *
+ * 3. …unless there is somewhere to ask. `--permission-prompt-tool` routes the
+ *    prompt to an MCP tool of ours instead of auto-denying it, and
+ *    `--permission-prompts host` is what decides anything is asked at all
+ *    (host is the default; it is passed anyway so a change of default cannot
+ *    quietly turn this off). Verified against the installed CLI, not docs —
+ *    unknown flags are rejected outright and these two run clean.
  */
 export const claude: AgentAdapter = {
   id: "claude",
@@ -28,7 +35,7 @@ export const claude: AgentAdapter = {
     path.join(homedir(), ".claude.json"),
   ],
 
-  spawn({ cwd, prompt, resume, policy, model }) {
+  spawn({ cwd, prompt, resume, policy, model, ask }) {
     return {
       command: "claude",
       args: [
@@ -47,6 +54,19 @@ export const claude: AgentAdapter = {
         policy === "full" ? "bypassPermissions" : "acceptEdits",
         // Echo our own messages back so the transcript shows steering in place.
         "--replay-user-messages",
+        // A refusal becomes a question. Only under `repo` — `bypassPermissions`
+        // never asks anything, so wiring a prompt tool into it would be a
+        // channel nothing ever travels down.
+        ...(ask && policy !== "full"
+          ? [
+              "--permission-prompts",
+              "host",
+              "--permission-prompt-tool",
+              ask.toolName,
+              "--mcp-config",
+              ask.configPath,
+            ]
+          : []),
         ...(model ? ["--model", model] : []),
         ...(resume ? ["--resume", resume] : []),
       ],
@@ -56,6 +76,8 @@ export const claude: AgentAdapter = {
   },
 
   live: { encode: userMessage },
+
+  asks: true,
 
   parse(line) {
     if (!line.trim()) return []
