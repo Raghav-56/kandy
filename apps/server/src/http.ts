@@ -690,16 +690,20 @@ async function noteAction(
           // The merge commit is the one commit that is definitely still in
           // history after the branch is deleted, so it is the one worth
           // signing — when the board asked to be signed at all.
+          const model = note.model ?? (note.agent ? view.board.models?.[note.agent] : null) ?? null
           const trailers = view.board.attribution?.commit
-            ? commitTrailers({
-                noteId,
-                runId: note.runId,
-                agent: note.agent,
-                model:
-                  note.model ?? (note.agent ? view.board.models?.[note.agent] : null) ?? null,
-              })
+            ? commitTrailers({ noteId, runId: note.runId, agent: note.agent, model })
             : []
-          const result = await mergeBranch(view.board.repoPath, wt.branch, trailers)
+          // The subject and body are the note's own words; the footer is what
+          // the run turned out to be. Both are already on the board — the
+          // merge commit is the last chance to write them down somewhere that
+          // outlives it.
+          const run = view.runs.find((r) => r.id === note.runId)
+          const result = await mergeBranch(view.board.repoPath, wt.branch, {
+            note: { id: noteId, title: note.title, body: note.body },
+            facts: { stat: note.stat, agent: note.agent, model, turns: run?.turns ?? null },
+            trailers,
+          })
           if (!result.merged) {
             // Leave everything exactly as it was. A conflict is the user's
             // call, and they still have the branch and the worktree.

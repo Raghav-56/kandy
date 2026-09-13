@@ -4,6 +4,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import type { DiffStat } from "@kandy/core"
 import { withTrailers } from "./attribution.js"
+import { composeCommitMessage, type CommitFacts, type CommitNote } from "./message.js"
 import { worktreeRoot } from "./paths.js"
 
 const exec = promisify(execFile)
@@ -169,15 +170,24 @@ export async function removeWorktree(repoPath: string, dir: string, force = fals
  * guessing at a merge on their behalf is how trust dies.
  *
  * `git merge` has no `--trailer` of its own, so trailers are folded into the
- * message here. With none, the message is the same string it always was.
+ * message here. With none, the message is exactly what composeCommitMessage
+ * produced.
+ *
+ * The message is the note's own words rather than its branch name — see
+ * composeCommitMessage. The note is required for that reason: a merge commit
+ * is the one commit that survives the branch being deleted, so it is the last
+ * place that can still say what the work was.
  */
 export async function mergeBranch(
   repoPath: string,
   branch: string,
-  trailers: readonly string[] = [],
+  land: { note: CommitNote; facts?: CommitFacts; trailers?: readonly string[] },
 ): Promise<{ merged: boolean; conflict?: string }> {
   try {
-    const message = withTrailers(`kandy: merge ${branch}`, trailers)
+    const message = withTrailers(
+      composeCommitMessage(land.note, land.facts),
+      land.trailers ?? [],
+    )
     await git(repoPath, "merge", "--no-ff", "-m", message, branch)
     return { merged: true }
   } catch (err) {
