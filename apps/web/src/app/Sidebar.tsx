@@ -12,7 +12,7 @@ import { Button, Hint, Separator, StatusPill } from "@/ui"
 import { Wordmark } from "@/brand/Logo"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import type { Theme } from "@/hooks/useTheme"
-import { cn, compact, money, tailPath } from "@/lib/utils"
+import { cn, money } from "@/lib/utils"
 
 export type View = "board" | "usage" | "settings"
 
@@ -137,14 +137,6 @@ export function Sidebar({
           </button>
         </div>
 
-        {view && (
-          <p
-            className="text-muted-foreground/70 mt-3 truncate px-1.5 font-mono text-[10.5px]"
-            title={view.board.repoPath}
-          >
-            {tailPath(view.board.repoPath.replace(/^\/Users\/[^/]+/, "~"), 28)}
-          </p>
-        )}
       </div>
 
       <div className="space-y-3 px-2.5 pb-3">
