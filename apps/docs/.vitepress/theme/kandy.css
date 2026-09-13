@@ -1,0 +1,35 @@
+/*
+ * The app's palette, applied to VitePress's variables.
+ *
+ * Warm dark rather than pure black, candy accents held at low saturation —
+ * docs that look like the thing they document, without a second design system
+ * to maintain.
+ */
+:root {
+  --vp-c-brand-1: #c2527c;
+  --vp-c-brand-2: #b0456e;
+  --vp-c-brand-3: #a03c63;
+  --vp-c-brand-soft: rgb(232 127 164 / 0.14);
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #c2527c, #a8802a 55%, #3d9c73);
+  --vp-home-hero-image-background-image: linear-gradient(-45deg, #e87fa4 30%, #a794f0 70%);
+  --vp-home-hero-image-filter: blur(56px);
+}
+
+.dark {
+  --vp-c-bg: #131219;
+  --vp-c-bg-alt: #16151d;
+  --vp-c-bg-soft: #1a1922;
+  --vp-c-divider: #2c2a38;
+  --vp-c-text-1: #ece9f4;
+  --vp-c-text-2: #9a95ad;
+
+  --vp-c-brand-1: #e87fa4;
+  --vp-c-brand-2: #ef93b3;
+  --vp-c-brand-3: #d96b91;
+}
+
+/* Long shell examples are the norm here; let them scroll rather than wrap. */
+.vp-doc pre { border-radius: 10px; }
+.vp-doc code { font-size: 0.86em; }

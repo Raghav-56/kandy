@@ -62,6 +62,7 @@ Read [`docs/01-architecture.md`](docs/01-architecture.md) for the reasoning, and
 | `apps/tui` | Terminal client. Live board view over the same SSE stream. |
 | `packages/core` | Domain types, event schemas, and the one reducer everything projects with. |
 | `packages/client` | Typed client for the server API. |
+| `apps/docs` | The documentation site (VitePress). `pnpm --filter @kandy/docs dev` |
 
 ## Running it
 

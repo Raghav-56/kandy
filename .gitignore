@@ -12,3 +12,7 @@ dist/
 
 # playwright mcp scratch
 .playwright-mcp/
+
+# vitepress build output and cache
+apps/docs/.vitepress/dist/
+apps/docs/.vitepress/cache/
