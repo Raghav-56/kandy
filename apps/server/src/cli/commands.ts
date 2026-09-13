@@ -7,6 +7,7 @@ import { promisify } from "node:util"
 import type { AgentId, Board, BoardView, Note } from "@kandy/core"
 import { banner, berry, bold, dim, faint, heat, lemon, mint, sparkline, statusTag } from "./banner.js"
 import { client, DEFAULT_PORT, ensureUp } from "./daemon.js"
+import { findReclaimable, heldBack, humanBytes, reclaim } from "../gc.js"
 
 const exec = promisify(execFile)
 const out = (s = "") => process.stdout.write(s + "\n")
@@ -268,6 +269,81 @@ export async function cmdStats(opts: { port: number }): Promise<number> {
       )
     }
   }
+  out()
+  return 0
+}
+
+/**
+ * Reclaim the checkouts of notes that are finished.
+ *
+ * Every note gets a full worktree, and only the daemon that made one knows
+ * where it is — restart it and those checkouts are stranded inside the repo.
+ * On a board that has run a hundred notes that is a hundred copies of the
+ * tree, node_modules and all.
+ *
+ * The branch is never touched. Removing a checkout is reversible as long as
+ * the commits survive, and that asymmetry is the whole safety story: unmerged
+ * or uncommitted work is held back until the user says --force.
+ */
+export async function cmdGc(opts: {
+  port: number
+  dryRun: boolean
+  force: boolean
+}): Promise<number> {
+  if (!(await ensureUp(opts.port))) return fail()
+  const here = await boardHere(opts.port)
+  if (!here) {
+    out(dim("  no board for this repo yet — nothing to reclaim"))
+    return 0
+  }
+
+  const found = await findReclaimable(here.board.repoPath, here.view.notes)
+  if (found.length === 0) {
+    out(dim("  nothing to reclaim — no worktrees left by finished notes"))
+    return 0
+  }
+
+  out()
+  let freed = 0
+  let held = 0
+  for (const item of found) {
+    const why = heldBack(item, opts.force)
+    const size = faint(humanBytes(item.bytes).padStart(8))
+    const tail =
+      dim(item.outcome === "discarded" ? "  discarded" : item.outcome === "merged" ? "  merged" : "")
+
+    if (why) {
+      held++
+      out(`  ${lemon("kept".padEnd(9))} ${size}  ${item.title}`)
+      out(`  ${" ".repeat(9)} ${" ".repeat(8)}  ${dim(why)}${dim(" — pass --force to remove it")}`)
+      continue
+    }
+
+    if (opts.dryRun) {
+      freed += item.bytes
+      out(`  ${faint("would free".padEnd(9))} ${size}  ${item.title}${tail}`)
+      continue
+    }
+
+    try {
+      await reclaim(here.board.repoPath, item, opts.force)
+      freed += item.bytes
+      out(`  ${mint("freed".padEnd(9))} ${size}  ${item.title}${tail}`)
+    } catch (err) {
+      held++
+      out(`  ${berry("failed".padEnd(9))} ${size}  ${item.title}`)
+      out(`  ${" ".repeat(9)} ${" ".repeat(8)}  ${dim(err instanceof Error ? err.message.split("\n")[0]! : String(err))}`)
+    }
+  }
+
+  out()
+  out(
+    `  ${bold(humanBytes(freed))} ${opts.dryRun ? "would be reclaimed" : "reclaimed"}` +
+      dim(` · ${found.length - held} worktree${found.length - held === 1 ? "" : "s"}`) +
+      (held ? dim(` · ${held} kept`) : ""),
+  )
+  // The commits are the work; the checkout was only a place to do it.
+  out(dim("  branches are left alone"))
   out()
   return 0
 }
