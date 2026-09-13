@@ -29,6 +29,17 @@ import {
   type Worktree,
 } from "./worktree.js"
 
+/**
+ * What the agent is told when its note is escalated.
+ *
+ * It names the change rather than just saying "continue", because the agent
+ * is resuming a session in which it was refused and has already reasoned its
+ * way around the refusal.
+ */
+const CONTINUE_WITH_FULL =
+  "Full access has been granted for this note — shell commands that were refused will now run. " +
+  "Continue from where you left off, starting with whatever you were blocked on."
+
 type Live = {
   runId: string
   noteId: string
@@ -62,6 +73,8 @@ export class Runner {
   private queue: Queued[] = []
   /** Worktree per note, so a follow-up resumes where the last run left off. */
   private worktrees = new Map<string, Worktree>()
+  /** Follow-ups held until a note's current run has actually exited. */
+  private pending = new Map<string, { boardId: string; text: string }>()
 
   constructor(
     private engine: Engine,
@@ -167,6 +180,17 @@ export class Runner {
       }
     }
 
+    this.followUp(boardId, noteId, text)
+    return "queued"
+  }
+
+  /**
+   * Queue another turn for a note: same worktree, same session, new prompt.
+   *
+   * The one path by which a note gets a second turn without a second
+   * workspace. Steering falls back to it; escalation always uses it.
+   */
+  private followUp(boardId: string, noteId: string, text: string, role: "user" | "system" = "user"): void {
     const view = this.getView(boardId)
     const note = view?.notes.find((n) => n.id === noteId)
     const agent = note?.agent
@@ -174,7 +198,7 @@ export class Runner {
 
     const runId = id("run")
     this.emit(event("run.requested", { runId, noteId, agent }))
-    this.say(runId, "user", text)
+    this.say(runId, role, text)
     this.queue.push({
       runId,
       noteId,
@@ -184,6 +208,36 @@ export class Runner {
       ...(this.worktrees.has(noteId) ? { worktree: this.worktrees.get(noteId)! } : {}),
     })
     void this.pump()
+  }
+
+  /**
+   * Continue a note whose policy was just raised to full access.
+   *
+   * Never delivered live, unlike steering. Policy is a spawn-time argument —
+   * telling the process that was refused that it may now proceed changes
+   * nothing about what its sandbox will allow. It needs a new process.
+   *
+   * If one is still running it is stopped first, and the follow-up waits for
+   * it to exit: two agents in one worktree is not a thing we allow, and a
+   * `run.requested` emitted before the old run's `run.finished` would have its
+   * status immediately overwritten by it.
+   */
+  escalate(boardId: string, noteId: string): Delivery {
+    // A turn already waiting for a slot would start under the old policy and
+    // then collide with this one in the same worktree. Drop it.
+    for (const q of this.queue.filter((q) => q.noteId === noteId)) this.cancel(q.runId)
+
+    const live = [...this.live.values()].find((l) => l.noteId === noteId)
+    if (live) {
+      this.pending.set(noteId, { boardId, text: CONTINUE_WITH_FULL })
+      // Not `cancel`, which writes "cancelled by user" — this is not an
+      // abandonment, and a transcript that says so would be lying about why
+      // the process died.
+      this.say(live.runId, "system", "stopping to grant full access — continuing in a new turn")
+      live.child.kill("SIGTERM")
+      return "queued"
+    }
+    this.followUp(boardId, noteId, CONTINUE_WITH_FULL, "system")
     return "queued"
   }
 
@@ -495,6 +549,20 @@ export class Runner {
       void this.onBranchReady?.(l.boardId, noteId)
     }
     if (l) this.syncColumn(l.boardId, noteId)
+
+    // A continuation held while this run was stopped. Queued only now, so its
+    // `run.requested` lands after the `run.finished` above rather than being
+    // clobbered by it.
+    const held = this.pending.get(noteId)
+    if (held) {
+      this.pending.delete(noteId)
+      try {
+        this.followUp(held.boardId, noteId, held.text, "system")
+      } catch (err) {
+        this.say(runId, "error", err instanceof Error ? err.message : String(err))
+      }
+    }
+
     void this.pump()
   }
 
@@ -541,6 +609,7 @@ export class Runner {
 
   forget(noteId: string): void {
     this.worktrees.delete(noteId)
+    this.pending.delete(noteId)
   }
 
   /** Remember worktrees from previous daemon lifetimes so review still works. */

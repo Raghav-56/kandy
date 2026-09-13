@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import type { KandyClient } from "@kandy/client"
-import type { AgentId, AgentInfo, BoardView } from "@kandy/core"
-import { Button, Input, Separator } from "@/ui"
+import type { AgentId, AgentInfo, BoardView, Policy } from "@kandy/core"
+import { Button, Confirm, Input, Separator } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { ModelSelect } from "@/features/agents/ModelSelect"
 import type { Theme } from "@/hooks/useTheme"
@@ -36,6 +36,7 @@ export function SettingsPage({
   const [carry, setCarry] = useState("")
   const [saving, setSaving] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [askFull, setAskFull] = useState(false)
 
   useEffect(() => {
     if (!view) return
@@ -56,6 +57,16 @@ export function SettingsPage({
     } finally {
       setSaving(null)
     }
+  }
+
+  // Read straight from the projected board rather than local state: the
+  // setting is a single choice, and a stale copy of it is the one thing this
+  // section must never show.
+  const defaultPolicy: Policy = view.board.defaultPolicy ?? "repo"
+
+  async function setPolicy(p: Policy) {
+    await save("policy", () => client.setBoardPolicy(view!.board.id, p))
+    setAskFull(false)
   }
 
   return (
@@ -123,6 +134,45 @@ export function SettingsPage({
         >
           {saving === "models" ? "Saving…" : "Save models"}
         </Button>
+      </Section>
+
+      <Section
+        title="Agent access"
+        body="What a note written on this repo starts as. A note can still be changed on its own, and notes already on the board keep what they have."
+      >
+        <div className="flex gap-2">
+          <Button
+            variant={defaultPolicy === "repo" ? "default" : "outline"}
+            size="sm"
+            disabled={saving === "policy"}
+            onClick={() => void setPolicy("repo")}
+          >
+            Repo only
+          </Button>
+          <Button
+            variant={defaultPolicy === "full" ? "default" : "outline"}
+            size="sm"
+            disabled={saving === "policy"}
+            onClick={() => (defaultPolicy === "full" ? undefined : setAskFull(true))}
+            className={cn(defaultPolicy === "full" && "border-[#4a3a20] bg-[#241d10] text-lemon")}
+          >
+            Full access
+          </Button>
+        </div>
+        <p className="text-muted-foreground/70 mt-2.5 max-w-[58ch] text-[11px] leading-relaxed">
+          {defaultPolicy === "full" ? (
+            <>
+              New notes here can run any shell command. That is what lets them build and test what
+              they write — and it is also everything else a shell can do.
+            </>
+          ) : (
+            <>
+              New notes here can edit files but most shell commands are refused, including{" "}
+              <code className="font-mono">pnpm build</code> and{" "}
+              <code className="font-mono">pnpm test</code>.
+            </>
+          )}
+        </p>
       </Section>
 
       <Section
@@ -210,6 +260,31 @@ export function SettingsPage({
           )}
         </div>
       </Section>
+
+      <Confirm
+        open={askFull}
+        onOpenChange={(v) => !v && setAskFull(false)}
+        title="Give new notes full access"
+        body={
+          <>
+            Every note written on this repo from now on will be able to run <b>any shell command</b>
+            , with no approval — installs, network calls, anything you could run yourself. Its
+            worktree bounds what it can damage <i>inside</i> the repository. It does not bound what
+            it can reach outside one: your home directory, your credentials, the network.
+            <br />
+            <br />
+            This applies to this repository only. Notes already on the board keep the policy they
+            have, and any single note can still be set either way.
+          </>
+        }
+        facts={[
+          { label: "Repo", value: view.board.repoPath },
+          { label: "Applies to", value: "notes written from now on" },
+        ]}
+        confirmLabel="Give full access"
+        busy={saving === "policy"}
+        onConfirm={() => void setPolicy("full")}
+      />
     </div>
   )
 }

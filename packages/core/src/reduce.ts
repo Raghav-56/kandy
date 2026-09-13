@@ -41,6 +41,11 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
       return { ...view, board: { ...view.board, models: e.data.models } }
     }
 
+    case "board.policy": {
+      if (e.data.boardId !== view.board.id) return view
+      return { ...view, board: { ...view.board, defaultPolicy: e.data.defaultPolicy } }
+    }
+
     case "board.setup": {
       if (e.data.boardId !== view.board.id) return view
       return {
@@ -70,7 +75,10 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         pos: e.data.pos,
         agent: null,
         model: null,
-        policy: "repo",
+        // The board's default at the moment the note was written. Read from
+        // the view rather than stamped into the event, so replay gives the
+        // same answer: `board.policy` events are ordered against this one.
+        policy: view.board.defaultPolicy ?? "repo",
         runId: null,
         branch: null,
         worktree: null,

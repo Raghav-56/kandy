@@ -45,6 +45,15 @@ refused something" rather than "it is waiting for you." Answering in-flight need
 in-process rather than as a subprocess — a real architectural fork, not a tweak. Codex and the
 others each express refusal differently and will need their own answer.
 
+There is now a pragmatic version of the answer, which is not the same thing. The note's detail
+pane shows what was actually refused — the exact commands, read out of the `permission` frames
+the adapters already write — and offers one action: grant *this note* full access and continue.
+That sets the note's policy and resumes the agent in the same worktree, one turn later, down the
+same path steering uses. It is a decision made once, after the fact, about a whole note; it is
+not an answer to a single prompt in flight, and the escalation says so plainly before you take
+it. A board also carries a `defaultPolicy`, so a repo whose blast radius you're comfortable with
+can start its notes unblocked and never reach this screen.
+
 **Can we reliably capture agent session ids?** Resume — which steering depends on — needs them.
 Claude emits `session_id` on every event and can even be handed one up front, so it is solved
 there. Codex won't let us pre-assign one; Gemini doesn't reliably emit one at all. Steering will

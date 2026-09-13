@@ -49,6 +49,8 @@ function detailOf(e: KandyEvent): string {
       return e.data.model ?? "board default"
     case "note.policy":
       return e.data.policy
+    case "board.policy":
+      return `new notes: ${e.data.defaultPolicy}`
     case "note.status":
       return e.data.status
     case "note.pr":

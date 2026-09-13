@@ -65,6 +65,15 @@ export type Board = {
   carry: string[]
   /** Default model per agent, e.g. { claude: "opus", codex: "gpt-6-astra" }. */
   models: Partial<Record<AgentId, string>>
+  /**
+   * What a new note on this board starts as. `repo` unless someone says
+   * otherwise.
+   *
+   * Per board, not per install, because it is a judgement about one
+   * repository's blast radius: a scratch repo and an employer's do not deserve
+   * the same answer, and a single global switch would force one.
+   */
+  defaultPolicy: Policy
   createdAt: number
 }
 

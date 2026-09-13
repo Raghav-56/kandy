@@ -9,7 +9,13 @@ import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
  */
 export type Commands = {
   "POST /boards": {
-    req: { name?: string; repoPath: string; setup?: string | null; carry?: string[] }
+    req: {
+      name?: string
+      repoPath: string
+      setup?: string | null
+      carry?: string[]
+      defaultPolicy?: Policy
+    }
     res: { board: Board }
   }
   "POST /boards/:id/setup": { req: { setup: string | null; carry?: string[] }; res: {} }
@@ -25,6 +31,15 @@ export type Commands = {
   "POST /notes/:id/policy": { req: { policy: Policy }; res: {} }
   "POST /notes/:id/model": { req: { model: string | null }; res: {} }
   "POST /boards/:id/models": { req: { models: Record<string, string> }; res: {} }
+  /** What notes created on this board start as. */
+  "POST /boards/:id/policy": { req: { defaultPolicy: Policy }; res: {} }
+  /**
+   * Answer a refusal: raise this note to full access and continue it.
+   *
+   * Not an in-flight permission answer — the note's policy changes and the
+   * agent is resumed in the same worktree, one turn later.
+   */
+  "POST /notes/:id/escalate": { req: {}; res: { delivery: Delivery } }
   /** Push the note's branch and open a PR for it. */
   "POST /notes/:id/pr": { req: { draft?: boolean }; res: { pr: PullRequest } }
   "POST /notes/:id/delete": { req: {}; res: {} }

@@ -24,11 +24,17 @@ export type KandyEventMap = {
     setup?: string | null
     carry?: string[]
     models?: Partial<Record<AgentId, string>>
+    defaultPolicy?: Policy
   }
   "board.setup": { boardId: BoardId; setup: string | null; carry?: string[] }
   /** Removes the board from kandy. The repository itself is never touched. */
   "board.removed": { boardId: BoardId }
   "board.models": { boardId: BoardId; models: Partial<Record<AgentId, string>> }
+  /**
+   * What notes created on this board start as. Applies from here forward —
+   * notes already on the board keep whatever policy they have.
+   */
+  "board.policy": { boardId: BoardId; defaultPolicy: Policy }
 
   "column.created": {
     columnId: ColumnId
