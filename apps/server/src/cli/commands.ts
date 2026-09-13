@@ -14,7 +14,7 @@ const exec = promisify(execFile)
 const out = (s = "") => process.stdout.write(s + "\n")
 
 /** The board whose repo contains the current directory. */
-async function boardHere(port: number): Promise<{ board: Board; view: BoardView } | null> {
+export async function boardHere(port: number): Promise<{ board: Board; view: BoardView } | null> {
   const api = client(port)
   const cwd = await exec("git", ["rev-parse", "--show-toplevel"])
     .then((r) => r.stdout.trim())

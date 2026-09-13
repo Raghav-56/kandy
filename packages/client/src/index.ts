@@ -16,6 +16,9 @@ import type {
   StreamFrame,
   TranscriptFrame,
 } from "@kandy/core"
+import { installEventSource } from "./sse.js"
+
+export { installEventSource, NodeEventSource, SseDecoder, type SseMessage } from "./sse.js"
 
 export type ClientOptions = {
   baseUrl?: string
@@ -191,6 +194,10 @@ export class KandyClient {
    *
    * EventSource handles reconnect and Last-Event-ID for us, which is most of
    * why the transport is SSE rather than a WebSocket we'd have to babysit.
+   *
+   * Node has no global EventSource on the versions we support, so install the
+   * polyfill here rather than making every CLI caller remember to. It is a
+   * no-op in the browser and on any runtime that ships a real one.
    */
   events(
     after: number,
@@ -211,6 +218,7 @@ export class KandyClient {
     url.searchParams.set("after", String(after))
     if (this.token) url.searchParams.set("token", this.token)
 
+    installEventSource()
     const es = new EventSource(url)
     const handler = (ev: MessageEvent) => {
       try {

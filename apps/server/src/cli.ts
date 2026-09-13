@@ -17,6 +17,7 @@ import {
   cmdStats,
   cmdStatus,
 } from "./cli/commands.js"
+import { cmdLog } from "./cli/log.js"
 import { DEFAULT_PORT } from "./cli/daemon.js"
 
 const DEFAULT_SLOTS = 4
@@ -83,6 +84,7 @@ function usage(): void {
   w(cmd("kandy", "status: daemon, repos, agents"))
   w(cmd("kandy ls [--all]", "what's open here; --all includes done"))
   w(cmd("kandy stats", "what this board has actually done"))
+  w(cmd("kandy log [--verbose]", "tail what the board is doing, live"))
   w(cmd("kandy open", "the board in a browser"))
 
   w(head("setup"))
@@ -97,6 +99,7 @@ function usage(): void {
   w(cmd("--no-run", "write the note without starting it"))
   w(cmd("--port N", "a daemon on a different port (default 4477)"))
   w(cmd("--all", "include finished notes in `ls`"))
+  w(cmd("--verbose", "include agent chatter in `log`"))
   w(cmd("--dry-run", "say what `gc` would reclaim, remove nothing"))
   w(cmd("--force", "let `gc` remove unmerged or dirty worktrees"))
   w(cmd("--slots N", "how many agents may run at once (serve)"))
@@ -161,7 +164,7 @@ async function main(): Promise<void> {
   const agent = strFlag(argv, "--agent") as AgentId | undefined
   const noRun = argv.includes("--no-run")
   const VALUED = ["--port", "--slots", "--agent"]
-  const BARE = ["--no-run", "--all", "-a", "--dry-run", "--force"]
+  const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force"]
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
   // and reporting "nothing here" is worse than refusing it.
@@ -199,6 +202,11 @@ async function main(): Promise<void> {
       break
     case "stats":
       process.exit(await cmdStats({ port }))
+      break
+    case "log":
+      process.exit(
+        await cmdLog({ port, verbose: argv.includes("--verbose") || argv.includes("-v") }),
+      )
       break
     case "gc":
       process.exit(
