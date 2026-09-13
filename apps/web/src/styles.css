@@ -97,13 +97,22 @@ body {
    palette does not contain. */
 ::selection { background: var(--color-grape-bg); color: var(--color-ink); }
 
-/* Focus is a soft ring in the palette, and only on things you can actually
-   tab to — the old rule painted a blue outline on anything with a tabindex. */
-:where(button, a, input, textarea, select, [role="button"]):focus-visible {
+/* Focus is a soft ring in the palette, and only on things you can actually tab
+   to — the old rule painted a blue outline on anything with a tabindex.
+   Inputs are excluded: shadcn already rings them, and both together drew a
+   double halo around every focused field. */
+:where(button, a, [role="button"], [role="option"]):focus-visible {
   outline: 2px solid var(--color-grape);
   outline-offset: 1px;
   border-radius: 8px;
 }
+
+/* Tailwind v4 no longer gives buttons a pointer cursor, and shadcn does not add
+   one — so every control in the app felt inert on hover. */
+:where(button, [role="button"], [role="option"], summary, label[for]):not(:disabled) {
+  cursor: pointer;
+}
+:where(button, [role="button"]):disabled { cursor: not-allowed; }
 
 /* Metadata voice: small caps, never shouty. */
 .label {

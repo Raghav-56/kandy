@@ -1,8 +1,10 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
+import { ChevronRight } from "lucide-react"
 import type { ActivityFrame, BoardView, Note } from "@kandy/core"
 import { Button, Empty, Kbd } from "@/ui"
 import { Logo } from "@/brand/Logo"
 import { GROUPS, LOOK } from "@/features/notes/status"
+import { cn } from "@/lib/utils"
 import { NoteRow } from "./NoteRow"
 
 /**
@@ -26,6 +28,10 @@ export function TriageList({
   onSelect: (id: string) => void
   onCompose: () => void
 }) {
+  // Done is collapsed to start: eight finished notes should not take as much
+  // room as the one thing waiting on you.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set(["done"]))
+
   const groups = useMemo(() => {
     return GROUPS.map((g) => ({
       ...g,
@@ -53,14 +59,30 @@ export function TriageList({
 
   return (
     <div className="mx-auto w-full max-w-[820px] px-4 pb-16 pt-3">
-      {groups.map((g) => (
+      {groups.map((g) => {
+        const open = !collapsed.has(g.key)
+        return (
         <section key={g.key} className="mb-5">
-          <header className="sticky top-0 z-10 flex items-baseline gap-2 bg-bg/85 px-3 py-2 backdrop-blur">
-            <h2 className="text-[12px] font-semibold tracking-[-0.005em] text-dim">{g.title}</h2>
-            <span className="text-[11px] tabular-nums text-faint">{g.notes.length}</span>
-          </header>
+          <button
+            onClick={() =>
+              setCollapsed((c) => {
+                const next = new Set(c)
+                next.has(g.key) ? next.delete(g.key) : next.add(g.key)
+                return next
+              })
+            }
+            className="bg-background/85 text-muted-foreground hover:text-foreground sticky top-0 z-10 flex w-full items-center gap-1.5 px-3 py-2 text-left backdrop-blur transition-colors"
+          >
+            <ChevronRight
+              className={cn("size-3 transition-transform", open && "rotate-90")}
+            />
+            <h2 className="text-[12px] font-semibold tracking-[-0.005em]">{g.title}</h2>
+            <span className="text-muted-foreground/60 text-[11px] tabular-nums">
+              {g.notes.length}
+            </span>
+          </button>
 
-          <div className="space-y-0.5">
+          <div className={cn("space-y-0.5", !open && "hidden")}>
             {g.notes.map((note) => (
               <NoteRow
                 key={note.id}
@@ -73,7 +95,8 @@ export function TriageList({
             ))}
           </div>
         </section>
-      ))}
+        )
+      })}
 
       <div className="px-3">
         <button

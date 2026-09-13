@@ -88,31 +88,62 @@ export function warmPrices(): Promise<void> {
  * it does not have access to — but it beats asking someone to type an exact
  * model string from memory.
  */
-const PROVIDER: Record<string, { prefixes: string[]; exclude: RegExp }> = {
-  claude: { prefixes: ["claude-"], exclude: /(instant|-v1|1\.[0-3]|bedrock|vertex)/ },
-  codex: { prefixes: ["gpt-", "o1", "o3", "o4"], exclude: /(audio|realtime|search|transcribe|tts|image|embedding|instruct|-16k|vision-preview)/ },
-  gemini: { prefixes: ["gemini-"], exclude: /(vision|embedding|tuned)/ },
-  grok: { prefixes: ["xai/grok", "grok-"], exclude: /(vision|image)/ },
-  cursor: { prefixes: [], exclude: /.^/ },
-  opencode: { prefixes: [], exclude: /.^/ },
+type Menu = {
+  /** Shown first: what the CLI documents as a shorthand. */
+  aliases: string[]
+  /** Which table entries belong to this agent at all. */
+  keep: RegExp
+  /** Entries that exist in the table but the agent cannot actually run. */
+  drop: RegExp
+}
+
+/**
+ * What each agent can actually be asked to run.
+ *
+ * Deliberately not "everything in the price table with the right prefix" — that
+ * offered Codex a menu of o3-mini and o4-mini, which it does not run, and
+ * offered Claude forty dated ids nobody types. Aliases come first because they
+ * are what the CLIs document and what stays correct when a new model ships.
+ */
+const MENU: Record<string, Menu> = {
+  claude: {
+    aliases: ["fable", "opus", "sonnet", "haiku"],
+    keep: /^claude-(opus|sonnet|haiku)-\d/,
+    // Dated ids and provider-suffixed ones are the same models wearing a
+    // deployment name; the aliases already cover "the latest".
+    drop: /(bedrock|vertex|latest|@|:|-\d{8})/,
+  },
+  codex: {
+    aliases: [],
+    keep: /^gpt-[56](\.\d+)?(-codex)?(-mini|-nano)?$|^gpt-6-[a-z]+$/,
+    drop: /(audio|realtime|search|transcribe|tts|image|embedding|instruct|chat-latest|:|-\d{8})/,
+  },
+  gemini: {
+    aliases: [],
+    keep: /^gemini-[23](\.\d+)?-(pro|flash)$/,
+    drop: /(vision|embedding|tuned|thinking)/,
+  },
+  grok: { aliases: [], keep: /^grok-\d/, drop: /(vision|image)/ },
+  cursor: { aliases: [], keep: /.^/, drop: /.^/ },
+  opencode: { aliases: [], keep: /.^/, drop: /.^/ },
 }
 
 export function modelsFor(agent: string): string[] {
-  const rule = PROVIDER[agent]
-  if (!table || !rule || rule.prefixes.length === 0) return []
+  const menu = MENU[agent]
+  if (!menu) return []
+  if (!table) return menu.aliases
 
-  const names = Object.entries(table)
+  const named = Object.entries(table)
     .filter(([name, rates]) => {
-      if (!rule.prefixes.some((p) => name.startsWith(p))) return false
-      if (rule.exclude.test(name)) return false
-      // A model with no input price is a table stub, not something to offer.
+      if (!menu.keep.test(name) || menu.drop.test(name)) return false
+      // An entry with no input price is a table stub, not a runnable model.
       return typeof rates.input_cost_per_token === "number"
     })
     .map(([name]) => name)
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+    .slice(0, 12)
 
-  // Longest-lived convention across these providers: higher version strings
-  // sort later, so reverse gives newest-first without a date to sort on.
-  return names.sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).slice(0, 40)
+  return [...menu.aliases, ...named]
 }
 
 /** Rates for a model, trying the most specific name first. */
