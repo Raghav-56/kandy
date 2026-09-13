@@ -57,15 +57,71 @@ export class Store {
         text    TEXT    NOT NULL,
         PRIMARY KEY (run_id, seq)
       );
+
+      -- SPIKE (docs/12-spike-git-share.md). Provenance for events that came
+      -- from another device. The local seq stays local and single-writer; this
+      -- records which foreign (origin, oseq) it was, which is what makes a
+      -- second fold of the same file a no-op instead of a duplicate board.
+      CREATE TABLE IF NOT EXISTS shared (
+        origin TEXT    NOT NULL,
+        oseq   INTEGER NOT NULL,
+        seq    INTEGER NOT NULL,
+        PRIMARY KEY (origin, oseq)
+      );
+      CREATE INDEX IF NOT EXISTS shared_seq ON shared(seq);
     `)
   }
 
-  append(pending: PendingEvent): KandyEvent {
-    const ts = Date.now()
+  append(pending: PendingEvent, ts: number = Date.now()): KandyEvent {
     const row = this.db
       .prepare("INSERT INTO events (ts, type, data) VALUES (?, ?, ?) RETURNING seq")
       .get(ts, pending.type, JSON.stringify(pending.data)) as { seq: number }
     return { ...pending, seq: row.seq, ts } as KandyEvent
+  }
+
+  /**
+   * Append an event that originated on another device, preserving its origin
+   * timestamp so the board shows when the teammate did the thing, not when we
+   * happened to pull it.
+   *
+   * Returns null if this (origin, oseq) was already folded in — pulling twice,
+   * or pulling a file that overlaps what we already have, must be free.
+   */
+  appendShared(pending: PendingEvent, origin: string, oseq: number, ts: number): KandyEvent | null {
+    if (this.isShared(origin, oseq)) return null
+    const e = this.append(pending, ts)
+    this.db.prepare("INSERT INTO shared (origin, oseq, seq) VALUES (?, ?, ?)").run(origin, oseq, e.seq)
+    return e
+  }
+
+  isShared(origin: string, oseq: number): boolean {
+    return (
+      this.db.prepare("SELECT 1 FROM shared WHERE origin = ? AND oseq = ?").get(origin, oseq) !==
+      undefined
+    )
+  }
+
+  /**
+   * Events this device authored, in order.
+   *
+   * Anything in `shared` is excluded: it reached us from its author's own file
+   * on the branch, and re-publishing it under our device id would give it a
+   * second identity and defeat the dedupe for whoever pulls from both of us.
+   */
+  locallyAuthored(after = 0, limit = 100_000): KandyEvent[] {
+    const rows = this.db
+      .prepare(
+        `SELECT e.seq, e.ts, e.type, e.data FROM events e
+         LEFT JOIN shared s ON s.seq = e.seq
+         WHERE e.seq > ? AND s.seq IS NULL ORDER BY e.seq LIMIT ?`,
+      )
+      .all(after, limit) as { seq: number; ts: number; type: string; data: string }[]
+    return rows.map((r) => ({
+      seq: r.seq,
+      ts: r.ts,
+      type: r.type,
+      data: JSON.parse(r.data),
+    })) as KandyEvent[]
   }
 
   /** Events strictly after `seq`. The basis of both projection and SSE replay. */

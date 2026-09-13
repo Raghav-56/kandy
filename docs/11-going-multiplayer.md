@@ -159,3 +159,9 @@ One share, two laptops, over a git remote. No cloud, no auth, no tiers.
 If two people hand a note back and forth for a week and it feels good, the only claim the
 business rests on is proven. If it feels like friction, a year was saved. The pricing page
 writes itself after that; it cannot be written before it.
+
+**Half of this has now been tried.** [`12-spike-git-share.md`](12-spike-git-share.md) is the
+orphan-branch transport built and pushed between two clones. The transport holds and is duller
+than expected — there is no merge to get wrong. What does not hold is the review step: the
+teammate receives a note asking for a verdict and cannot see the diff. Read it before costing
+any of the above.
