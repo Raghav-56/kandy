@@ -73,13 +73,19 @@ export function Composer({
             }}
           />
 
+          {/*
+            The base Textarea is a bordered field with its own padding and a
+            dark-mode fill. Here it is the continuation of the title above it, so
+            all three go — including `dark:bg-input/30`, which `bg-transparent`
+            alone does not outrank and which left it reading as a sunken slab.
+          */}
           <Textarea
             ref={detail}
             rows={4}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Detail — constraints, how to verify it, anything the agent needs. Optional."
-            className="min-h-[92px] resize-none border-0 bg-transparent p-0 text-[13.5px] leading-[1.6] shadow-none focus-visible:ring-0"
+            className="min-h-[92px] resize-none border-0 bg-transparent p-0 text-[13.5px] leading-[1.6] shadow-none focus-visible:ring-0 dark:bg-transparent"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(!e.shiftKey)
               e.stopPropagation()
