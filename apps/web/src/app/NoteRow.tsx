@@ -49,19 +49,11 @@ export const NoteRow = memo(function NoteRow({
       data-note={note.id}
       aria-current={selected}
       className={cn(
-        "group relative flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
+        "group flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
         selected ? "bg-accent" : "hover:bg-accent/50",
         settled && !selected && "opacity-65 hover:opacity-100",
       )}
     >
-      {/* Selection is a spine, not a border — it doesn't shift the content. */}
-      <span
-        className={cn(
-          "bg-grape absolute inset-y-2 left-0 w-[3px] rounded-full transition-opacity",
-          selected ? "opacity-100" : "opacity-0",
-        )}
-      />
-
       <span className="mt-[3px] shrink-0">
         {note.agent ? (
           <AgentMark agent={note.agent} size={15} />
