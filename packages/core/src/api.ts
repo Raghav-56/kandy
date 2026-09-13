@@ -148,6 +148,17 @@ export type Stats = {
     medianMs: number | null
   }[]
   tools: { tool: string; calls: number }[]
+  /** Runs per day, oldest first, for the activity map. */
+  daily: { date: string; runs: number }[]
+  /** Runs started in each hour, 0–23. */
+  hours: number[]
+  /**
+   * Where work goes, and where it stops.
+   *
+   * The one shape only kandy can draw: written → run → reviewed → landed, with
+   * what fell out at each step.
+   */
+  funnel: { written: number; ran: number; reviewed: number; landed: number; lost: number }
 }
 
 export type Forge = {

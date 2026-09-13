@@ -77,6 +77,29 @@ export function computeStats(view: BoardView, store: Store): Stats {
     })
     .sort((a, b) => b.landed - a.landed || b.runs - a.runs)
 
+  // 12 weeks of days, including the empty ones — a gap is information.
+  const DAYS = 84
+  const day = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+  const perDay = new Map<string, number>()
+  for (const r of runs) perDay.set(day(r.startedAt), (perDay.get(day(r.startedAt)) ?? 0) + 1)
+
+  const daily: { date: string; runs: number }[] = []
+  const today = new Date()
+  for (let i = DAYS - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(today.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    daily.push({ date: key, runs: perDay.get(key) ?? 0 })
+  }
+
+  const hours = Array.from({ length: 24 }, (_, h) => byHour.get(h) ?? 0)
+
+  // Only notes that still exist: a deleted note leaves its runs behind, and
+  // counting those made "ran" exceed "written".
+  const live = new Set(notes.map((n) => n.id))
+  const ranNotes = new Set(runs.map((r) => r.noteId).filter((id) => live.has(id)))
+  const reviewed = notes.filter((n) => n.outcome !== null || n.status === "review").length
+
   return {
     board: { name: view.board.name, repoPath: view.board.repoPath },
     notes: {
@@ -115,5 +138,15 @@ export function computeStats(view: BoardView, store: Store): Stats {
     // The one figure that needs the transcript table, aggregated in SQL rather
     // than by reading every frame into memory.
     tools: store.toolCounts(runs.map((r) => r.id)),
+    daily,
+    hours,
+    funnel: {
+      written: notes.length,
+      ran: ranNotes.size,
+      reviewed,
+      landed: landed.length,
+      // Work that was started and did not land: discarded, failed, abandoned.
+      lost: discarded.length + failed.length,
+    },
   }
 }

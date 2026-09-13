@@ -1,7 +1,11 @@
 import { execFile } from "node:child_process"
+import { copyFileSync, existsSync, mkdirSync } from "node:fs"
+import { homedir } from "node:os"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import type { AgentId, Board, BoardView, Note } from "@kandy/core"
-import { banner, berry, bold, dim, faint, lemon, mint, statusTag } from "./banner.js"
+import { banner, berry, bold, dim, faint, heat, lemon, mint, sparkline, statusTag } from "./banner.js"
 import { client, DEFAULT_PORT, ensureUp } from "./daemon.js"
 
 const exec = promisify(execFile)
@@ -206,6 +210,52 @@ export async function cmdStats(opts: { port: number }): Promise<number> {
     )
   if (s.tools[0]) row("most used tool", s.tools[0].tool, `${s.tools[0].calls} calls`)
 
+  // The activity map: twelve weeks, a column per week, a row per weekday.
+  if (s.daily.some((d) => d.runs > 0)) {
+    out()
+    const max = Math.max(...s.daily.map((d) => d.runs))
+    const level = (n: number) => (n === 0 ? 0 : Math.max(1, Math.ceil((n / max) * 4)))
+
+    // Pad the front so the first column starts on a Sunday, as a calendar does.
+    const lead = new Date(s.daily[0]!.date + "T00:00:00").getDay()
+    const cells: (number | null)[] = [...Array(lead).fill(null), ...s.daily.map((d) => d.runs)]
+
+    for (let row = 0; row < 7; row++) {
+      const line: string[] = []
+      for (let i = row; i < cells.length; i += 7) {
+        const v = cells[i]
+        line.push(v === null || v === undefined ? " " : heat(level(v)))
+      }
+      const label = row === 1 ? "mon" : row === 3 ? "wed" : row === 5 ? "fri" : "   "
+      out(`  ${faint(label)} ${line.join(" ")}`)
+    }
+    out(`  ${faint("      12 weeks")}${dim(" · ")}${faint(`busiest day ${max} runs`)}`)
+  }
+
+  if (s.hours.some((h) => h > 0)) {
+    out()
+    out(`  ${faint("by hour")}      ${sparkline(s.hours)}`)
+    out(`  ${faint("             00")}${faint("          06          12          18")}`)
+  }
+
+  // Where work goes, and where it stops. The one shape only kandy can draw.
+  const f = s.funnel
+  if (f.written > 0) {
+    const width = 24
+    const bar = (n: number) => {
+      // Clamped: a stage can never be wider than the whole, and a negative
+      // repeat count throws rather than just looking wrong.
+      const filled = Math.max(0, Math.min(width, Math.round((n / Math.max(f.written, 1)) * width)))
+      return mint("█".repeat(filled)) + dim("░".repeat(width - filled))
+    }
+    out()
+    out(`  ${faint("written ")} ${bar(f.written)} ${f.written}`)
+    out(`  ${faint("ran     ")} ${bar(f.ran)} ${f.ran}`)
+    out(`  ${faint("reviewed")} ${bar(f.reviewed)} ${f.reviewed}`)
+    out(`  ${faint("landed  ")} ${bar(f.landed)} ${f.landed}`)
+    if (f.lost > 0) out(`  ${faint("lost    ")} ${dim("─".repeat(width))} ${berry(String(f.lost))}`)
+  }
+
   if (s.agents.length > 0) {
     out()
     for (const a of s.agents) {
@@ -219,6 +269,34 @@ export async function cmdStats(opts: { port: number }): Promise<number> {
     }
   }
   out()
+  return 0
+}
+
+/**
+ * Put the kandy skill where agents look for it.
+ *
+ * The skill ships in the repo, which scopes it to this checkout. Copying it to
+ * ~/.claude/skills makes it available in every repository — which is the point,
+ * since the whole idea is queueing work from wherever you happen to be.
+ */
+export async function cmdSkillInstall(): Promise<number> {
+  const source = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../../.claude/skills/kandy/SKILL.md",
+  )
+  if (!existsSync(source)) {
+    out(berry("  cannot find the skill to install") + dim(`\n  looked in ${source}`))
+    return 1
+  }
+
+  const target = path.join(homedir(), ".claude", "skills", "kandy")
+  mkdirSync(target, { recursive: true })
+  const dest = path.join(target, "SKILL.md")
+  const existed = existsSync(dest)
+  copyFileSync(source, dest)
+
+  out(`  ${mint(existed ? "updated" : "installed")} ${dim(dest)}`)
+  out(dim("  agents that read skills can now queue work onto a kandy board"))
   return 0
 }
 

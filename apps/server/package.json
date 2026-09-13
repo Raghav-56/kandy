@@ -1,6 +1,6 @@
 {
-  "name": "@kandy/server",
-  "version": "0.0.0",
+  "name": "kandy",
+  "version": "0.1.0-alpha.1",
   "private": true,
   "type": "module",
   "bin": {
@@ -16,5 +16,29 @@
   "dependencies": {
     "@kandy/core": "workspace:*",
     "@kandy/client": "workspace:*"
-  }
+  },
+  "description": "A board for orchestrating coding agents. Each note is one job, run in its own git worktree.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "claude-code",
+    "codex",
+    "git-worktree",
+    "kanban",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hiteshbandhu/kandy.git"
+  },
+  "homepage": "https://github.com/hiteshbandhu/kandy#readme",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
 }

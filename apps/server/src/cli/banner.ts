@@ -37,6 +37,33 @@ export function banner(subtitle?: string): string {
   ].join("\n")
 }
 
+/**
+ * Five steps of intensity, in the candy palette.
+ *
+ * Same idea as a contribution graph: the shape of a month of work is legible at
+ * a glance in a way a table of numbers never is. Empty days are drawn, not
+ * skipped — a gap is information.
+ */
+const HEAT = ["238", "96", "132", "175", "218"]
+
+export function heat(level: number): string {
+  const code = HEAT[Math.max(0, Math.min(HEAT.length - 1, level))]!
+  return c(`38;5;${code}`, "■")
+}
+
+/** A row of block characters scaled to the largest value. */
+export function sparkline(values: number[]): string {
+  const blocks = "▁▂▃▄▅▆▇█"
+  const max = Math.max(...values, 1)
+  return values
+    .map((v) => {
+      if (v === 0) return dim("·")
+      const i = Math.min(blocks.length - 1, Math.round((v / max) * (blocks.length - 1)))
+      return lemon(blocks[i]!)
+    })
+    .join("")
+}
+
 /** Status dot + word, matching the web app's language. */
 export function statusTag(status: string): string {
   switch (status) {

@@ -8,7 +8,14 @@ import { DB_PATH } from "./paths.js"
 import { hasWebBuild } from "./static.js"
 import { warmPrices } from "./pricing.js"
 import { banner, berry, bold, dim, faint, lemon, mint } from "./cli/banner.js"
-import { cmdList, cmdNew, cmdOpen, cmdStats, cmdStatus } from "./cli/commands.js"
+import {
+  cmdList,
+  cmdNew,
+  cmdOpen,
+  cmdSkillInstall,
+  cmdStats,
+  cmdStatus,
+} from "./cli/commands.js"
 import { DEFAULT_PORT } from "./cli/daemon.js"
 
 const DEFAULT_SLOTS = 4
@@ -56,6 +63,7 @@ function usage(): void {
       row("kandy status", "daemon, repos and agents") +
       row("kandy stats", "what this board has actually done") +
       row("kandy open", "open the board in a browser") +
+      row("kandy skill", "install the skill so agents can queue work") +
       row("kandy serve [--port N]", "run the daemon in the foreground") +
       "\n" +
       `  ${faint("flags")}  ${dim("--agent claude|codex   --no-run   --port N")}\n\n`,
@@ -155,6 +163,9 @@ async function main(): Promise<void> {
       break
     case "open":
       process.exit(await cmdOpen({ port }))
+      break
+    case "skill":
+      process.exit(await cmdSkillInstall())
       break
     case "help":
       return usage()

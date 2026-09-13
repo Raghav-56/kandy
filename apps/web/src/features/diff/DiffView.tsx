@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type FileDiff = {
@@ -45,22 +46,23 @@ export function DiffView({
               <button
                 onClick={() => setOpen(isOpen ? null : f.path)}
                 className={cn(
-                  "flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors",
+                  "flex w-full items-center gap-2 px-3 py-2 text-left leading-none transition-colors",
                   isOpen ? "bg-raised" : "bg-surface hover:bg-raised/60",
                 )}
               >
-                <span
+                {/* An icon, not a ▶ glyph: the character carries its own
+                    baseline and font metrics, so it never sits on the same
+                    line as the text beside it. */}
+                <ChevronRight
                   className={cn(
-                    "shrink-0 text-[10px] text-faint transition-transform",
+                    "text-muted-foreground size-3.5 shrink-0 transition-transform",
                     isOpen && "rotate-90",
                   )}
-                >
-                  ▶
-                </span>
-                <span className="truncate font-mono text-[12px] text-ink" title={f.path}>
+                />
+                <span className="truncate font-mono text-[12px] leading-none" title={f.path}>
                   {f.path}
                 </span>
-                <span className="ml-auto shrink-0 text-[11px] tabular-nums">
+                <span className="ml-auto shrink-0 text-[11px] leading-none tabular-nums">
                   <span className="text-mint">+{f.added}</span>{" "}
                   <span className="text-berry">−{f.removed}</span>
                 </span>
