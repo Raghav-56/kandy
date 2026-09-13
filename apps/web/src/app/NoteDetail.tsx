@@ -10,7 +10,7 @@ import type {
   TranscriptFrame,
 } from "@kandy/core"
 import { Maximize2, Minimize2, X } from "lucide-react"
-import { ActivityLine, Button, Hint, LoadingBlock, StatusPill, Textarea } from "@/ui"
+import { ActivityLine, Button, Confirm, Hint, LoadingBlock, StatusPill, Textarea } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { AgentSelect } from "@/features/agents/AgentSelect"
 import { ModelSelect } from "@/features/agents/ModelSelect"
@@ -41,7 +41,9 @@ export type NoteDetailProps = {
   onReview: (decision: "merge" | "discard") => void
   onOpenPr: () => Promise<void>
   onDelete: () => void
-  loadDiff: () => Promise<{ diff: string; capturedAt: number | null } | undefined>
+  loadDiff: () => Promise<
+    { diff: string; capturedAt: number | null; baseBranch: string | null } | undefined
+  >
 }
 
 /**
@@ -54,13 +56,19 @@ export type NoteDetailProps = {
  */
 export function NoteDetail(p: NoteDetailProps) {
   const [tab, setTab] = useState<"stream" | "diff">("stream")
-  const [diff, setDiff] = useState<{ text: string; capturedAt: number | null } | null>(null)
+  const [diff, setDiff] = useState<{
+    text: string
+    capturedAt: number | null
+    baseBranch: string | null
+  } | null>(null)
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const [delivery, setDelivery] = useState<string | null>(null)
   const [pring, setPring] = useState(false)
   const [files, setFiles] = useState<Attached[]>([])
   const [full, setFull] = useState(false)
+  const [ask, setAsk] = useState<null | "merge" | "pr" | "discard" | "delete">(null)
+  const [busy, setBusy] = useState(false)
 
   const run = p.view.runs.find((r) => r.id === p.note.runId)
   const live = p.note.status === "running" || p.note.status === "blocked"
@@ -75,7 +83,8 @@ export function NoteDetail(p: NoteDetailProps) {
     let stale = false
     if (tab === "diff" || split) {
       void p.loadDiff().then((d) => {
-        if (!stale && d) setDiff({ text: d.diff, capturedAt: d.capturedAt })
+        if (!stale && d)
+          setDiff({ text: d.diff, capturedAt: d.capturedAt, baseBranch: d.baseBranch })
       })
     }
     return () => {
@@ -91,6 +100,40 @@ export function NoteDetail(p: NoteDetailProps) {
   useEffect(() => {
     if (reviewable) setTab("diff")
   }, [reviewable])
+
+  // What each confirmation needs to state about this particular note.
+  const base = diff?.baseBranch ?? p.forge?.defaultBranch ?? "the base branch"
+  const facts = [
+    ...(p.note.branch ? [{ label: "Branch", value: p.note.branch }] : []),
+    ...(p.note.stat
+      ? [
+          {
+            label: "Changes",
+            value: (
+              <>
+                <span className="text-mint">+{p.note.stat.insertions}</span>{" "}
+                <span className="text-berry">−{p.note.stat.deletions}</span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  in {p.note.stat.files} file{p.note.stat.files === 1 ? "" : "s"}
+                </span>
+              </>
+            ),
+          },
+        ]
+      : []),
+    ...(p.note.pr ? [{ label: "Pull request", value: `#${p.note.pr.number}` }] : []),
+  ]
+
+  async function confirmAction(action: () => void | Promise<void>) {
+    setBusy(true)
+    try {
+      await action()
+      setAsk(null)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function send() {
     const text = draft.trim()
@@ -229,20 +272,27 @@ export function NoteDetail(p: NoteDetailProps) {
           {live && run && (
             <Button onClick={() => p.onCancel(run.id)}>Stop</Button>
           )}
-          {p.forge?.available && p.note.branch && !p.note.pr && !live && (
-            <Button
-              onClick={async () => { setPring(true); await p.onOpenPr(); setPring(false) }}
-              disabled={pring}
-            >
-              {pring ? "Opening…" : "Open PR"}
-            </Button>
-          )}
+          {/* Where this work can go: two destinations and a bin, so "merge"
+              never has to mean two different things. Each asks first, and the
+              question says what will actually happen to this branch. */}
           {reviewable && (
             <>
-              <Button variant="outline" onClick={() => p.onReview("merge")}>
-                {p.note.pr ? "Merge locally" : "Merge"}
+              <Button size="sm" onClick={() => setAsk("merge")}>
+                Merge here
               </Button>
-              <Button variant="outline" onClick={() => p.onReview("discard")}>Discard</Button>
+              {p.forge?.available && !p.note.pr && (
+                <Button variant="outline" size="sm" onClick={() => setAsk("pr")} disabled={pring}>
+                  {pring ? "Opening…" : "Open a PR"}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-berry"
+                onClick={() => setAsk("discard")}
+              >
+                Discard
+              </Button>
             </>
           )}
         </div>
@@ -266,7 +316,7 @@ export function NoteDetail(p: NoteDetailProps) {
             </button>
           ))}
           <button
-            onClick={p.onDelete}
+            onClick={() => setAsk("delete")}
             className="ml-auto rounded-lg px-2.5 py-1.5 text-[11.5px] text-faint transition-colors hover:bg-[#241419] hover:text-berry"
           >
             Delete
@@ -354,6 +404,79 @@ export function NoteDetail(p: NoteDetailProps) {
       )}
     >
       {body}
+
+      <Confirm
+        open={ask === "merge"}
+        onOpenChange={(v) => !v && setAsk(null)}
+        title="Merge here"
+        body={
+          <>
+            Merges this note's branch into <b>{base}</b> on this machine. Nothing is pushed. The
+            branch and its worktree are removed afterwards; your own working tree is not touched.
+          </>
+        }
+        facts={facts}
+        confirmLabel="Merge"
+        busy={busy}
+        onConfirm={() => confirmAction(() => p.onReview("merge"))}
+      />
+
+      <Confirm
+        open={ask === "pr"}
+        onOpenChange={(v) => !v && setAsk(null)}
+        title="Open a pull request"
+        body={
+          <>
+            Pushes this branch to <b>{p.forge?.repo ?? "the remote"}</b> and opens a PR against{" "}
+            <b>{p.forge?.defaultBranch ?? base}</b>. This is the first thing kandy does that leaves
+            your machine. The note lands here automatically once the PR is merged.
+          </>
+        }
+        facts={facts}
+        confirmLabel="Push and open PR"
+        busy={busy || pring}
+        onConfirm={() =>
+          confirmAction(async () => {
+            setPring(true)
+            await p.onOpenPr()
+            setPring(false)
+          })
+        }
+      />
+
+      <Confirm
+        open={ask === "discard"}
+        onOpenChange={(v) => !v && setAsk(null)}
+        title="Discard this work"
+        body={
+          <>
+            Deletes the branch and its worktree. Everything the agent wrote is lost, and this
+            cannot be undone. The note stays, so you can run it again.
+          </>
+        }
+        facts={facts}
+        confirmLabel="Discard"
+        destructive
+        busy={busy}
+        onConfirm={() => confirmAction(() => p.onReview("discard"))}
+      />
+
+      <Confirm
+        open={ask === "delete"}
+        onOpenChange={(v) => !v && setAsk(null)}
+        title="Delete this note"
+        body={
+          <>
+            Removes the note and its history from the board.
+            {p.note.branch ? " Its branch is left in the repository." : ""} This cannot be undone.
+          </>
+        }
+        facts={[{ label: "Note", value: p.note.title }]}
+        confirmLabel="Delete"
+        destructive
+        busy={busy}
+        onConfirm={() => confirmAction(p.onDelete)}
+      />
     </aside>
   )
 }

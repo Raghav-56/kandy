@@ -240,6 +240,12 @@ function fromItem(item: Record<string, any>, started: boolean): AgentEvent[] {
  * finished turn and the file does not change mid-run.
  */
 let cachedModel: string | null | undefined
+
+/** What `~/.codex/config.toml` says Codex will run, if anything. */
+export function configuredModel(): string | null {
+  return activeModel()
+}
+
 function activeModel(): string | null {
   if (cachedModel !== undefined) return cachedModel
   try {

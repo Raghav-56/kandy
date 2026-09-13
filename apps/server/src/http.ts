@@ -266,17 +266,26 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     if (wt) {
       try {
         const [diff, stat] = await Promise.all([gitDiff(wt), diffStat(wt)])
-        return send(res, 200, { diff, stat, branch: wt.branch, capturedAt: null })
+        return send(res, 200, {
+          diff,
+          stat,
+          branch: wt.branch,
+          // Where "merge here" would put it, so the confirmation can say so.
+          baseBranch: wt.baseBranch,
+          capturedAt: null,
+        })
       } catch {
         // Worktree remembered but no longer on disk. The snapshot is all we have.
       }
     }
     const saved = deps.engine.store.savedDiff(noteId)
-    if (!saved) return send(res, 200, { diff: "", stat: "", branch: null, capturedAt: null })
+    if (!saved)
+      return send(res, 200, { diff: "", stat: "", branch: null, baseBranch: null, capturedAt: null })
     return send(res, 200, {
       diff: saved.diff,
       stat: saved.stat,
       branch: saved.branch,
+      baseBranch: null,
       capturedAt: saved.ts,
     })
   }

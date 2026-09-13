@@ -16,6 +16,8 @@ export class PrWatch {
   constructor(
     private engine: Engine,
     private everyMs = 60_000,
+    /** Called when a PR merge lands a note, so its lane and worktree follow. */
+    private onLanded?: (boardId: string, noteId: string) => void,
   ) {}
 
   start(): void {
@@ -51,6 +53,15 @@ export class PrWatch {
           const pr = await prForBranch(view.board.repoPath, note.branch!)
           if (!same(note.pr, pr)) {
             this.engine.emit(event("note.pr", { noteId: note.id, pr }))
+
+            // A PR merged on the forge is the note landing. Leaving it in
+            // review means the board disagrees with GitHub about finished work.
+            if (pr?.state === "merged" && note.status === "review") {
+              this.engine.emit(
+                event("review.decided", { noteId: note.id, decision: "merge", comment: "merged via pull request" }),
+              )
+              this.onLanded?.(view.board.id, note.id)
+            }
           }
         } catch {
           // A forge that is down is not a reason to stop watching the rest.

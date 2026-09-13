@@ -157,6 +157,8 @@ export class KandyClient {
       diff: string
       stat: string
       branch: string | null
+      /** Where a local merge would land it. Null once the worktree is gone. */
+      baseBranch: string | null
       /** Non-null when the worktree is gone and this is the review-time snapshot. */
       capturedAt: number | null
     }>(

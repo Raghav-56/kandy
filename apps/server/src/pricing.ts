@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
+import { configuredModel } from "./agents/codex.js"
 
 /**
  * Prices for agents that report tokens but not money.
@@ -115,8 +116,13 @@ const MENU: Record<string, Menu> = {
   },
   codex: {
     aliases: [],
-    keep: /^gpt-[56](\.\d+)?(-codex)?(-mini|-nano)?$|^gpt-6-[a-z]+$/,
-    drop: /(audio|realtime|search|transcribe|tts|image|embedding|instruct|chat-latest|:|-\d{8})/,
+    // Codex runs its own tuned models, not everything OpenAI prices. Offering
+    // gpt-5.6 produced "the 'gpt-5.6' model is not supported" from the API —
+    // a menu that lists things the tool rejects is worse than no menu.
+    keep: /-codex(-mini)?$/,
+    // The table also carries the same models routed through other vendors —
+    // "openrouter/openai/gpt-5.3-codex" is not something the Codex CLI takes.
+    drop: /(audio|realtime|search|transcribe|tts|image|embedding|instruct|chat-latest|:|-\d{8}|\/)/,
   },
   gemini: {
     aliases: [],
@@ -131,7 +137,12 @@ const MENU: Record<string, Menu> = {
 export function modelsFor(agent: string): string[] {
   const menu = MENU[agent]
   if (!menu) return []
-  if (!table) return menu.aliases
+
+  // The configured model is known-good even when the table has never heard of
+  // it, so it always belongs on the menu.
+  const configured = agent === "codex" ? configuredModel() : null
+  const seed = configured ? [configured] : []
+  if (!table) return [...seed, ...menu.aliases]
 
   const named = Object.entries(table)
     .filter(([name, rates]) => {
@@ -143,7 +154,7 @@ export function modelsFor(agent: string): string[] {
     .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
     .slice(0, 12)
 
-  return [...menu.aliases, ...named]
+  return [...new Set([...seed, ...menu.aliases, ...named])]
 }
 
 /**
@@ -155,12 +166,10 @@ export function modelsFor(agent: string): string[] {
  */
 export function defaultModelFor(agent: string): string | null {
   if (agent === "claude") return "opus"
-  const menu = modelsFor(agent)
-  if (agent === "codex") {
-    // Prefer a codex-tuned model, else the newest general one on the menu.
-    return menu.find((m) => m.includes("codex")) ?? menu[0] ?? null
-  }
-  return menu[0] ?? null
+  // Whatever the agent is already configured to run is the one choice we know
+  // works on this machine; a table entry is only ever a guess.
+  if (agent === "codex") return configuredModel() ?? modelsFor("codex")[0] ?? null
+  return modelsFor(agent)[0] ?? null
 }
 
 /** Rates for a model, trying the most specific name first. */

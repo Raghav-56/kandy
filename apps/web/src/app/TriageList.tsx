@@ -57,8 +57,30 @@ export function TriageList({
     )
   }
 
+  const open = view.notes.filter((n) => n.status !== "done").length
+
   return (
-    <div className="mx-auto w-full max-w-[820px] px-4 pb-16 pt-3">
+    <div className="mx-auto w-full max-w-[820px] px-4 pb-16 pt-4">
+      {/* The primary action, shaped like the thing it makes. A dashed button at
+          the bottom of a list is where you put something you hope nobody
+          needs. */}
+      <button
+        onClick={onCompose}
+        className="bg-card hover:border-grape/40 group mb-5 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-colors"
+      >
+        <Logo size={17} className="opacity-80" />
+        <span className="text-muted-foreground group-hover:text-foreground flex-1 text-[13.5px] transition-colors">
+          What should the agent do?
+        </span>
+        <Kbd>C</Kbd>
+      </button>
+
+      {open > 0 && (
+        <p className="text-muted-foreground/60 mb-3 px-3 text-[11.5px]">
+          {open} open · {view.notes.length - open} done
+        </p>
+      )}
+
       {groups.map((g) => {
         const open = !collapsed.has(g.key)
         return (
@@ -99,16 +121,6 @@ export function TriageList({
         )
       })}
 
-      <div className="px-3">
-        <button
-          onClick={onCompose}
-          className="flex w-full items-center gap-2 rounded-xl border border-dashed border-line px-3 py-2.5 text-[12.5px] text-faint transition-colors hover:border-[#3a3850] hover:text-dim"
-        >
-          <span className="text-[14px] leading-none">+</span>
-          New note
-          <Kbd className="ml-auto">C</Kbd>
-        </button>
-      </div>
     </div>
   )
 }

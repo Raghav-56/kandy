@@ -65,7 +65,9 @@ function serve(args: string[]): void {
   const slots = intFlag(args, "--slots", DEFAULT_SLOTS)
 
   const engine = new Engine()
-  const prs = new PrWatch(engine)
+  const prs: PrWatch = new PrWatch(engine, 60_000, (boardId, noteId) => {
+    runner.landed(boardId, noteId)
+  })
   const runner = new Runner(engine, slots, (boardId, noteId) => {
     void prs.refresh(boardId, noteId).catch(() => {})
   })

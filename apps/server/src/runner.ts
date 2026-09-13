@@ -18,6 +18,7 @@ import { priceUsage } from "./pricing.js"
 import {
   carryInto,
   commitLeftovers,
+  removeWorktree,
   createWorktree,
   diff as gitDiff,
   diffNumbers,
@@ -500,6 +501,20 @@ export class Runner {
     this.say(runId, "system", "cancelled by user")
     l.child.kill("SIGTERM")
     return true
+  }
+
+  /**
+   * A note landed somewhere other than here — a PR was merged on the forge.
+   * Clean up after it exactly as a local merge would.
+   */
+  landed(boardId: string, noteId: string): void {
+    const wt = this.worktrees.get(noteId)
+    const view = this.getView(boardId)
+    if (wt && view) {
+      void removeWorktree(view.board.repoPath, wt.path, true).catch(() => {})
+      this.worktrees.delete(noteId)
+    }
+    this.syncColumn(boardId, noteId)
   }
 
   /** Where a note's work lives, for diffing and review. */
