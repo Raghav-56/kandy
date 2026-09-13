@@ -1,13 +1,28 @@
+import {
+  FolderGit2,
+  Gauge,
+  LayoutList,
+  Moon,
+  Plus,
+  Settings2,
+  Sun,
+} from "lucide-react"
 import type { AgentInfo, Board, BoardView } from "@kandy/core"
-import { Badge, Button, Hint, Kbd } from "@/ui"
+import { Button, Hint, Separator, StatusPill } from "@/ui"
 import { Wordmark } from "@/brand/Logo"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
+import type { Theme } from "@/hooks/useTheme"
 import { cn, compact, money, tailPath } from "@/lib/utils"
 
+export type View = "board" | "usage" | "settings"
+
 /**
- * Standing context: which repo, what is happening across it, what it has cost,
- * and which agents are actually available. Everything here is a fact about the
- * whole board, so none of it belongs in the list.
+ * Standing context and navigation.
+ *
+ * Everything here is a fact about the whole workspace rather than about one
+ * note, which is why none of it belongs in the list. It never gets covered by
+ * anything: losing sight of what else is waiting is the one thing this app
+ * cannot afford to do.
  */
 export function Sidebar({
   boards,
@@ -15,6 +30,10 @@ export function Sidebar({
   view,
   agents,
   connected,
+  page,
+  theme,
+  onPage,
+  onTheme,
   onBoardChange,
   onNewBoard,
 }: {
@@ -23,109 +42,186 @@ export function Sidebar({
   view: BoardView | null
   agents: AgentInfo[]
   connected: boolean
+  page: View
+  theme: Theme
+  onPage: (v: View) => void
+  onTheme: (t: Theme) => void
   onBoardChange: (id: string) => void
   onNewBoard: () => void
 }) {
   const notes = view?.notes ?? []
-  const count = (f: (s: string) => boolean) => notes.filter((n) => f(n.status)).length
-  const attention = count((s) => s === "blocked" || s === "failed")
-  const review = count((s) => s === "review")
-  const running = count((s) => s === "running")
+  const n = (f: (s: string) => boolean) => notes.filter((x) => f(x.status)).length
+  const attention = n((s) => s === "blocked" || s === "failed")
+  const review = n((s) => s === "review")
+  const running = n((s) => s === "running")
 
   const runs = view?.runs ?? []
   const spend = runs.reduce((t, r) => t + (r.costUsd ?? 0), 0)
-  const tokens = runs.reduce((t, r) => t + (r.tokens ?? 0), 0)
-  const unpriced = runs.filter((r) => r.tokens !== null && r.costUsd === null).length
+  const estimated = runs.some((r) => r.costSource === "estimated")
 
   return (
-    <aside className="flex w-[228px] shrink-0 flex-col gap-5 border-r border-hairline px-3 py-3.5">
-      <div className="flex items-center justify-between px-2">
+    <aside className="bg-sidebar flex w-[244px] shrink-0 flex-col border-r">
+      <div className="flex items-center justify-between px-4 pt-4 pb-3">
         <Wordmark />
         <Hint text={connected ? "Live" : "Reconnecting…"}>
           <span
             className={cn(
-              "block h-1.5 w-1.5 rounded-full",
-              connected ? "bg-mint" : "breathe bg-lemon",
+              "size-1.5 rounded-full",
+              connected ? "bg-mint" : "bg-lemon breathe",
             )}
           />
         </Hint>
       </div>
 
-      <nav className="space-y-0.5">
-        {boards.map((b) => (
-          <button
-            key={b.id}
-            onClick={() => onBoardChange(b.id)}
-            className={cn(
-              "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] transition-colors",
-              b.id === boardId ? "bg-raised text-ink" : "text-dim hover:bg-surface hover:text-ink",
-            )}
-          >
-            <span className="truncate">{b.name}</span>
-          </button>
-        ))}
-        <button
-          onClick={onNewBoard}
-          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-faint transition-colors hover:bg-surface hover:text-dim"
-        >
-          <span className="text-[14px] leading-none">+</span> Add a repo
-        </button>
+      <nav className="space-y-0.5 px-2.5">
+        <NavItem icon={LayoutList} label="Board" active={page === "board"} onClick={() => onPage("board")}>
+          {attention > 0 ? (
+            <StatusPill tone="berry" pulse className="px-1.5 py-0 text-[10px]">
+              {attention}
+            </StatusPill>
+          ) : review > 0 ? (
+            <StatusPill tone="mint" className="px-1.5 py-0 text-[10px]">
+              {review}
+            </StatusPill>
+          ) : running > 0 ? (
+            <StatusPill tone="lemon" pulse className="px-1.5 py-0 text-[10px]">
+              {running}
+            </StatusPill>
+          ) : null}
+        </NavItem>
+        <NavItem icon={Gauge} label="Usage" active={page === "usage"} onClick={() => onPage("usage")}>
+          {spend > 0 && (
+            <span className="text-muted-foreground text-[11px] tabular-nums">
+              {estimated ? "≈" : ""}
+              {money(spend)}
+            </span>
+          )}
+        </NavItem>
+        <NavItem
+          icon={Settings2}
+          label="Settings"
+          active={page === "settings"}
+          onClick={() => onPage("settings")}
+        />
       </nav>
 
-      {view && (
-        <div className="space-y-2 px-2">
-          <p className="truncate font-mono text-[11px] text-faint" title={view.board.repoPath}>
-            {tailPath(view.board.repoPath.replace(/^\/Users\/[^/]+/, "~"), 26)}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {attention > 0 && <Badge tone="berry" dot pulse>{attention} needs you</Badge>}
-            {running > 0 && <Badge tone="lemon" dot pulse>{running} running</Badge>}
-            {review > 0 && <Badge tone="mint" dot>{review} to review</Badge>}
-          </div>
-        </div>
-      )}
+      <Separator className="my-3" />
 
-      <div className="mt-auto space-y-3 px-2">
-        {(spend > 0 || tokens > 0) && (
-          <div>
-            <p className="label">Spend</p>
-            <p className="mt-1 text-[15px] font-medium tabular-nums text-ink">
-              {money(spend) ?? "$0.00"}
-            </p>
-            {/* The caveat lives beside the number, not on it: say which slice is
-                uncertain rather than disclaiming the whole figure. */}
-            <p className="mt-0.5 text-[11px] text-faint">
-              {compact(tokens)} tokens
-              {unpriced > 0 && ` · ${unpriced} run${unpriced > 1 ? "s" : ""} unpriced`}
-            </p>
-          </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2.5">
+        <p className="label px-1.5 pb-1.5">Repos</p>
+        <div className="space-y-0.5">
+          {boards.map((b) => (
+            <button
+              key={b.id}
+              onClick={() => {
+                onBoardChange(b.id)
+                onPage("board")
+              }}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition-colors",
+                b.id === boardId && page === "board"
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+              )}
+            >
+              <FolderGit2 className="size-3.5 shrink-0 opacity-70" />
+              <span className="truncate">{b.name}</span>
+            </button>
+          ))}
+          <button
+            onClick={onNewBoard}
+            className="text-muted-foreground hover:bg-accent/60 hover:text-foreground flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition-colors"
+          >
+            <Plus className="size-3.5 shrink-0" />
+            Add a repo
+          </button>
+        </div>
+
+        {view && (
+          <p
+            className="text-muted-foreground/70 mt-3 truncate px-1.5 font-mono text-[10.5px]"
+            title={view.board.repoPath}
+          >
+            {tailPath(view.board.repoPath.replace(/^\/Users\/[^/]+/, "~"), 28)}
+          </p>
         )}
+      </div>
+
+      <div className="space-y-3 px-2.5 pb-3">
+        <Separator />
 
         <div>
-          <p className="label">Agents</p>
-          <div className="mt-1.5 space-y-1">
-            {agents.filter((a) => a.installed).map((a) => (
-              <Hint
-                key={a.id}
-                text={`${agentLabel(a.id)}${a.version ? ` — ${a.version}` : ""}${a.authed ? "" : " (not signed in)"}`}
-              >
-                <span className="flex items-center gap-2">
-                  <AgentMark agent={a.id} size={13} />
-                  <span className={cn("text-[11.5px]", a.authed ? "text-dim" : "text-faint")}>
-                    {agentLabel(a.id)}
+          <p className="label px-1.5 pb-1.5">Agents</p>
+          <div className="space-y-0.5">
+            {agents
+              .filter((a) => a.installed)
+              .map((a) => (
+                <Hint
+                  key={a.id}
+                  text={`${agentLabel(a.id)}${a.version ? ` — ${a.version}` : ""}${a.authed ? "" : " · not signed in"}`}
+                >
+                  <span className="flex items-center gap-2 px-1.5 py-0.5">
+                    <AgentMark agent={a.id} size={13} />
+                    <span
+                      className={cn(
+                        "text-[11.5px]",
+                        a.authed ? "text-muted-foreground" : "text-muted-foreground/50",
+                      )}
+                    >
+                      {agentLabel(a.id)}
+                    </span>
                   </span>
-                  {!a.authed && <span className="text-[10px] text-faint">signed out</span>}
-                </span>
-              </Hint>
-            ))}
+                </Hint>
+              ))}
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 border-t border-hairline pt-3">
-          <Kbd>⌘K</Kbd>
-          <span className="text-[11px] text-faint">for anything</span>
+        <div className="flex items-center gap-1 px-1.5">
+          <Hint text={theme === "dark" ? "Switch to light" : "Switch to dark"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onTheme(theme === "dark" ? "light" : "dark")}
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+            </Button>
+          </Hint>
+          <span className="text-muted-foreground/70 ml-auto text-[10.5px]">
+            <kbd className="bg-muted rounded border px-1 py-px text-[10px]">⌘K</kbd> for anything
+          </span>
         </div>
       </div>
     </aside>
+  )
+}
+
+function NavItem({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+  children,
+}: {
+  icon: typeof LayoutList
+  label: string
+  active: boolean
+  onClick: () => void
+  children?: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors",
+        active
+          ? "bg-accent text-accent-foreground font-medium"
+          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+      )}
+    >
+      <Icon className="size-4 shrink-0 opacity-80" />
+      <span className="flex-1">{label}</span>
+      {children}
+    </button>
   )
 }

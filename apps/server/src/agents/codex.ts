@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import type { AgentAdapter, AgentEvent } from "./types.js"
@@ -26,13 +27,17 @@ import type { AgentAdapter, AgentEvent } from "./types.js"
  * Codex reports tokens but not money, so cost stays null rather than being
  * invented from a price list that would be wrong the week it changed.
  */
+/** Set by spawn(), read by parse() — the model this process was told to use. */
+let pinnedModel: string | undefined
+
 export const codex: AgentAdapter = {
   id: "codex",
   bin: "codex",
   credentials: [path.join(homedir(), ".codex", "auth.json")],
 
-  spawn({ cwd, prompt, resume, policy }) {
+  spawn({ cwd, prompt, resume, policy, model }) {
     const full = policy === "full"
+    pinnedModel = model
 
     // `exec` and `exec resume` do NOT take the same flags: resume accepts
     // neither -s nor -C, and passing them fails the run outright with
@@ -50,6 +55,7 @@ export const codex: AgentAdapter = {
           ...(full
             ? ["--dangerously-bypass-approvals-and-sandbox"]
             : ["-c", 'sandbox_mode="workspace-write"']),
+          ...(model ? ["-m", model] : []),
           prompt,
         ],
       }
@@ -66,12 +72,15 @@ export const codex: AgentAdapter = {
         full ? "danger-full-access" : "workspace-write",
         "-C",
         cwd,
+        ...(model ? ["-m", model] : []),
         prompt,
       ],
     }
   },
 
   parse(line) {
+    // `spawn` records what it was told to run so `turn.completed` can price
+    // against the model that actually ran rather than the configured default.
     if (!line.trim()) return []
     let msg: Record<string, any>
     try {
@@ -98,14 +107,23 @@ export const codex: AgentAdapter = {
 
       case "turn.completed": {
         const u = (msg["usage"] ?? {}) as Record<string, number>
-        const tokens = (u["input_tokens"] ?? 0) + (u["output_tokens"] ?? 0)
+        const cacheRead = u["cached_input_tokens"] ?? 0
+        const cacheWrite = u["cache_write_input_tokens"] ?? 0
+        // Codex's input_tokens includes the cached buckets; back them out so
+        // each is billed at its own rate rather than twice.
+        const input = Math.max(0, (u["input_tokens"] ?? 0) - cacheRead - cacheWrite)
+        const output = u["output_tokens"] ?? 0
+        const tokens = (u["input_tokens"] ?? 0) + output
+
         out.push({
           kind: "usage",
           text: `${tokens.toLocaleString()} tokens`,
-          // Codex reports no dollar figure. Null is honest; a guess is not.
+          // Codex reports no dollar figure; kandy prices it from the tokens.
           costUsd: null,
           tokens,
           turns: 1,
+          model: pinnedModel ?? activeModel(),
+          usage: { input, output, cacheRead, cacheWrite },
         })
         out.push({ kind: "turn_end" })
         break
@@ -211,4 +229,24 @@ function fromItem(item: Record<string, any>, started: boolean): AgentEvent[] {
     default:
       return []
   }
+}
+
+/**
+ * Which model Codex will actually use.
+ *
+ * `codex exec --json` never says — the model only appears on `turn_context`
+ * lines in the rollout files, which we do not read. We never pass `-m`, so the
+ * configured default is what runs. Cached, because this is consulted on every
+ * finished turn and the file does not change mid-run.
+ */
+let cachedModel: string | null | undefined
+function activeModel(): string | null {
+  if (cachedModel !== undefined) return cachedModel
+  try {
+    const cfg = readFileSync(path.join(homedir(), ".codex", "config.toml"), "utf8")
+    cachedModel = cfg.match(/^\s*model\s*=\s*"([^"]+)"/m)?.[1] ?? null
+  } catch {
+    cachedModel = null
+  }
+  return cachedModel
 }

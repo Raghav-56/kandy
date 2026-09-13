@@ -1,9 +1,4 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
+export { cn } from "cn"
 
 export function relTime(ts: number): string {
   const s = Math.round((Date.now() - ts) / 1000)
@@ -24,6 +19,19 @@ export function duration(from: number, to: number | null): string {
 export function money(usd: number | null): string | null {
   if (usd === null) return null
   return usd < 0.01 ? "<$0.01" : `$${usd.toFixed(2)}`
+}
+
+/**
+ * Cost with its provenance attached.
+ *
+ * An estimate is marked with ≈ rather than hidden behind a disclaimer: the
+ * reader sees at a glance which numbers are billed and which are computed from
+ * tokens, and a total made of both can say how much of it is which.
+ */
+export function cost(usd: number | null, source?: string): string | null {
+  const m = money(usd)
+  if (m === null) return null
+  return source === "estimated" ? `≈${m}` : m
 }
 
 export function compact(n: number | null): string | null {

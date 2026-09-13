@@ -1,45 +1,85 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@custom-variant dark (&:where([data-theme="dark"] *), &:where([data-theme="dark"]));
 
 /*
- * kandy — a warm dark desk with paper on it.
+ * kandy — one palette, two themes.
  *
- * Easy on the eyes means: nothing is pure black or pure white, contrast is
- * enough and not more, corners are round, and the accents are candy colours
- * held at low saturation so a screen full of them still reads calm.
+ * Tailwind's @theme generates utilities that reference these variables, so a
+ * theme switch is a variable swap rather than a second set of classes. Nothing
+ * is pure black or pure white in either: a true black desk is harsh over a long
+ * session, and a true white one glares.
  */
 @theme {
-  /* Surfaces — warm, never #000. A true black desk is harsh under long use. */
   --color-bg: #131219;
   --color-surface: #1a1922;
   --color-raised: #22212d;
   --color-line: #2c2a38;
   --color-hairline: #232230;
 
-  /* Ink — off-white, so nothing glares. */
   --color-ink: #ece9f4;
   --color-dim: #9a95ad;
-  --color-faint: #635e78;
+  --color-faint: #6a6480;
 
-  /* Paper — the notes themselves. */
   --color-paper: #f7f1e3;
   --color-paper-2: #ece4d3;
   --color-paper-ink: #201d17;
 
-  /* Candy accents. Muted on purpose: saturated versions of these are a toy. */
   --color-berry: #e87fa4;
   --color-mint: #74d6ac;
   --color-lemon: #e8c56a;
   --color-sky: #7db4f0;
   --color-grape: #a794f0;
 
+  /* Tinted surfaces for the accents, so a badge never needs a bespoke hex. */
+  --color-berry-bg: #2a161f;
+  --color-mint-bg: #15241d;
+  --color-lemon-bg: #262013;
+  --color-sky-bg: #152232;
+  --color-grape-bg: #1e1a32;
+
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
 }
 
-:root { color-scheme: dark; }
+/*
+ * Light. Warm paper rather than white, and accents pushed darker so they still
+ * carry contrast against it — the same hue at the same lightness reads as a
+ * pastel smear on a pale background.
+ */
+:root[data-theme="light"] {
+  --color-bg: #f7f5f1;
+  --color-surface: #ffffff;
+  --color-raised: #f0ece5;
+  --color-line: #e0dad0;
+  --color-hairline: #eae5dc;
+
+  --color-ink: #221f1a;
+  --color-dim: #6b6559;
+  --color-faint: #98917f;
+
+  --color-paper: #fffdf7;
+  --color-paper-2: #f5efe2;
+  --color-paper-ink: #221f1a;
+
+  --color-berry: #c2527c;
+  --color-mint: #3d9c73;
+  --color-lemon: #a8802a;
+  --color-sky: #3f7fc4;
+  --color-grape: #7a63cf;
+
+  --color-berry-bg: #fbeaf0;
+  --color-mint-bg: #e6f5ee;
+  --color-lemon-bg: #f9f0dc;
+  --color-sky-bg: #e8f0fa;
+  --color-grape-bg: #eee9fb;
+}
+
 html, body, #root { height: 100%; }
 
 body {
@@ -53,6 +93,18 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Selection was the browser's default blue, which is the one colour this
+   palette does not contain. */
+::selection { background: var(--color-grape-bg); color: var(--color-ink); }
+
+/* Focus is a soft ring in the palette, and only on things you can actually
+   tab to — the old rule painted a blue outline on anything with a tabindex. */
+:where(button, a, input, textarea, select, [role="button"]):focus-visible {
+  outline: 2px solid var(--color-grape);
+  outline-offset: 1px;
+  border-radius: 8px;
+}
+
 /* Metadata voice: small caps, never shouty. */
 .label {
   font-size: 10.5px;
@@ -62,25 +114,29 @@ body {
   color: var(--color-faint);
 }
 
-/* Paper lifting off a desk, not a drop shadow. */
 .paper {
   box-shadow:
-    0 1px 1px rgb(0 0 0 / 0.4),
-    0 4px 10px -3px rgb(0 0 0 / 0.4),
-    0 14px 30px -12px rgb(0 0 0 / 0.45);
+    0 1px 1px rgb(0 0 0 / 0.35),
+    0 4px 10px -3px rgb(0 0 0 / 0.35),
+    0 14px 30px -12px rgb(0 0 0 / 0.4);
+}
+:root[data-theme="light"] .paper {
+  box-shadow:
+    0 1px 1px rgb(80 70 50 / 0.06),
+    0 3px 8px -2px rgb(80 70 50 / 0.08),
+    0 12px 24px -10px rgb(80 70 50 / 0.12);
 }
 
-*::-webkit-scrollbar { width: 9px; height: 9px; }
-*::-webkit-scrollbar-thumb { background: #2e2c3c; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
-*::-webkit-scrollbar-thumb:hover { background: #3a3850; background-clip: padding-box; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--color-faint); background-clip: padding-box; }
 *::-webkit-scrollbar-track { background: transparent; }
-* { scrollbar-width: thin; scrollbar-color: #2e2c3c transparent; }
-
-:where(button, a, input, textarea, select, [tabindex]):focus-visible {
-  outline: 2px solid var(--color-sky);
-  outline-offset: 1px;
-  border-radius: 6px;
-}
+* { scrollbar-width: thin; scrollbar-color: var(--color-line) transparent; }
 
 /* Liveness as motion along a line: "work is moving", not "notice me". */
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
@@ -90,15 +146,26 @@ body {
   position: absolute;
   inset: 0;
   background: linear-gradient(90deg, transparent, currentColor, transparent);
-  opacity: 0.6;
+  opacity: 0.55;
   animation: shimmer 1.9s linear infinite;
 }
+
+/* Three notes being written and settling. */
+@keyframes kandy-tick {
+  0%, 70%, 100% { transform: translateY(0); opacity: 0.45; }
+  35%           { transform: translateY(-55%); opacity: 1; }
+}
+.kandy-tick { animation: kandy-tick 1.1s ease-in-out infinite; }
 
 @keyframes breathe { 50% { opacity: 0.4; } }
 .breathe { animation: breathe 2s ease-in-out infinite; }
 
-@keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-.rise { animation: rise 160ms ease-out both; }
+@keyframes rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise 170ms cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer::after, .breathe, .rise, .kandy-tick { animation: none; }
+}
 
 /* Markdown from agents: tight rhythm, because these are messages in a stream
    rather than documents. */
@@ -111,14 +178,165 @@ body {
 .md ul { list-style: disc; }
 .md ol { list-style: decimal; }
 .md h1, .md h2, .md h3, .md h4 { margin: 1em 0 0.4em; font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; }
-.md strong { font-weight: 600; color: #fff; }
+.md strong { font-weight: 600; color: var(--color-ink); }
 .md em { font-style: italic; }
 .md pre {
-  margin: 0 0 0.7em; padding: 9px 11px; overflow-x: auto;
-  border-radius: 10px; border: 1px solid var(--color-hairline); background: #100f16;
+  margin: 0 0 0.7em; padding: 10px 12px; overflow-x: auto;
+  border-radius: 10px; border: 1px solid var(--color-hairline); background: var(--color-bg);
 }
 .md blockquote { margin: 0 0 0.6em; padding-left: 0.85em; border-left: 2px solid var(--color-line); color: var(--color-dim); }
 .md hr { margin: 0.9em 0; border: 0; border-top: 1px solid var(--color-hairline); }
 .md table { margin: 0 0 0.7em; border-collapse: collapse; font-size: 12px; }
-.md th, .md td { border: 1px solid var(--color-hairline); padding: 4px 8px; text-align: left; }
+.md th, .md td { border: 1px solid var(--color-hairline); padding: 5px 9px; text-align: left; }
 .md th { background: var(--color-raised); font-weight: 600; }
+/*
+ ---break---
+ */
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Geist Variable', sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+/*
+ ---break---
+ */
+/*
+ * kandy's palette, expressed in shadcn's semantic names.
+ *
+ * shadcn generates every component against --background/--foreground/--border
+ * and friends, so mapping our colours onto those names once means every
+ * component it ships is already in the right palette, in both themes, without
+ * touching a single component file.
+ *
+ * Light is the default here and dark is the override, because dark is opt-in
+ * via data-theme and "system" resolves to one of the two explicitly.
+ */
+:root {
+  --background: #f7f5f1;
+  --foreground: #221f1a;
+  --card: #ffffff;
+  --card-foreground: #221f1a;
+  --popover: #ffffff;
+  --popover-foreground: #221f1a;
+
+  /* Primary is ink-on-paper: the one filled button in the system. */
+  --primary: #221f1a;
+  --primary-foreground: #f7f5f1;
+
+  --secondary: #f0ece5;
+  --secondary-foreground: #221f1a;
+  --muted: #f0ece5;
+  --muted-foreground: #6b6559;
+  --accent: #f0ece5;
+  --accent-foreground: #221f1a;
+
+  --destructive: #c2527c;
+  --border: #e0dad0;
+  --input: #e0dad0;
+  --ring: #7a63cf;
+
+  --chart-1: #c2527c;
+  --chart-2: #3d9c73;
+  --chart-3: #a8802a;
+  --chart-4: #3f7fc4;
+  --chart-5: #7a63cf;
+
+  --radius: 0.625rem;
+
+  --sidebar: #f0ece5;
+  --sidebar-foreground: #221f1a;
+  --sidebar-primary: #221f1a;
+  --sidebar-primary-foreground: #f7f5f1;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #221f1a;
+  --sidebar-border: #e0dad0;
+  --sidebar-ring: #7a63cf;
+}
+
+:root[data-theme="dark"] {
+  --background: #131219;
+  --foreground: #ece9f4;
+  --card: #1a1922;
+  --card-foreground: #ece9f4;
+  --popover: #1a1922;
+  --popover-foreground: #ece9f4;
+
+  --primary: #ece9f4;
+  --primary-foreground: #131219;
+
+  --secondary: #22212d;
+  --secondary-foreground: #ece9f4;
+  --muted: #22212d;
+  --muted-foreground: #9a95ad;
+  --accent: #22212d;
+  --accent-foreground: #ece9f4;
+
+  --destructive: #e87fa4;
+  --border: #2c2a38;
+  --input: #2c2a38;
+  --ring: #a794f0;
+
+  --chart-1: #e87fa4;
+  --chart-2: #74d6ac;
+  --chart-3: #e8c56a;
+  --chart-4: #7db4f0;
+  --chart-5: #a794f0;
+
+  --sidebar: #16151d;
+  --sidebar-foreground: #ece9f4;
+  --sidebar-primary: #ece9f4;
+  --sidebar-primary-foreground: #131219;
+  --sidebar-accent: #22212d;
+  --sidebar-accent-foreground: #ece9f4;
+  --sidebar-border: #232230;
+  --sidebar-ring: #a794f0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}

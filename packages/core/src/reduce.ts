@@ -2,6 +2,7 @@ import {
   LANE_OF,
   type BoardView,
   type Column,
+  type CostSource,
   type DiffStat,
   type Note,
   type NoteStatus,
@@ -33,6 +34,11 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
     case "board.created":
       return view
 
+    case "board.models": {
+      if (e.data.boardId !== view.board.id) return view
+      return { ...view, board: { ...view.board, models: e.data.models } }
+    }
+
     case "board.setup": {
       if (e.data.boardId !== view.board.id) return view
       return {
@@ -61,6 +67,7 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         status: "draft",
         pos: e.data.pos,
         agent: null,
+        model: null,
         policy: "repo",
         runId: null,
         branch: null,
@@ -93,6 +100,9 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
     case "note.pr":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, pr: e.data.pr }))
 
+    case "note.model":
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, model: e.data.model }))
+
     case "note.policy":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, policy: e.data.policy }))
 
@@ -120,6 +130,8 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         costUsd: null,
         tokens: null,
         turns: null,
+        model: null,
+        costSource: "unpriced",
       }
       const withRun = { ...view, runs: [...view.runs, run] }
       return patchNote(withRun, e.data.noteId, e.ts, (n) => ({
@@ -155,6 +167,11 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         // right for both — replacing made every Codex run read "1 turn" no
         // matter how long it worked.
         turns: sum(r.turns, e.data.turns),
+        model: e.data.model ?? r.model,
+        // A run that was ever estimated stays estimated: mixing a reported
+        // figure with a computed one and calling the total exact would be the
+        // dishonest half of both.
+        costSource: worst(r.costSource, e.data.source ?? "unpriced"),
       }))
 
     case "run.session":
@@ -209,6 +226,15 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
 function asDiffStat(v: unknown): DiffStat | null {
   if (v && typeof v === "object" && "insertions" in v) return v as DiffStat
   return null
+}
+
+const CONFIDENCE: Record<CostSource, number> = { reported: 0, estimated: 1, unpriced: 2 }
+
+function worst(a: CostSource, b: CostSource): CostSource {
+  // "unpriced" only wins when nothing priced it at all.
+  if (a === "unpriced") return b
+  if (b === "unpriced") return a
+  return CONFIDENCE[a] >= CONFIDENCE[b] ? a : b
 }
 
 function sum(a: number | null, b: number | null): number | null {

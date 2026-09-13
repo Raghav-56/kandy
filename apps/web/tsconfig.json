@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // shadcn ships vendored components that are not written against this rule,
+    // and every `shadcn add` would reintroduce the breakage. Our own packages
+    // (core, server, client) still compile with it on.
+    "exactOptionalPropertyTypes": false,
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
@@ -9,5 +13,6 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/components/ui"]
 }

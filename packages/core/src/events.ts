@@ -1,5 +1,6 @@
 import type {
   AgentId,
+  CostSource,
   DiffStat,
   Lane,
   NoteStatus,
@@ -24,6 +25,7 @@ export type KandyEventMap = {
     carry?: string[]
   }
   "board.setup": { boardId: BoardId; setup: string | null; carry?: string[] }
+  "board.models": { boardId: BoardId; models: Partial<Record<AgentId, string>> }
 
   "column.created": {
     columnId: ColumnId
@@ -44,6 +46,7 @@ export type KandyEventMap = {
   "note.edited": { noteId: NoteId; title?: string; body?: string }
   "note.moved": { noteId: NoteId; columnId: ColumnId; pos: string }
   "note.assigned": { noteId: NoteId; agent: AgentId }
+  "note.model": { noteId: NoteId; model: string | null }
   "note.policy": { noteId: NoteId; policy: Policy }
   "note.status": { noteId: NoteId; status: NoteStatus }
   "note.deleted": { noteId: NoteId }
@@ -74,7 +77,14 @@ export type KandyEventMap = {
   "review.opened": { noteId: NoteId; runId: RunId; branch: string; stat: DiffStat }
   /** A PR was opened from this note, or its state changed on the forge. */
   "note.pr": { noteId: NoteId; pr: PullRequest | null }
-  "run.metrics": { runId: RunId; costUsd: number | null; tokens: number | null; turns: number | null }
+  "run.metrics": {
+    runId: RunId
+    costUsd: number | null
+    tokens: number | null
+    turns: number | null
+    model?: string | null
+    source?: CostSource
+  }
   "review.decided": {
     noteId: NoteId
     decision: "merge" | "discard" | "revise"

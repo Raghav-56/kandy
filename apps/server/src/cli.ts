@@ -5,6 +5,7 @@ import { Runner } from "./runner.js"
 import { createHttpServer } from "./http.js"
 import { DB_PATH } from "./paths.js"
 import { hasWebBuild } from "./static.js"
+import { warmPrices } from "./pricing.js"
 import { banner, berry, bold, dim, faint, lemon, mint } from "./cli/banner.js"
 import { cmdList, cmdNew, cmdOpen, cmdStatus } from "./cli/commands.js"
 import { DEFAULT_PORT } from "./cli/daemon.js"
@@ -76,6 +77,9 @@ function serve(args: string[]): void {
   }
 
   prs.start()
+  // Fetched once a day and cached; failing is silent, since pricing a turn
+  // must never be able to stop an agent from running.
+  void warmPrices()
   const server = createHttpServer({ engine, runner, prs })
   server.listen(port, "127.0.0.1", () => {
     process.stdout.write(banner(`http://127.0.0.1:${port}`))

@@ -21,6 +21,8 @@ export type Commands = {
   "POST /notes/:id/move": { req: { columnId: ColumnId; before?: NoteId; after?: NoteId }; res: {} }
   "POST /notes/:id/assign": { req: { agent: AgentId }; res: {} }
   "POST /notes/:id/policy": { req: { policy: Policy }; res: {} }
+  "POST /notes/:id/model": { req: { model: string | null }; res: {} }
+  "POST /boards/:id/models": { req: { models: Record<string, string> }; res: {} }
   /** Push the note's branch and open a PR for it. */
   "POST /notes/:id/pr": { req: { draft?: boolean }; res: { pr: PullRequest } }
   "POST /notes/:id/delete": { req: {}; res: {} }

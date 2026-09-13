@@ -163,6 +163,14 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     return send(res, 200, await detectForge(view.board.repoPath))
   }
 
+  // POST /boards/:id/models
+  if (req.method === "POST" && parts[0] === "boards" && parts[2] === "models") {
+    const b = await json<{ models: Record<string, string> }>(req)
+    if (!deps.engine.view(parts[1]!)) return fail(res, 404, "board_not_found", "no such board")
+    const e = emit(deps, event("board.models", { boardId: parts[1]!, models: b?.models ?? {} }))
+    return send(res, 200, { ok: true, seq: e.seq })
+  }
+
   // POST /boards/:id/setup
   if (req.method === "POST" && parts[0] === "boards" && parts[2] === "setup") {
     const body = await json<{ setup: string | null; carry?: string[] }>(req)
@@ -329,6 +337,13 @@ async function noteAction(
         if (now?.pr) return send(res, 200, { ok: true, seq: deps.engine.head(), pr: now.pr })
         return fail(res, 409, "internal", message)
       }
+    }
+
+    case "model": {
+      const b = await json<{ model: string | null }>(req)
+      const model = b?.model?.trim() || null
+      const e = emit(deps, event("note.model", { noteId, model }))
+      return send(res, 200, { ok: true, seq: e.seq })
     }
 
     case "policy": {

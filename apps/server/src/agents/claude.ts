@@ -28,7 +28,7 @@ export const claude: AgentAdapter = {
     path.join(homedir(), ".claude.json"),
   ],
 
-  spawn({ cwd, prompt, resume, policy }) {
+  spawn({ cwd, prompt, resume, policy, model }) {
     return {
       command: "claude",
       args: [
@@ -47,6 +47,7 @@ export const claude: AgentAdapter = {
         policy === "full" ? "bypassPermissions" : "acceptEdits",
         // Echo our own messages back so the transcript shows steering in place.
         "--replay-user-messages",
+        ...(model ? ["--model", model] : []),
         ...(resume ? ["--resume", resume] : []),
       ],
       env: { CLAUDE_PROJECT_DIR: cwd },
@@ -130,6 +131,7 @@ export const claude: AgentAdapter = {
             costUsd: cost,
             tokens,
             turns: typeof msg["num_turns"] === "number" ? msg["num_turns"] : null,
+            model: typeof msg["model"] === "string" ? msg["model"] : null,
           })
         }
         if (msg["is_error"]) {

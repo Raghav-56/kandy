@@ -8,11 +8,13 @@ import {
   notesIn,
   type AgentId,
   type BoardView,
+  type CostSource,
   type Delivery,
   type DiffStat,
 } from "@kandy/core"
 import type { Engine } from "./engine.js"
 import { adapter } from "./agents/index.js"
+import { priceUsage } from "./pricing.js"
 import {
   carryInto,
   commitLeftovers,
@@ -223,10 +225,15 @@ export class Runner {
       ? view.runs.filter((r) => r.noteId === q.noteId && r.agentSessionId).at(-1)?.agentSessionId
       : undefined
 
+    const agentId = q.agent
     const spec = a.spawn({
       cwd: worktree.path,
       prompt: q.prompt ?? note.body ?? note.title,
       policy: note.policy ?? "repo",
+      // Note pin wins over the board default; neither means the agent's own.
+      ...(note.model ?? view.board.models?.[agentId]
+        ? { model: note.model ?? view.board.models?.[agentId] }
+        : {}),
       ...(prior ? { resume: prior } : {}),
     })
 
@@ -341,17 +348,33 @@ export class Runner {
                 this.emit(event("run.tool", { runId, tool: ev.tool, status: ev.status }))
               }
               break
-            case "usage":
-              this.say(runId, "system", ev.text)
+            case "usage": {
+              // Price it ourselves when the agent only counted tokens, and
+              // record which of the two the number is.
+              const priced =
+                ev.costUsd ?? (ev.usage ? priceUsage(ev.model ?? null, ev.usage) : null)
+              const source: CostSource =
+                ev.costUsd !== null ? "reported" : priced !== null ? "estimated" : "unpriced"
+
+              this.say(
+                runId,
+                "system",
+                priced !== null && ev.costUsd === null
+                  ? `${ev.text} · ≈$${priced.toFixed(4)}`
+                  : ev.text,
+              )
               this.emit(
                 event("run.metrics", {
                   runId,
-                  costUsd: ev.costUsd,
+                  costUsd: priced,
                   tokens: ev.tokens,
                   turns: ev.turns,
+                  model: ev.model ?? null,
+                  source,
                 }),
               )
               break
+            }
             case "turn_end":
               // One run is one turn. Closing stdin lets the agent exit, which
               // finishes the run, frees the slot, and moves the note to review.

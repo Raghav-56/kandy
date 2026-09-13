@@ -66,10 +66,10 @@ export function Composer({
             ))}
           </select>
 
-          <Button tone="ghost" onClick={() => submit(false)} disabled={!text.trim()}>
+          <Button variant="ghost" onClick={() => submit(false)} disabled={!text.trim()}>
             Add
           </Button>
-          <Button tone="primary" onClick={() => submit(true)} disabled={!text.trim() || !agent}>
+          <Button variant="default" onClick={() => submit(true)} disabled={!text.trim() || !agent}>
             Add &amp; run
           </Button>
           <span className="ml-auto text-[11px] text-faint">⌘↵ run · ⇧⌘↵ add · esc</span>

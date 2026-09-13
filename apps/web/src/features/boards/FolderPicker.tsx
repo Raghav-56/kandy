@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import type { KandyClient } from "@kandy/client"
 import type { DirEntry, Listing } from "@kandy/core"
-import { Button } from "@/ui"
+import { Button, LoadingBlock } from "@/ui"
 import { cn } from "@/lib/utils"
 
 /**
@@ -62,7 +62,7 @@ export function FolderPicker({
         <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-dim" dir="rtl">
           {listing?.path.replace(/^\/Users\/[^/]+/, "~") ?? "…"}
         </span>
-        <Button size="sm" tone="ghost" onClick={() => void chooseNatively()} disabled={native}>
+        <Button size="sm" variant="ghost" onClick={() => void chooseNatively()} disabled={native}>
           {native ? "Choosing…" : "Browse…"}
         </Button>
       </header>
@@ -82,7 +82,7 @@ export function FolderPicker({
       )}
 
       <div className="max-h-[240px] overflow-y-auto">
-        {loading && <p className="px-3 py-6 text-center text-[12px] text-faint">Reading…</p>}
+        {loading && <LoadingBlock className="py-8" />}
 
         {!loading && listing?.entries.length === 0 && (
           <p className="px-3 py-6 text-center text-[12px] text-faint">Nothing in here.</p>
@@ -97,7 +97,7 @@ export function FolderPicker({
       {listing?.isRepo && (
         <div className="flex items-center gap-2 border-t border-hairline bg-raised px-2.5 py-2">
           <span className="flex-1 text-[11.5px] text-mint">This folder is a repository</span>
-          <Button size="sm" tone="primary" onClick={() => onPick(listing.path)}>
+          <Button size="sm" variant="default" onClick={() => onPick(listing.path)}>
             Use this
           </Button>
         </div>

@@ -10,9 +10,14 @@ export type AgentEvent =
   | {
       kind: "usage"
       text: string
+      /** Dollars, when the agent actually reports them. Null means "price it". */
       costUsd: number | null
       tokens: number | null
       turns: number | null
+      /** The model that ran, so a token-only agent can still be priced. */
+      model?: string | null
+      /** Per-bucket tokens; cache tiers are billed at different rates. */
+      usage?: { input: number; output: number; cacheRead: number; cacheWrite: number }
     }
   /**
    * The agent finished a turn. Agents we hold stdin open for (to steer them)
@@ -30,6 +35,8 @@ export type SpawnOptions = {
   resume?: string
   /** How much the user has allowed this note to do. */
   policy: Policy
+  /** Model to run, or undefined to let the agent use its own default. */
+  model?: string | undefined
 }
 
 /**

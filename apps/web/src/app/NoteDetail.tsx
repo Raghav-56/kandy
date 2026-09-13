@@ -9,14 +9,16 @@ import type {
   Policy,
   TranscriptFrame,
 } from "@kandy/core"
-import { ActivityLine, Badge, Button, Hint, Select, Textarea } from "@/ui"
+import { Maximize2, Minimize2, X } from "lucide-react"
+import { ActivityLine, Button, Hint, LoadingBlock, StatusPill, Textarea } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
+import { AgentSelect } from "@/features/agents/AgentSelect"
 import { DiffView } from "@/features/diff/DiffView"
 import { InlineEdit } from "@/features/notes/InlineEdit"
 import { PrBadge } from "@/features/notes/PrBadge"
 import { LOOK } from "@/features/notes/status"
 import { Transcript } from "@/features/stream/Transcript"
-import { cn, compact, duration, money } from "@/lib/utils"
+import { cn, compact, cost, duration } from "@/lib/utils"
 import { useTick } from "@/hooks/useTick"
 
 export type NoteDetailProps = {
@@ -92,9 +94,9 @@ export function NoteDetail(p: NoteDetailProps) {
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={look.tone} dot pulse={p.note.status === "running"}>
+              <StatusPill tone={look.tone} pulse={p.note.status === "running"}>
                 {look.label}
-              </Badge>
+              </StatusPill>
               {p.note.agent && (
                 <span className="flex items-center gap-1.5 text-[11.5px] text-dim">
                   <AgentMark agent={p.note.agent} size={12} />
@@ -116,13 +118,13 @@ export function NoteDetail(p: NoteDetailProps) {
           </div>
 
           <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
-            <Hint text={full ? "Exit full screen" : "Full screen — stream beside diff"}>
-              <Button tone="ghost" size="icon" onClick={() => setFull((f) => !f)}>
-                {full ? "⤡" : "⤢"}
+            <Hint text={full ? "Narrow" : "Widen — stream beside diff"}>
+              <Button variant="ghost" size="icon" onClick={() => setFull((f) => !f)}>
+                {full ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
               </Button>
             </Hint>
-            <Button tone="ghost" size="icon" onClick={p.onClose} aria-label="Close">
-              ✕
+            <Button variant="ghost" size="icon" onClick={p.onClose} aria-label="Close">
+              <X className="size-3.5" />
             </Button>
           </div>
         </div>
@@ -135,9 +137,25 @@ export function NoteDetail(p: NoteDetailProps) {
             {run.turns !== null && <><Sep /><span className="tabular-nums">{run.turns} turns</span></>}
             {run.tokens !== null && <><Sep /><span className="tabular-nums">{compact(run.tokens)} tok</span></>}
             {run.costUsd !== null ? (
-              <><Sep /><span className="tabular-nums">{money(run.costUsd)}</span></>
+              <>
+                <Sep />
+                <Hint
+                  text={
+                    run.costSource === "estimated"
+                      ? `Estimated from ${run.tokens?.toLocaleString() ?? "?"} tokens${run.model ? ` at ${run.model} rates` : ""} — this agent reports no cost.`
+                      : "Reported by the agent."
+                  }
+                >
+                  <span className="tabular-nums">{cost(run.costUsd, run.costSource)}</span>
+                </Hint>
+              </>
             ) : run.tokens !== null ? (
-              <><Sep /><Hint text="This agent reports tokens but no cost."><span className="text-faint">unpriced</span></Hint></>
+              <>
+                <Sep />
+                <Hint text={`No price for ${run.model ?? "this model"}, so the cost is unknown.`}>
+                  <span className="text-faint">unpriced</span>
+                </Hint>
+              </>
             ) : null}
           </div>
         )}
@@ -158,22 +176,17 @@ export function NoteDetail(p: NoteDetailProps) {
         )}
 
         <div className="mt-3.5 flex flex-wrap items-center gap-2">
-          <Select
-            value={p.note.agent ?? ""}
-            onChange={(e) => p.onAssign(e.target.value as AgentId)}
-          >
-            <option value="" disabled>agent</option>
-            {p.agents.map((a) => (
-              <option key={a.id} value={a.id} disabled={!a.installed}>
-                {agentLabel(a.id)}{a.installed ? "" : " — not installed"}
-              </option>
-            ))}
-          </Select>
+          <AgentSelect
+            value={p.note.agent}
+            agents={p.agents}
+            onChange={p.onAssign}
+            className="w-[168px]"
+          />
 
           <PolicyToggle value={p.note.policy ?? "repo"} onChange={p.onPolicy} disabled={live} />
 
           {!live && !reviewable && (
-            <Button tone="primary" onClick={() => p.onRun()} disabled={!p.note.agent}>
+            <Button variant="default" onClick={() => p.onRun()} disabled={!p.note.agent}>
               {p.note.status === "failed" ? "Retry" : "Run"}
             </Button>
           )}
@@ -190,10 +203,10 @@ export function NoteDetail(p: NoteDetailProps) {
           )}
           {reviewable && (
             <>
-              <Button tone="mint" onClick={() => p.onReview("merge")}>
+              <Button variant="outline" onClick={() => p.onReview("merge")}>
                 {p.note.pr ? "Merge locally" : "Merge"}
               </Button>
-              <Button tone="berry" onClick={() => p.onReview("discard")}>Discard</Button>
+              <Button variant="outline" onClick={() => p.onReview("discard")}>Discard</Button>
             </>
           )}
         </div>
@@ -239,7 +252,7 @@ export function NoteDetail(p: NoteDetailProps) {
         {(tab === "diff" || split) && (
           <div className={cn("flex min-w-0 flex-col", split ? "flex-[1.25]" : "flex-1")}>
             {diff === null ? (
-              <p className="flex-1 px-5 py-6 text-center text-[12px] text-faint">Loading…</p>
+              <LoadingBlock label="Reading the diff" />
             ) : (
               <DiffView diff={diff.text} capturedAt={diff.capturedAt} />
             )}
@@ -273,7 +286,7 @@ export function NoteDetail(p: NoteDetailProps) {
           }}
         />
         <div className="mt-2 flex items-center gap-2">
-          <Button tone="primary" onClick={() => void send()} disabled={!draft.trim() || sending}>
+          <Button variant="default" onClick={() => void send()} disabled={!draft.trim() || sending}>
             Send
           </Button>
           <span className="text-[11px] text-faint">{delivery ?? "⌘↵ to send"}</span>
@@ -282,16 +295,15 @@ export function NoteDetail(p: NoteDetailProps) {
     </div>
   )
 
-  if (full) {
-    return (
-      <div className="fixed inset-0 z-40 flex bg-bg">
-        <div className="flex min-h-0 flex-1 flex-col">{body}</div>
-      </div>
-    )
-  }
-
+  // Never an overlay. Covering the sidebar to read a diff means losing the one
+  // thing the app is for — seeing what else is waiting on you.
   return (
-    <aside className="flex w-[460px] shrink-0 flex-col border-l border-hairline bg-surface">
+    <aside
+      className={cn(
+        "bg-card flex shrink-0 flex-col border-l transition-[width] duration-200",
+        full ? "w-[min(1000px,62vw)]" : "w-[420px]",
+      )}
+    >
       {body}
     </aside>
   )
@@ -324,7 +336,7 @@ function PolicyToggle({
       }
     >
       <Button
-        tone={full ? "soft" : "ghost"}
+        variant={full ? "outline" : "ghost"}
         disabled={disabled}
         onClick={() => onChange(full ? "repo" : "full")}
         className={cn(full && "border-[#4a3a20] bg-[#241d10] text-lemon")}

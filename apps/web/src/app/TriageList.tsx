@@ -43,7 +43,7 @@ export function TriageList({
         title="Nothing on the board"
         body="A note is one job for one agent. Write what you want done — it runs in its own worktree, on its own branch, and comes back as a diff."
         action={
-          <Button tone="primary" size="md" onClick={onCompose}>
+          <Button variant="default" size="default" onClick={onCompose}>
             Write the first note
           </Button>
         }

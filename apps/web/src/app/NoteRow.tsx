@@ -1,9 +1,9 @@
 import type { ActivityFrame, Note, Run } from "@kandy/core"
-import { Badge, ActivityLine } from "@/ui"
+import { StatusPill, ActivityLine } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { PrBadge } from "@/features/notes/PrBadge"
 import { LOOK } from "@/features/notes/status"
-import { cn, compact, duration, money } from "@/lib/utils"
+import { cn, compact, cost, duration } from "@/lib/utils"
 import { useTick } from "@/hooks/useTick"
 
 /**
@@ -80,9 +80,9 @@ export function NoteRow({
           </span>
         ) : (
           <span className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <Badge tone={look.tone} dot pulse={note.status === "running"}>
+            <StatusPill tone={look.tone} pulse={note.status === "running"}>
               {look.label}
-            </Badge>
+            </StatusPill>
             {note.agent && <span className="text-[11px] text-faint">{agentLabel(note.agent)}</span>}
             {note.stat && note.stat.files > 0 && (
               <span className="text-[11px] tabular-nums text-faint">
@@ -95,7 +95,9 @@ export function NoteRow({
               <span className="text-[11px] tabular-nums text-faint">{compact(run.tokens)} tok</span>
             )}
             {run?.costUsd != null && (
-              <span className="text-[11px] tabular-nums text-faint">{money(run.costUsd)}</span>
+              <span className="text-[11px] tabular-nums text-faint">
+                {cost(run.costUsd, run.costSource)}
+              </span>
             )}
             {note.pr && <PrBadge pr={note.pr} onDark />}
           </span>

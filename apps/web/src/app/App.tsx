@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { KandyClient } from "@kandy/client"
 import type { AgentId, AgentInfo, Board, Forge } from "@kandy/core"
-import { Button, Empty } from "@/ui"
+import { Button, Empty, LoadingBlock } from "@/ui"
 import { Backdrop } from "@/brand/Backdrop"
 import { Logo } from "@/brand/Logo"
 import { Composer } from "@/features/notes/Composer"
 import { NewBoardDialog } from "@/features/boards/NewBoardDialog"
 import { useBoard } from "@/hooks/useBoard"
+import { useTheme } from "@/hooks/useTheme"
+import { TooltipProvider } from "@/ui"
 import { CommandPalette } from "./CommandPalette"
+import { SettingsPage } from "./SettingsPage"
+import { UsagePage } from "./UsagePage"
 import { NoteDetail } from "./NoteDetail"
-import { Sidebar } from "./Sidebar"
+import { Sidebar, type View } from "./Sidebar"
 import { TriageList } from "./TriageList"
 
 export function App() {
@@ -22,6 +26,8 @@ export function App() {
   const [composing, setComposing] = useState(false)
   const [newBoard, setNewBoard] = useState(false)
   const [palette, setPalette] = useState(false)
+  const [page, setPage] = useState<View>("board")
+  const { theme, setTheme } = useTheme()
 
   const { view, connected, error, act, transcript, activity, loadTranscript, clearError } =
     useBoard(boardId)
@@ -102,6 +108,7 @@ export function App() {
   }
 
   return (
+    <TooltipProvider delayDuration={250}>
     <div className="flex h-full">
       <Backdrop />
 
@@ -111,6 +118,10 @@ export function App() {
         view={view}
         agents={agents}
         connected={connected}
+        page={page}
+        theme={theme}
+        onPage={setPage}
+        onTheme={setTheme}
         onBoardChange={(id) => {
           setBoardId(id)
           setSelected(null)
@@ -129,7 +140,18 @@ export function App() {
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {view ? (
+          {page === "usage" ? (
+            <UsagePage view={view} />
+          ) : page === "settings" ? (
+            <SettingsPage
+              view={view}
+              agents={agents}
+              client={client}
+              theme={theme}
+              onTheme={setTheme}
+              onSaved={() => void refreshBoards()}
+            />
+          ) : view ? (
             <TriageList
               view={view}
               activity={activity}
@@ -144,13 +166,13 @@ export function App() {
               title="Point kandy at a repository"
               body="Every note you write becomes one job for one agent — run in its own worktree, on its own branch, so several can work at once without colliding."
               action={
-                <Button tone="primary" size="md" onClick={() => setNewBoard(true)}>
+                <Button variant="default" size="default" onClick={() => setNewBoard(true)}>
                   Choose a repo
                 </Button>
               }
             />
           ) : (
-            <p className="pt-24 text-center text-[12px] text-faint">Loading…</p>
+            <LoadingBlock className="pt-24" label="Opening the board" />
           )}
         </div>
       </main>
@@ -229,5 +251,6 @@ export function App() {
         }}
       />
     </div>
+    </TooltipProvider>
   )
 }

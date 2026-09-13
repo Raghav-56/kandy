@@ -32,6 +32,7 @@ export class Projections {
           repoPath: e.data.repoPath,
           setup: e.data.setup ?? null,
           carry: e.data.carry ?? [],
+          models: {},
           createdAt: e.ts,
         },
         columns: [],

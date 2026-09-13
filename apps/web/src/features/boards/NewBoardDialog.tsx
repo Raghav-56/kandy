@@ -129,14 +129,14 @@ export function NewBoardDialog({
 
         <div className="mt-6 flex items-center gap-2">
           <Button
-            tone="primary"
-            size="md"
+            variant="default"
+            size="default"
             disabled={!check?.isRepo || busy}
             onClick={() => void create()}
           >
             {busy ? "Creating…" : "Create board"}
           </Button>
-          <Button tone="ghost" size="md" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" size="default" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
         </div>

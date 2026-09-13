@@ -63,6 +63,8 @@ export type Board = {
    * where the filesystem supports it, so this is close to free.
    */
   carry: string[]
+  /** Default model per agent, e.g. { claude: "opus", codex: "gpt-6-astra" }. */
+  models: Partial<Record<AgentId, string>>
   createdAt: number
 }
 
@@ -107,6 +109,8 @@ export type Note = {
   status: NoteStatus
   pos: string
   agent: AgentId | null
+  /** Pinned model, or null to use the board default for the chosen agent. */
+  model: string | null
   policy: Policy
   runId: RunId | null
   /** Set when a run starts; the deliverable. */
@@ -161,11 +165,24 @@ export type Run = {
   endedAt: number | null
   exitCode: number | null
   error: string | null
-  /** What the turn cost, as reported by the agent. Null if it doesn't say. */
+  /** What the turn cost. Null when we can neither read nor price it. */
   costUsd: number | null
   tokens: number | null
   turns: number | null
+  /** The model that actually ran, when the agent tells us. */
+  model: string | null
+  /**
+   * Where the cost figure came from.
+   *
+   * Claude reports dollars directly; Codex reports only tokens, so its cost is
+   * computed from a price table and is an estimate. Tracking which is which
+   * means the UI can say precisely how much of a total is uncertain instead of
+   * disclaiming the whole number.
+   */
+  costSource: CostSource
 }
+
+export type CostSource = "reported" | "estimated" | "unpriced"
 
 /** What a client renders. A projection of the event log, never written directly. */
 export type BoardView = {

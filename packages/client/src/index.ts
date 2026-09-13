@@ -121,6 +121,12 @@ export class KandyClient {
   openPr(noteId: string, draft = false) {
     return this.req<{ pr: PullRequest; seq: number }>("POST", `/notes/${noteId}/pr`, { draft })
   }
+  setModel(noteId: string, model: string | null) {
+    return this.req<{ seq: number }>("POST", `/notes/${noteId}/model`, { model })
+  }
+  setBoardModels(boardId: string, models: Record<string, string>) {
+    return this.req<{ seq: number }>("POST", `/boards/${boardId}/models`, { models })
+  }
   setPolicy(noteId: string, policy: Policy) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/policy`, { policy })
   }
@@ -229,6 +235,8 @@ const EVENT_TYPES = [
   "run.session",
   "run.metrics",
   "note.policy",
+  "note.model",
+  "board.models",
   "note.pr",
   "board.setup",
   "run.blocked",
