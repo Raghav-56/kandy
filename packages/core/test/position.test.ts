@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { between, sequence } from "../src/position.ts"
+import { between, sequence } from "../dist/position.js"
 
 /** Every key is strictly greater than the one before it. */
 function assertSorted(keys: string[], message: string): void {

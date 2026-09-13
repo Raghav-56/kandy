@@ -90,6 +90,23 @@ Requires Node >= 22, pnpm, and at least one agent CLI installed and logged in
 (`claude` or `codex`). kandy never reads or stores your credentials — it spawns
 the CLI you already authenticated, and the child inherits it.
 
+## Tests
+
+```sh
+pnpm test      # 78 tests across core and server
+```
+
+They cover the reducer's state machine, cost provenance, both agent adapters
+parsed against their real captured output, pricing and model menus, projections
+and replay, attachment path safety, and worktree isolation against an actual
+git repository.
+
+## Using kandy from another agent
+
+`.claude/skills/kandy/SKILL.md` lets Claude Code (or anything that reads skill
+files) queue work onto a board rather than doing it inline. Copy it to
+`~/.claude/skills/kandy/` to have it everywhere.
+
 ## Docs
 
 | | |

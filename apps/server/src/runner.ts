@@ -6,6 +6,7 @@ import {
   id,
   laneColumn,
   notesIn,
+  promptFor,
   type AgentId,
   type BoardView,
   type CostSource,
@@ -259,7 +260,7 @@ export class Runner {
     const agentId = q.agent
     const spec = a.spawn({
       cwd: worktree.path,
-      prompt: q.prompt ?? note.body ?? note.title,
+      prompt: q.prompt ?? promptFor(note),
       policy: note.policy ?? "repo",
       // Note pin wins over the board default; neither means the agent's own.
       ...(note.model ?? view.board.models?.[agentId]

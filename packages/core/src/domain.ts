@@ -103,8 +103,12 @@ export type Note = {
   id: NoteId
   boardId: BoardId
   columnId: ColumnId
+  /** Short name for the note. Shown in the list; also given to the agent. */
   title: string
-  /** The prompt handed to the agent. */
+  /**
+   * The detail: constraints, acceptance criteria, links, anything the agent
+   * needs beyond the one-line task. Optional — a title alone is a valid note.
+   */
   body: string
   status: NoteStatus
   pos: string
@@ -192,4 +196,16 @@ export type BoardView = {
   runs: Run[]
   /** Sequence number this view reflects; the client streams from here. */
   seq: number
+}
+
+/**
+ * What the agent is actually told to do.
+ *
+ * Title and detail are two fields, and the agent receives both. The previous
+ * `body ?? title` lost the title whenever a detail existed — and since `??`
+ * does not treat an empty string as absent, a note written as a single line
+ * sent the agent nothing at all.
+ */
+export function promptFor(note: { title: string; body: string }): string {
+  return [note.title.trim(), note.body.trim()].filter(Boolean).join("\n\n")
 }

@@ -51,6 +51,7 @@ function usage(): void {
   process.stdout.write(
     row('kandy "fix the login flash"', "write a note here and run it") +
       row("kandy new <text>", "write a note without running it") +
+      row('  "task" $\'\\n\'"detail"', "first line names it, the rest is detail") +
       row("kandy ls [--all]", "what's on the board for this repo") +
       row("kandy status", "daemon, repos and agents") +
       row("kandy open", "open the board in a browser") +

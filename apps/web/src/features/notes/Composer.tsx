@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { CornerDownLeft } from "lucide-react"
 import type { AgentId, AgentInfo } from "@kandy/core"
 import { Button, Dialog, DialogContent, DialogTitle, Kbd, Textarea } from "@/ui"
@@ -8,9 +8,10 @@ import { ModelSelect } from "@/features/agents/ModelSelect"
 /**
  * Writing a note is writing a prompt.
  *
- * One writing surface, not a form: the first line becomes the title and the
- * rest becomes the prompt, the same rule the CLI uses, so a note reads the same
- * wherever it was written.
+ * Two named fields rather than one box split on a newline. The split was
+ * invisible magic — you could not tell what you were defining until after you
+ * had typed it — and the agent is given both, so the distinction is about what
+ * shows in the list, not about what gets sent.
  *
  * Built on the same Dialog as every other modal — the hand-rolled overlay it
  * used to have had its own dimming, its own animation and no focus trap, and
@@ -34,17 +35,16 @@ export function Composer({
     run: boolean,
   ) => void
 }) {
-  const [text, setText] = useState("")
+  const [title, setTitle] = useState("")
+  const [body, setBody] = useState("")
   const [agent, setAgent] = useState<AgentId | "">(defaultAgent ?? "")
   const [model, setModel] = useState<string | null>(null)
-
-  const [firstLine = "", ...restLines] = text.trim().split(/\r?\n/)
-  const title = firstLine.trim()
-  const body = restLines.join("\n").trim()
+  const detail = useRef<HTMLTextAreaElement>(null)
 
   const submit = (run: boolean) => {
-    if (!title) return
-    onCreate(title, body, (agent || null) as AgentId | null, model, run)
+    const t = title.trim()
+    if (!t) return
+    onCreate(t, body.trim(), (agent || null) as AgentId | null, model, run)
   }
 
   return (
@@ -56,24 +56,36 @@ export function Composer({
         {/* Present for screen readers; the placeholder is the visible prompt. */}
         <DialogTitle className="sr-only">New note</DialogTitle>
 
-        <Textarea
-          autoFocus
-          rows={5}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="What should the agent do?"
-          className="min-h-[132px] resize-none rounded-none border-0 bg-transparent px-5 py-4 text-[15px] leading-[1.55] shadow-none focus-visible:ring-0"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(!e.shiftKey)
-            e.stopPropagation()
-          }}
-        />
+        <div className="space-y-3 px-5 pt-5 pb-4">
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="What should the agent do?"
+            className="placeholder:text-muted-foreground/70 w-full bg-transparent text-[16px] font-medium tracking-[-0.01em] outline-none"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) {
+                e.preventDefault()
+                detail.current?.focus()
+              }
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(!e.shiftKey)
+              e.stopPropagation()
+            }}
+          />
 
-        {body && (
-          <p className="text-muted-foreground/70 -mt-1 px-5 pb-3 text-[11px]">
-            First line is the title; the rest is the prompt.
-          </p>
-        )}
+          <Textarea
+            ref={detail}
+            rows={4}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Detail — constraints, how to verify it, anything the agent needs. Optional."
+            className="min-h-[92px] resize-none border-0 bg-transparent p-0 text-[13.5px] leading-[1.6] shadow-none focus-visible:ring-0"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(!e.shiftKey)
+              e.stopPropagation()
+            }}
+          />
+        </div>
 
         <div className="bg-muted/50 flex flex-wrap items-center gap-2 border-t px-4 py-3">
           <AgentSelect
@@ -90,10 +102,10 @@ export function Composer({
           />
 
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => submit(false)} disabled={!title}>
+            <Button variant="ghost" size="sm" onClick={() => submit(false)} disabled={!title.trim()}>
               Save
             </Button>
-            <Button size="sm" onClick={() => submit(true)} disabled={!title || !agent}>
+            <Button size="sm" onClick={() => submit(true)} disabled={!title.trim() || !agent}>
               Save &amp; run
               <CornerDownLeft className="size-3 opacity-70" />
             </Button>

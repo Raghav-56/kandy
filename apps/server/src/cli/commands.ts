@@ -62,8 +62,9 @@ export async function cmdNew(
     return 1
   }
 
-  // First line is the title, the rest is the prompt — same rule as the web
-  // composer, so a note reads the same wherever it was written.
+  // A shell gives us one string, so the first line is the title and the rest
+  // is the detail. The agent is given both either way; the split only decides
+  // what shows in the list.
   const [first = "", ...rest] = title.split("\n")
   const { noteId } = await api.createNote(here.board.id, column, first.trim(), rest.join("\n").trim())
 
