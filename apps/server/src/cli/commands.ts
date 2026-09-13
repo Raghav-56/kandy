@@ -158,16 +158,27 @@ function dur(ms: number): string {
 
 const usd = (n: number, est: boolean) => `${est ? "≈" : ""}$${n.toFixed(2)}`
 
-export async function cmdStats(opts: { port: number }): Promise<number> {
+export async function cmdStats(opts: { port: number; json?: boolean }): Promise<number> {
   if (!(await ensureUp(opts.port))) return fail()
   const here = await boardHere(opts.port)
   if (!here) {
-    out(dim("  no board for this repo yet"))
+    // Machine readers get a shape they can branch on rather than prose on
+    // stdout they would have to parse to discover there is nothing here.
+    if (opts.json) out(JSON.stringify({ board: null }))
+    else out(dim("  no board for this repo yet"))
     return 0
   }
 
   const api = client(opts.port)
   const s = await api.stats(here.board.id)
+
+  // The server's projection is already the whole answer. Print it verbatim
+  // rather than reassembling a subset here — a second shape to keep in step
+  // with the first is how the two drift apart.
+  if (opts.json) {
+    out(JSON.stringify({ ...s, generatedAt: new Date().toISOString() }, null, 2))
+    return 0
+  }
 
   const row = (label: string, value: string, note = "") =>
     out(`  ${faint(label.padEnd(20))} ${value}${note ? dim(`  ${note}`) : ""}`)

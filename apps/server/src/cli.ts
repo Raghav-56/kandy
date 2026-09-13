@@ -103,6 +103,7 @@ function usage(): void {
   w(cmd("--verbose", "include agent chatter in `log`"))
   w(cmd("--dry-run", "say what `gc` would reclaim, remove nothing"))
   w(cmd("--force", "let `gc` remove unmerged or dirty worktrees"))
+  w(cmd("--json", "machine-readable output from `stats` and `serve`"))
   w(cmd("--slots N", "how many agents may run at once (serve)"))
 
   w(`\n  ${dim("Notes run with repo-only permissions by default: an agent can edit")}\n`)
@@ -116,6 +117,7 @@ function usage(): void {
 function serve(args: string[]): void {
   const port = intFlag(args, "--port", DEFAULT_PORT)
   const slots = intFlag(args, "--slots", DEFAULT_SLOTS)
+  const json = args.includes("--json")
 
   const token = loadToken(TOKEN_PATH)
   const engine = new Engine()
@@ -139,6 +141,24 @@ function serve(args: string[]): void {
   void warmPrices()
   const server = createHttpServer({ engine, runner, prs, token })
   server.listen(port, "127.0.0.1", () => {
+    // One line of JSON on start, for a supervisor or a script that needs to
+    // know where the daemon landed without scraping a banner. The token is
+    // deliberately not in it: it is in a 0600 file, and printing it to stdout
+    // would put it in every log that captures this process.
+    if (json) {
+      process.stdout.write(
+        JSON.stringify({
+          url: `http://127.0.0.1:${port}`,
+          port,
+          slots,
+          db: DB_PATH,
+          tokenPath: TOKEN_PATH,
+          webBuilt: hasWebBuild(),
+          pid: process.pid,
+        }) + "\n",
+      )
+      return
+    }
     process.stdout.write(banner(`http://127.0.0.1:${port}`))
     process.stdout.write(
       `  ${faint("state")}  ${dim(DB_PATH)}\n` +
@@ -149,7 +169,7 @@ function serve(args: string[]): void {
   })
 
   const shutdown = () => {
-    process.stdout.write(dim("\n  stopping…\n"))
+    if (!json) process.stdout.write(dim("\n  stopping…\n"))
     runner.shutdown()
     prs.stop()
     server.close()
@@ -166,7 +186,7 @@ async function main(): Promise<void> {
   const agent = strFlag(argv, "--agent") as AgentId | undefined
   const noRun = argv.includes("--no-run")
   const VALUED = ["--port", "--slots", "--agent"]
-  const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force"]
+  const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json"]
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
   // and reporting "nothing here" is worse than refusing it.
@@ -203,7 +223,7 @@ async function main(): Promise<void> {
       process.exit(await cmdStatus({ port }))
       break
     case "stats":
-      process.exit(await cmdStats({ port }))
+      process.exit(await cmdStats({ port, json: argv.includes("--json") }))
       break
     case "log":
       process.exit(

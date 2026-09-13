@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { computed, ref } from "vue"
+import stats from "../../data/stats.json"
 
 /**
  * The hero, replacing VitePress's default one.
@@ -27,12 +28,23 @@ async function copy() {
   }
 }
 
-const STATS = [
-  { n: "13", label: "notes landed" },
-  { n: "36", label: "agent runs" },
-  { n: "+7,569", label: "lines written" },
-  { n: "$15.23", label: "total spend" },
-]
+// Read from `kandy stats --json` by scripts/stats.mjs, not typed by hand —
+// a number on a landing page is a claim, and this one is checkable.
+const num = (n: number) => n.toLocaleString("en-US")
+const STATS = computed(() => [
+  { n: num(stats.landed), label: "notes landed" },
+  { n: num(stats.runs), label: "agent runs" },
+  { n: `+${num(stats.insertions)}`, label: "lines written" },
+  { n: `${stats.estimated ? "≈" : ""}$${stats.usd.toFixed(2)}`, label: "total spend" },
+])
+
+const taken = computed(() =>
+  new Date(stats.takenAt).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }),
+)
 </script>
 
 <template>
@@ -69,7 +81,9 @@ const STATS = [
           <dd>{{ s.label }}</dd>
         </div>
       </dl>
-      <p class="k-stats-note">kandy's own board, building kandy — from <code>kandy stats</code></p>
+      <p class="k-stats-note">
+        kandy's own board, building kandy — <code>kandy stats</code>, {{ taken }}
+      </p>
     </div>
 
     <!-- Cropped deliberately: the board continues past the fold, which is the
