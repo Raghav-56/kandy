@@ -52,6 +52,9 @@ export function Sidebar({
   const notes = view?.notes ?? []
   const n = (f: (s: string) => boolean) => notes.filter((x) => f(x.status)).length
   const attention = n((s) => s === "blocked" || s === "failed")
+  // Ahead of everything, including `attention`: an agent standing still with a
+  // question is the one thing on a board that cannot make progress without you.
+  const waiting = view?.prompts.length ?? 0
   const review = n((s) => s === "review")
   const running = n((s) => s === "running")
 
@@ -75,7 +78,11 @@ export function Sidebar({
 
       <nav className="space-y-0.5 px-2.5">
         <NavItem icon={LayoutList} label="Board" active={page === "board"} onClick={() => onPage("board")}>
-          {attention > 0 ? (
+          {waiting > 0 ? (
+            <StatusPill tone="lemon" pulse className="px-1.5 py-0 text-[10px]">
+              {waiting}
+            </StatusPill>
+          ) : attention > 0 ? (
             <StatusPill tone="berry" pulse className="px-1.5 py-0 text-[10px]">
               {attention}
             </StatusPill>

@@ -37,6 +37,18 @@ export type SpawnOptions = {
   policy: Policy
   /** Model to run, or undefined to let the agent use its own default. */
   model?: string | undefined
+  /**
+   * Where this agent should send a permission prompt instead of auto-denying
+   * it. Present only for agents that can ask at all, and only under `repo` —
+   * full access asks nobody anything.
+   */
+  ask?: AskChannel | undefined
+}
+
+/** See `permission.ts`: the MCP sidecar an agent routes its prompts through. */
+export type AskChannel = {
+  configPath: string
+  toolName: string
 }
 
 /**
@@ -77,4 +89,12 @@ export type AgentAdapter = {
   parse(line: string): AgentEvent[]
   /** Present only on agents that accept mid-run steering. */
   live?: LiveInput
+  /**
+   * Whether this CLI can route a permission prompt back to us rather than
+   * deciding alone. True for Claude Code; Codex's non-interactive exec has no
+   * equivalent, and pretending otherwise would show a question that never
+   * arrives. Keep in step with `ASK_CAPABLE` in `@kandy/core`, which is what
+   * the clients read.
+   */
+  asks?: boolean
 }

@@ -14,6 +14,7 @@ import {
 } from "@kandy/core"
 import type { Runner } from "./runner.js"
 import type { PrWatch } from "./prwatch.js"
+import type { Permissions } from "./permission.js"
 import { detectForge, openPr } from "./forge.js"
 import { serveStatic } from "./static.js"
 import {
@@ -45,7 +46,14 @@ import { authorized } from "./auth.js"
 const VERSION = "0.0.0"
 const STARTED = Date.now()
 
-export type ServerDeps = { engine: Engine; runner: Runner; prs: PrWatch; token: string }
+export type ServerDeps = {
+  engine: Engine
+  runner: Runner
+  prs: PrWatch
+  token: string
+  /** Absent when the daemon was built without a way to ask. */
+  permissions?: Permissions
+}
 
 export function createHttpServer(deps: ServerDeps) {
   return createServer((req, res) => {
@@ -408,6 +416,53 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     return send(res, 200, { frames, nextAfter: frames.at(-1)?.seq ?? null })
   }
 
+  // POST /runs/:id/permission — the agent asking, via its MCP sidecar.
+  //
+  // The one request in this API that is allowed to take minutes: it is held
+  // open for exactly as long as the question is on the board. The daemon owns
+  // that clock, so nothing here needs a timeout of its own.
+  if (req.method === "POST" && parts[0] === "runs" && parts[2] === "permission") {
+    if (!deps.permissions)
+      return fail(res, 409, "run_not_live", "this daemon cannot ask — nothing is listening")
+    const b = await json<{ tool: string; input?: Record<string, unknown> }>(req)
+    if (!b?.tool) return fail(res, 400, "bad_request", "tool required")
+
+    // If the agent goes away mid-question, the question goes with it. Without
+    // this the card would sit on the board until it timed out, inviting
+    // someone to answer something nothing is listening for.
+    const gone = new AbortController()
+    res.on("close", () => {
+      if (!res.writableEnded) gone.abort()
+    })
+
+    const verdict = await deps.permissions.request(parts[1]!, b.tool, b.input ?? {}, gone.signal)
+    return send(res, 200, { ok: true, seq: deps.engine.head(), verdict })
+  }
+
+  // POST /runs/:id/respond — the user answering.
+  if (req.method === "POST" && parts[0] === "runs" && parts[2] === "respond") {
+    const b = await json<{
+      requestId: string
+      decision: "allow" | "deny"
+      scope?: "once" | "note"
+      comment?: string
+    }>(req)
+    if (!b?.requestId) return fail(res, 400, "bad_request", "requestId required")
+    if (b.decision !== "allow" && b.decision !== "deny")
+      return fail(res, 400, "bad_request", "decision must be 'allow' or 'deny'")
+    if (b.scope !== undefined && b.scope !== "once" && b.scope !== "note")
+      return fail(res, 400, "bad_request", "scope must be 'once' or 'note'")
+
+    const answered = deps.permissions?.answer(b.requestId, {
+      decision: b.decision,
+      ...(b.scope ? { scope: b.scope } : {}),
+      ...(b.comment ? { comment: b.comment } : {}),
+    })
+    // Two tabs on the same board is the normal case, and the second one to
+    // press a button has done nothing wrong. Say what happened, don't fail.
+    return send(res, 200, { ok: true, seq: deps.engine.head(), answered: answered === true })
+  }
+
   // POST /runs/:id/cancel
   if (req.method === "POST" && parts[0] === "runs" && parts[2] === "cancel") {
     return send(res, 200, { ok: true, seq: deps.engine.head(), cancelled: deps.runner.cancel(parts[1]!) })
@@ -511,12 +566,13 @@ async function noteAction(
     }
 
     /**
-     * Answer a refusal, once, for this note.
+     * The blunt instrument: raise the whole note to full access and continue.
      *
-     * Deliberately not an in-flight permission answer — that needs the
-     * `canUseTool` callback and the agent running in-process, which is a
-     * different architecture (see docs/09-open-questions.md). This is the
-     * pragmatic version: the policy changes, and the agent is resumed in the
+     * Not the same thing as answering a prompt — `POST /runs/:id/respond` is
+     * that, and it is the one to reach for. This is the after-the-fact answer
+     * for a note that was already refused, for an agent that cannot be asked
+     * at all, or for a run where the honest answer is "stop asking me, I trust
+     * this one". It changes the note's policy and resumes the agent in the
      * same worktree with what it was refused now permitted.
      */
     case "escalate": {

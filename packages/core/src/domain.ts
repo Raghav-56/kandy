@@ -1,3 +1,4 @@
+import type { PermissionPrompt, PermissionRule } from "./permission.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
 export const AGENTS = ["claude", "codex", "aider", "cursor", "opencode", "gemini", "grok"] as const
@@ -35,8 +36,9 @@ export type RunStatus =
  * this is the user's decision to make, per note, with the tradeoff stated
  * plainly rather than a flag we quietly set for them.
  *
- * `repo`  — edit files freely; anything else needs approval it cannot get
- *           headlessly, so it is refused and surfaced.
+ * `repo`  — edit files freely; anything else is put to you as a question, if
+ *           the agent can be asked (see `ASK_CAPABLE`), and refused and
+ *           surfaced if it cannot.
  * `full`  — run anything. Fast and unblocked; only for work you'd have run
  *           yourself without reading it first.
  */
@@ -152,6 +154,14 @@ export type Note = {
   /** Pinned model, or null to use the board default for the chosen agent. */
   model: string | null
   policy: Policy
+  /**
+   * Standing answers to permission prompts, for this note only.
+   *
+   * Written by "don't ask me again" while unblocking a run. Deliberately not
+   * inherited from the board and never copied to it: a board-wide rule is a
+   * bigger decision than someone makes in the middle of one job.
+   */
+  rules: PermissionRule[]
   runId: RunId | null
   /** Set when a run starts; the deliverable. */
   branch: string | null
@@ -240,6 +250,14 @@ export type BoardView = {
   columns: Column[]
   notes: Note[]
   runs: Run[]
+  /**
+   * Agents standing still, waiting for an answer.
+   *
+   * The most urgent thing a board can contain — more urgent than `blocked`,
+   * which means "it was refused and carried on". Empty almost always; when it
+   * isn't, it goes above everything else.
+   */
+  prompts: PermissionPrompt[]
   /** Sequence number this view reflects; the client streams from here. */
   seq: number
 }

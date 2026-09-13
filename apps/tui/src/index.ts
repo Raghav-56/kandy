@@ -76,7 +76,11 @@ function render({ view, connected, tick }: Frame): string {
 
   const running = view.notes.filter((n) => n.status === "running").length
   const blocked = view.notes.filter((n) => n.status === "blocked").length
+  const waiting = view.prompts.length
   const status = [
+    // Ahead of `blocked`, which means "was refused and carried on". This one
+    // means an agent is standing still until somebody opens the board.
+    waiting > 0 ? sgr(` ${waiting} waiting on you `, [INVERSE]) : null,
     blocked > 0 ? sgr(` ${blocked} blocked `, [INVERSE]) : null,
     running > 0 ? `${SPINNER[tick % SPINNER.length]} ${running} running` : null,
     connected ? sgr("live", [DIM]) : sgr("reconnecting…", [DIM]),

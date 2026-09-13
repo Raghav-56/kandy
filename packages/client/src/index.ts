@@ -214,6 +214,25 @@ export class KandyClient {
       `/runs/${runId}/transcript?after=${after}`,
     )
   }
+  /**
+   * Answer a waiting permission prompt.
+   *
+   * `scope: "note"` also writes the rule, so the same kind of call is not
+   * asked about again on this note. A denial's `comment` reaches the agent —
+   * it is the difference between "no" and "no, use pnpm".
+   */
+  respond(
+    runId: string,
+    requestId: string,
+    decision: "allow" | "deny",
+    opts: { scope?: "once" | "note"; comment?: string } = {},
+  ) {
+    return this.req<{ answered: boolean; seq: number }>("POST", `/runs/${runId}/respond`, {
+      requestId,
+      decision,
+      ...opts,
+    })
+  }
   cancelRun(runId: string) {
     return this.req<{ seq: number }>("POST", `/runs/${runId}/cancel`, {})
   }
@@ -290,6 +309,7 @@ const EVENT_TYPES = [
   "run.session",
   "run.metrics",
   "note.policy",
+  "note.permission",
   "note.model",
   "board.models",
   "board.policy",

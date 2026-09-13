@@ -14,6 +14,8 @@ import {
   type DiffStat,
 } from "@kandy/core"
 import type { Engine } from "./engine.js"
+import type { AskChannel } from "./agents/types.js"
+import { closeAskChannel, openAskChannel, type Permissions } from "./permission.js"
 import { adapter } from "./agents/index.js"
 import { adoptStaged, describe as describeAttachments } from "./attach.js"
 import { commitTrailers } from "./attribution.js"
@@ -50,6 +52,8 @@ type Live = {
   child: ChildProcess
   worktree: Worktree
   repoPath: string
+  /** The MCP config this run's prompts travel through, if it can be asked. */
+  ask?: AskChannel
 }
 
 type Queued = {
@@ -83,7 +87,18 @@ export class Runner {
     private slots = 4,
     /** Called when a note's branch is ready to be looked up on the forge. */
     private onBranchReady?: (boardId: string, noteId: string) => void,
+    /**
+     * Where an agent's permission prompts go, and what they need to get back.
+     * Absent in tests and in any deployment that would rather auto-deny.
+     */
+    private asking?: { permissions: Permissions; port: number; token: string },
   ) {}
+
+  /** Which note and board a live run belongs to. The broker's only view in. */
+  locate(runId: string): { boardId: string; noteId: string } | null {
+    const l = this.live.get(runId)
+    return l ? { boardId: l.boardId, noteId: l.noteId } : null
+  }
 
   private emit(pending: Parameters<Engine["emit"]>[0]): void {
     this.engine.emit(pending)
@@ -322,10 +337,22 @@ export class Runner {
     }
 
     const agentId = q.agent
+    const policy = note.policy ?? "repo"
+
+    // A prompt channel is opened only when there is both an agent that can be
+    // asked and a policy under which anything would be. Under full access
+    // nothing is ever refused, so there is nothing to ask about.
+    const asking = this.asking
+    const ask =
+      asking && a.asks && policy !== "full"
+        ? openAskChannel(q.runId, asking.port, asking.token)
+        : undefined
+
     const spec = a.spawn({
       cwd: worktree.path,
       prompt: (q.prompt ?? promptFor(note)) + describeAttachments(attached),
-      policy: note.policy ?? "repo",
+      policy,
+      ...(ask ? { ask } : {}),
       // Note pin wins over the board default; neither means the agent's own.
       ...(note.model ?? view.board.models?.[agentId]
         ? { model: note.model ?? view.board.models?.[agentId] }
@@ -350,6 +377,7 @@ export class Runner {
       child,
       worktree,
       repoPath: view.board.repoPath,
+      ...(ask ? { ask } : {}),
     })
 
     this.emit(
@@ -363,8 +391,10 @@ export class Runner {
       }),
     )
 
-    if ((note.policy ?? "repo") === "full") {
+    if (policy === "full") {
       this.say(q.runId, "system", "running with full access — this agent can do anything you can")
+    } else if (ask) {
+      this.say(q.runId, "system", "repo only — anything else will be put to you as a question")
     }
 
     // Say plainly what the agent can and cannot see.
@@ -554,6 +584,12 @@ export class Runner {
   ): Promise<void> {
     const l = this.live.get(runId)
     this.live.delete(runId)
+
+    // Settle anything this run was waiting on before anything else. A promise
+    // held by a dead process never resolves on its own, and a question on the
+    // board that nothing is listening to is worse than no question at all.
+    this.asking?.permissions.abandon(runId)
+    closeAskChannel(l?.ask)
 
     let error: string | null = null
     let stat: DiffStat = { files: 0, insertions: 0, deletions: 0 }

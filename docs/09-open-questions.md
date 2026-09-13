@@ -32,35 +32,51 @@ need one. This gap is real and unresolved.
 
 ## Technical
 
-**~~How does a blocked run actually surface?~~** *Partly answered.* Claude Code in headless
-mode does not hang and does not silently auto-approve: it auto-**denies** what it cannot ask
-about, emits the refusal as a `tool_result` with `is_error: true`, and reports every one in
-`result.permission_denials` with the tool name and its arguments. So `blocked` is real, and the
-adapter surfaces it.
+**~~How does a blocked run actually surface, and can we answer it?~~** *Answered, and this
+section was wrong until we checked.* It claimed that answering a prompt in flight required the
+`canUseTool` callback from `@anthropic-ai/claude-agent-sdk`, and therefore running the agent
+in-process instead of as a subprocess — "a real architectural fork, not a tweak". That was
+simply not true of the CLI we already spawn.
 
-What is still open is the other half: **we can see the denial but we cannot answer it.** The
-agent has already moved on by the time the note goes blocked, so today "blocked" means "it was
-refused something" rather than "it is waiting for you."
+`claude --permission-prompt-tool <mcp tool name>` routes a permission prompt to a tool *we*
+provide instead of auto-denying it. It is a real flag — unknown flags are rejected outright, and
+this one runs clean against the installed CLI. `claude --permission-prompts host|none` decides
+whether anything is asked at all, and defaults to `host`. So kandy runs a small MCP server
+(`apps/server/src/permission-mcp.ts`, a dependency-free stdio sidecar the agent spawns itself),
+points the agent at it for the life of one run, and the prompt arrives as an ordinary tool call.
+The daemon holds that call open, puts the question on the board, and returns allow or deny when
+someone answers. No in-process SDK, no rewrite.
 
-*Corrected September 2026.* This said answering in-flight needed the `canUseTool` callback from
-`@anthropic-ai/claude-agent-sdk`, and therefore running the agent in-process rather than as a
-subprocess — "a real architectural fork, not a tweak." That was wrong. Claude Code accepts
-`--permission-prompt-tool <mcp tool>`, which hands the prompt to a tool of our choosing instead
-of auto-denying it, and `--permission-prompts host|none` controls whether anything is asked at
-all. Verified against the installed CLI: unknown flags are rejected outright, and this one runs.
-So the subprocess architecture stands and this is a feature, not a rewrite.
+The decision itself is opencode's shape, as `docs/06-landscape.md` said it would be: permission
+rules are a **pure function** from (tool, args, rules) to `allow | deny | ask`, in
+`packages/core/src/permission.ts`, testable without a socket; and a deferred in
+`apps/server/src/permission.ts` blocks the tool call until a client answers, because the agent
+genuinely waits.
 
-Codex's non-interactive `exec` has no equivalent, so this will land for one agent before the
-others — which is its own inconsistency to explain to a user.
+The options are the three a terminal already trains people to expect — allow once; allow this
+kind of thing for this note and stop asking; deny **with a message saying what to do instead**.
+The third is the one people forget to build and the reason this beats a policy toggle: "no, run
+the tests with pnpm not npm" is an answer, and "deny" alone is not.
 
-There is now a pragmatic version of the answer, which is not the same thing. The note's detail
-pane shows what was actually refused — the exact commands, read out of the `permission` frames
-the adapters already write — and offers one action: grant *this note* full access and continue.
-That sets the note's policy and resumes the agent in the same worktree, one turn later, down the
-same path steering uses. It is a decision made once, after the fact, about a whole note; it is
-not an answer to a single prompt in flight, and the escalation says so plainly before you take
-it. A board also carries a `defaultPolicy`, so a repo whose blast radius you're comfortable with
-can start its notes unblocked and never reach this screen.
+Four things follow from that, each a decision rather than an accident:
+
+- A waiting prompt is the most urgent thing on a board — above `blocked`, which only ever meant
+  "was refused and carried on". It sits above *Needs you*, names the tool, shows the exact
+  command verbatim, and is answerable from the note detail pane.
+- It **times out** rather than hanging forever, and the transcript says so when it does. An
+  agent blocked on a question nobody answers is worse than one that was denied: it holds a slot
+  and looks like work in flight.
+- "Don't ask again" is scoped **per note, not per board**. A board-wide rule is a bigger
+  decision than someone makes while unblocking one run — `defaultPolicy` is where that lives.
+  A rule is also never generalised across a shell operator, so approving `pnpm test` cannot
+  quietly approve `pnpm test && rm -rf ~`.
+- It is **Claude only**. Codex's non-interactive exec has no equivalent, so `ASK_CAPABLE` in
+  core names the agents that can be asked and every surface reads it. A codex note says plainly
+  that its agent cannot ask, rather than showing an affordance that silently does nothing.
+
+Escalate-to-full-access stays. It is the blunt instrument — it changes the note's policy and
+resumes the agent in the same worktree, after the fact, for the whole note — and it is still
+sometimes the right one.
 
 **Can we reliably capture agent session ids?** Resume — which steering depends on — needs them.
 Claude emits `session_id` on every event and can even be handed one up front, so it is solved
