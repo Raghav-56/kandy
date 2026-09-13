@@ -25,7 +25,7 @@ note lands in review.
 
 Steering after that point becomes a follow-up run. Same intent, one turn later.
 
-![The agent's stream, with tool calls collapsed](/shots/stream.png)
+![The agent's reasoning, eighteen tool calls folded away behind one line, and a box to answer back](/shots/stream.png)
 
 ## Attachments
 

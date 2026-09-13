@@ -12,7 +12,7 @@ before *what did it write*.
 Full screen puts the stream and the diff side by side — reading what the agent
 said it did next to what it actually did is the real review motion.
 
-![Reviewing a diff beside the note it came from](/shots/review.png)
+![A finished note: its diff, what it cost, and merge, open a PR, or discard](/shots/review.png)
 
 ## Three ways to finish
 

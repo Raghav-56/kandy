@@ -30,7 +30,7 @@ in a fresh worktree:
 - **Say what not to touch.** Agents are literal, and a fresh worktree looks like
   fair game.
 
-![The board, sorted by what needs you](/shots/board.png)
+![The board: one note blocked on a decision, one ready to review, three agents still working, and nine landed](/shots/board.png)
 
 ## Run it
 
