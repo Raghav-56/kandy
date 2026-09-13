@@ -12,6 +12,7 @@ import type {
   Policy,
   PullRequest,
   RepoCheck,
+  Stats,
   StreamFrame,
   TranscriptFrame,
 } from "@kandy/core"
@@ -117,6 +118,9 @@ export class KandyClient {
   }
   assignNote(noteId: string, agent: AgentId) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/assign`, { agent })
+  }
+  stats(boardId: string) {
+    return this.req<Stats>("GET", `/boards/${boardId}/stats`)
   }
   forge(boardId: string) {
     return this.req<Forge>("GET", `/boards/${boardId}/forge`)

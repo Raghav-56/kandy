@@ -142,6 +142,86 @@ export async function cmdStatus(opts: { port: number }): Promise<number> {
   return 0
 }
 
+/** Duration in the shortest form that is still honest. */
+function dur(ms: number): string {
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  return m < 60 ? `${m}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(m / 60)}h ${m % 60}m`
+}
+
+const usd = (n: number, est: boolean) => `${est ? "≈" : ""}$${n.toFixed(2)}`
+
+export async function cmdStats(opts: { port: number }): Promise<number> {
+  if (!(await ensureUp(opts.port))) return fail()
+  const here = await boardHere(opts.port)
+  if (!here) {
+    out(dim("  no board for this repo yet"))
+    return 0
+  }
+
+  const api = client(opts.port)
+  const s = await api.stats(here.board.id)
+
+  const row = (label: string, value: string, note = "") =>
+    out(`  ${faint(label.padEnd(20))} ${value}${note ? dim(`  ${note}`) : ""}`)
+
+  out()
+  out(`  ${bold(s.board.name)}`)
+  out()
+  out(
+    `  ${bold(String(s.notes.total))} notes` +
+      dim(" · ") +
+      mint(`${s.notes.landed} landed`) +
+      dim(" · ") +
+      `${s.notes.discarded} discarded` +
+      (s.notes.open ? dim(" · ") + lemon(`${s.notes.open} open`) : ""),
+  )
+  out(
+    `  ${bold(usd(s.spend.usd, s.spend.estimated))}` +
+      dim(` across ${s.runs.total} runs · ${s.spend.tokens.toLocaleString()} tokens`) +
+      (s.spend.unpricedRuns ? dim(` · ${s.spend.unpricedRuns} unpriced`) : ""),
+  )
+  out()
+
+  if (s.firstTry.of > 0) {
+    const pct = Math.round((s.firstTry.landed / s.firstTry.of) * 100)
+    row("landed first try", `${s.firstTry.landed} of ${s.firstTry.of}`, `${pct}%`)
+  }
+  if (s.code.insertions + s.code.deletions > 0) {
+    row("code written", `${mint("+" + s.code.insertions)} ${berry("-" + s.code.deletions)}`,
+      `${s.code.files} files`)
+  }
+  if (s.linesPerDollar) row("lines per dollar", s.linesPerDollar.toLocaleString())
+  if (s.tokensPerLine) row("tokens per line", s.tokensPerLine.toLocaleString())
+  if (s.runs.medianMs !== null) row("median run", dur(s.runs.medianMs))
+  if (s.runs.longest) row("longest run", dur(s.runs.longest.ms), s.runs.longest.title.slice(0, 42))
+  if (s.priciest)
+    row("priciest note", usd(s.priciest.usd, s.priciest.estimated), s.priciest.title.slice(0, 42))
+  if (s.busiestHour)
+    row(
+      "busiest hour",
+      `${String(s.busiestHour.hour).padStart(2, "0")}:00`,
+      `${s.busiestHour.runs} runs`,
+    )
+  if (s.tools[0]) row("most used tool", s.tools[0].tool, `${s.tools[0].calls} calls`)
+
+  if (s.agents.length > 0) {
+    out()
+    for (const a of s.agents) {
+      out(
+        `  ${bold(a.agent.padEnd(9))}` +
+          `${a.landed} landed` +
+          dim(` · ${a.discarded} discarded · ${a.runs} runs · `) +
+          usd(a.usd, a.estimated) +
+          (a.medianMs !== null ? dim(` · median ${dur(a.medianMs)}`) : ""),
+      )
+    }
+  }
+  out()
+  return 0
+}
+
 export async function cmdOpen(opts: { port: number }): Promise<number> {
   if (!(await ensureUp(opts.port))) return fail()
   const url = `http://127.0.0.1:${opts.port}`

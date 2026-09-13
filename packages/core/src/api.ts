@@ -127,6 +127,29 @@ export type Listing = {
   suggestions: DirEntry[]
 }
 
+export type Stats = {
+  board: { name: string; repoPath: string }
+  notes: { total: number; landed: number; discarded: number; open: number; failed: number }
+  runs: { total: number; medianMs: number | null; longest: { ms: number; title: string } | null }
+  spend: { usd: number; estimated: boolean; tokens: number; unpricedRuns: number }
+  code: { insertions: number; deletions: number; files: number }
+  firstTry: { landed: number; of: number }
+  linesPerDollar: number | null
+  tokensPerLine: number | null
+  busiestHour: { hour: number; runs: number } | null
+  priciest: { usd: number; title: string; estimated: boolean } | null
+  agents: {
+    agent: string
+    landed: number
+    discarded: number
+    runs: number
+    usd: number
+    estimated: boolean
+    medianMs: number | null
+  }[]
+  tools: { tool: string; calls: number }[]
+}
+
 export type Forge = {
   /** gh is installed and authenticated. */
   available: boolean

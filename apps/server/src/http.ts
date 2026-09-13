@@ -18,6 +18,7 @@ import { detectForge, openPr } from "./forge.js"
 import { serveStatic } from "./static.js"
 import { describe, saveAttachments } from "./attach.js"
 import { defaultModelFor, modelsFor, warmPrices } from "./pricing.js"
+import { computeStats } from "./stats.js"
 import { list as listDir, nativePick, suggestions } from "./browse.js"
 import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
@@ -174,6 +175,13 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     }
     const view = deps.engine.view(boardId)!
     return send(res, 200, { ok: true, seq: view.seq, board: view.board })
+  }
+
+  // GET /boards/:id/stats
+  if (req.method === "GET" && parts[0] === "boards" && parts[2] === "stats") {
+    const view = deps.engine.view(parts[1]!)
+    if (!view) return fail(res, 404, "board_not_found", "no such board")
+    return send(res, 200, computeStats(view, deps.engine.store))
   }
 
   // GET /boards/:id/forge

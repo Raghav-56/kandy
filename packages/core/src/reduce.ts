@@ -76,6 +76,7 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         worktree: null,
         stat: null,
         pr: null,
+        outcome: null,
         createdAt: e.ts,
         updatedAt: e.ts,
       }
@@ -206,8 +207,12 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
     }
 
     case "review.decided": {
-      const status = e.data.decision === "revise" ? "draft" : "done"
-      return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, status }))
+      const revise = e.data.decision === "revise"
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({
+        ...n,
+        status: revise ? "draft" : "done",
+        outcome: revise ? null : e.data.decision === "merge" ? "merged" : "discarded",
+      }))
     }
 
     case "review.opened":

@@ -93,7 +93,7 @@ the CLI you already authenticated, and the child inherits it.
 ## Tests
 
 ```sh
-pnpm test      # 78 tests across core and server
+pnpm test      # 85 tests across core and server
 ```
 
 They cover the reducer's state machine, cost provenance, both agent adapters

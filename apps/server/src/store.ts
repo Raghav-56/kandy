@@ -199,6 +199,28 @@ export class Store {
     }[]
   }
 
+  /**
+   * How often each tool was called across a set of runs.
+   *
+   * Grouped in SQL: the transcript is the high-volume table, and pulling every
+   * frame into memory to count them would make a stats command cost more than
+   * the work it describes.
+   */
+  toolCounts(runIds: string[], limit = 8): { tool: string; calls: number }[] {
+    if (runIds.length === 0) return []
+    const marks = runIds.map(() => "?").join(",")
+    const rows = this.db
+      .prepare(
+        `SELECT meta AS tool, COUNT(*) AS calls FROM transcript
+         WHERE role = 'tool' AND meta IS NOT NULL AND run_id IN (${marks})
+         GROUP BY meta ORDER BY calls DESC LIMIT ?`,
+      )
+      .all(...runIds, limit) as { tool: string; calls: number }[]
+    // node:sqlite hands back null-prototype rows, which surprise anything that
+    // compares or spreads them. Callers get plain objects.
+    return rows.map((r) => ({ tool: r.tool, calls: r.calls }))
+  }
+
   close(): void {
     this.db.close()
   }

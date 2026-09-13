@@ -124,6 +124,14 @@ export type Note = {
   stat: DiffStat | null
   /** The PR opened from this note's branch, if there is one. */
   pr: PullRequest | null
+  /**
+   * How a finished note ended.
+   *
+   * Both verdicts leave a note `done`, which made "landed" and "thrown away"
+   * indistinguishable — and any accept rate computed from status alone would
+   * have been flattering nonsense.
+   */
+  outcome: Outcome | null
   createdAt: number
   updatedAt: number
 }
@@ -187,6 +195,8 @@ export type Run = {
 }
 
 export type CostSource = "reported" | "estimated" | "unpriced"
+
+export type Outcome = "merged" | "discarded"
 
 /** What a client renders. A projection of the event log, never written directly. */
 export type BoardView = {

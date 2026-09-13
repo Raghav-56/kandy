@@ -8,7 +8,7 @@ import { DB_PATH } from "./paths.js"
 import { hasWebBuild } from "./static.js"
 import { warmPrices } from "./pricing.js"
 import { banner, berry, bold, dim, faint, lemon, mint } from "./cli/banner.js"
-import { cmdList, cmdNew, cmdOpen, cmdStatus } from "./cli/commands.js"
+import { cmdList, cmdNew, cmdOpen, cmdStats, cmdStatus } from "./cli/commands.js"
 import { DEFAULT_PORT } from "./cli/daemon.js"
 
 const DEFAULT_SLOTS = 4
@@ -54,6 +54,7 @@ function usage(): void {
       row('  "task" $\'\\n\'"detail"', "first line names it, the rest is detail") +
       row("kandy ls [--all]", "what's on the board for this repo") +
       row("kandy status", "daemon, repos and agents") +
+      row("kandy stats", "what this board has actually done") +
       row("kandy open", "open the board in a browser") +
       row("kandy serve [--port N]", "run the daemon in the foreground") +
       "\n" +
@@ -148,6 +149,9 @@ async function main(): Promise<void> {
       break
     case "status":
       process.exit(await cmdStatus({ port }))
+      break
+    case "stats":
+      process.exit(await cmdStats({ port }))
       break
     case "open":
       process.exit(await cmdOpen({ port }))
