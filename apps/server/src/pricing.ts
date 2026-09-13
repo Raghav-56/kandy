@@ -80,6 +80,41 @@ export function warmPrices(): Promise<void> {
   return loading
 }
 
+/**
+ * Model ids a given agent can plausibly run, newest-looking first.
+ *
+ * Derived from the price table we already fetch, filtered to the provider that
+ * agent talks to. It is a menu, not a guarantee — the agent still rejects one
+ * it does not have access to — but it beats asking someone to type an exact
+ * model string from memory.
+ */
+const PROVIDER: Record<string, { prefixes: string[]; exclude: RegExp }> = {
+  claude: { prefixes: ["claude-"], exclude: /(instant|-v1|1\.[0-3]|bedrock|vertex)/ },
+  codex: { prefixes: ["gpt-", "o1", "o3", "o4"], exclude: /(audio|realtime|search|transcribe|tts|image|embedding|instruct|-16k|vision-preview)/ },
+  gemini: { prefixes: ["gemini-"], exclude: /(vision|embedding|tuned)/ },
+  grok: { prefixes: ["xai/grok", "grok-"], exclude: /(vision|image)/ },
+  cursor: { prefixes: [], exclude: /.^/ },
+  opencode: { prefixes: [], exclude: /.^/ },
+}
+
+export function modelsFor(agent: string): string[] {
+  const rule = PROVIDER[agent]
+  if (!table || !rule || rule.prefixes.length === 0) return []
+
+  const names = Object.entries(table)
+    .filter(([name, rates]) => {
+      if (!rule.prefixes.some((p) => name.startsWith(p))) return false
+      if (rule.exclude.test(name)) return false
+      // A model with no input price is a table stub, not something to offer.
+      return typeof rates.input_cost_per_token === "number"
+    })
+    .map(([name]) => name)
+
+  // Longest-lived convention across these providers: higher version strings
+  // sort later, so reverse gives newest-first without a date to sort on.
+  return names.sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).slice(0, 40)
+}
+
 /** Rates for a model, trying the most specific name first. */
 function ratesFor(model: string): Rates | null {
   if (!table) return null

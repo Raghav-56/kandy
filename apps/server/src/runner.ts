@@ -102,12 +102,26 @@ export class Runner {
   }
 
   /** Persist a transcript frame and push it to anyone watching, live. */
+  /** Last notice written per run, to suppress immediate repeats. */
+  private lastNotice = new Map<string, string>()
+
   private say(
     runId: string,
     role: "assistant" | "user" | "tool" | "system" | "error",
     text: string,
     meta?: string,
   ): void {
+    // Agents re-announce their standing conditions every turn — Codex repeats
+    // its hook-trust warning and its truncated-skills notice each time. Saying
+    // the same thing twice in a row trains people to skim the notices that
+    // matter, so a consecutive duplicate is dropped.
+    if (role === "system" || role === "error") {
+      const key = `${role}:${text}`
+      if (this.lastNotice.get(runId) === key) return
+      this.lastNotice.set(runId, key)
+    } else {
+      this.lastNotice.delete(runId)
+    }
     this.engine.say(runId, role, text, meta)
   }
 

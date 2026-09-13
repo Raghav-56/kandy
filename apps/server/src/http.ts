@@ -16,6 +16,8 @@ import type { Runner } from "./runner.js"
 import type { PrWatch } from "./prwatch.js"
 import { detectForge, openPr } from "./forge.js"
 import { serveStatic } from "./static.js"
+import { describe, saveAttachments } from "./attach.js"
+import { modelsFor, warmPrices } from "./pricing.js"
 import { list as listDir, nativePick, suggestions } from "./browse.js"
 import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
@@ -67,6 +69,12 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
 
   if (req.method === "GET" && routed === "/events") {
     return sse(deps, req, res, Number(req.headers["last-event-id"] ?? url.searchParams.get("after") ?? 0))
+  }
+
+  // GET /agents/:id/models — a menu for the model pickers
+  if (req.method === "GET" && parts[0] === "agents" && parts[2] === "models") {
+    await warmPrices()
+    return send(res, 200, { models: modelsFor(parts[1]!) })
   }
 
   if (req.method === "GET" && routed === "/agents") {
@@ -369,10 +377,21 @@ async function noteAction(
       return send(res, 200, { ok: true, seq: deps.engine.head(), runId })
     }
     case "message": {
-      const b = await json<{ text: string }>(req)
-      if (!b?.text?.trim()) return fail(res, 400, "bad_request", "text required")
+      const b = await json<{ text: string; files?: { name: string; data: string }[] }>(req)
+      if (!b?.text?.trim() && !b?.files?.length)
+        return fail(res, 400, "bad_request", "text or files required")
+
+      // Attachments go into the note's worktree, so the path we hand the agent
+      // is one it can actually open.
+      let text = (b.text ?? "").trim()
+      if (b.files?.length) {
+        const wt = deps.runner.worktreeOf(noteId)
+        if (!wt) return fail(res, 409, "no_branch", "this note has no workspace yet — run it first")
+        text += describe(saveAttachments(wt.path, b.files))
+      }
+
       try {
-        const delivery = deps.runner.steer(view.board.id, noteId, b.text.trim())
+        const delivery = deps.runner.steer(view.board.id, noteId, text)
         return send(res, 200, { ok: true, seq: deps.engine.head(), delivery })
       } catch (err) {
         return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))

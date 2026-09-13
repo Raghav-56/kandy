@@ -3,6 +3,7 @@ import type { KandyClient } from "@kandy/client"
 import type { AgentId, AgentInfo, BoardView } from "@kandy/core"
 import { Button, Input, Separator } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
+import { ModelSelect } from "@/features/agents/ModelSelect"
 import type { Theme } from "@/hooks/useTheme"
 import { cn } from "@/lib/utils"
 
@@ -88,11 +89,18 @@ export function SettingsPage({
                   <AgentMark agent={a.id} size={13} />
                   {agentLabel(a.id)}
                 </span>
-                <Input
-                  value={models[a.id] ?? ""}
-                  placeholder={a.id === "codex" ? "gpt-6-astra" : "opus"}
-                  onChange={(e) => setModels((m) => ({ ...m, [a.id]: e.target.value }))}
-                  className="h-8 font-mono text-[12px]"
+                <ModelSelect
+                  agent={a.id}
+                  value={models[a.id] ?? null}
+                  onChange={(v) =>
+                    setModels((m) => {
+                      const next = { ...m }
+                      if (v) next[a.id] = v
+                      else delete next[a.id]
+                      return next
+                    })
+                  }
+                  className="w-[260px]"
                 />
               </div>
             ))}

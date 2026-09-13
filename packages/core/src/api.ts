@@ -45,6 +45,8 @@ export type Queries = {
   "GET /boards": { res: { boards: Board[] } }
   "GET /boards/:id/view": { res: BoardView }
   "GET /agents": { res: { agents: AgentInfo[] } }
+  /** Model ids this agent can plausibly run. */
+  "GET /agents/:id/models": { res: { models: string[] } }
   "GET /runs/:id/output": { res: { lines: OutputLine[]; nextAfter: number | null } }
   "GET /runs/:id/transcript": { res: { frames: TranscriptFrame[]; nextAfter: number | null } }
   /**

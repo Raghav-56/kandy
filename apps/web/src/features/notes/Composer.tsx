@@ -1,6 +1,8 @@
 import { useState } from "react"
 import type { AgentId, AgentInfo } from "@kandy/core"
 import { Button } from "@/ui"
+import { AgentSelect } from "@/features/agents/AgentSelect"
+import { ModelSelect } from "@/features/agents/ModelSelect"
 import { Textarea } from "@/ui"
 
 /**
@@ -16,17 +18,24 @@ export function Composer({
   agents: AgentInfo[]
   defaultAgent: AgentId | null
   onCancel: () => void
-  onCreate: (title: string, body: string, agent: AgentId | null, run: boolean) => void
+  onCreate: (
+    title: string,
+    body: string,
+    agent: AgentId | null,
+    model: string | null,
+    run: boolean,
+  ) => void
 }) {
   const [text, setText] = useState("")
   const [agent, setAgent] = useState<AgentId | "">(defaultAgent ?? "")
+  const [model, setModel] = useState<string | null>(null)
 
   const submit = (run: boolean) => {
     const [firstLine = "", ...lines] = text.trim().split(/\r?\n/)
     const title = firstLine.trim()
     const body = lines.join("\n").trim()
     if (!title) return
-    onCreate(title, body, (agent || null) as AgentId | null, run)
+    onCreate(title, body, (agent || null) as AgentId | null, model, run)
   }
 
   return (
@@ -52,19 +61,12 @@ export function Composer({
         />
 
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-hairline pt-3">
-          <select
-            value={agent}
-            onChange={(e) => setAgent(e.target.value as AgentId)}
-            className="h-7 rounded-lg border border-line bg-raised px-2 text-[12px] text-ink"
-          >
-            <option value="">no agent</option>
-            {agents.map((a) => (
-              <option key={a.id} value={a.id} disabled={!a.installed}>
-                {a.id}
-                {a.installed ? "" : " — not installed"}
-              </option>
-            ))}
-          </select>
+<AgentSelect
+            value={agent || null}
+            agents={agents}
+            onChange={(a) => setAgent(a)}
+            className="w-[160px]"
+          />
 
           <Button variant="ghost" onClick={() => submit(false)} disabled={!text.trim()}>
             Add

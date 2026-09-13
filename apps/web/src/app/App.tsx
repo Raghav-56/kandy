@@ -190,8 +190,19 @@ export function App() {
           onCancel={(runId) => void act((c) => c.cancelRun(runId))}
           onAssign={(agent) => void act((c) => c.assignNote(note.id, agent))}
           onPolicy={(policy) => void act((c) => c.setPolicy(note.id, policy))}
+          onModel={(model) => void act((c) => c.setModel(note.id, model))}
           onEdit={async (patch) => (await act((c) => c.editNote(note.id, patch))) !== undefined}
-          onSteer={async (text) => (await act((c) => c.message(note.id, text)))?.delivery}
+          onSteer={async (text, files) =>
+            (
+              await act((c) =>
+                c.message(
+                  note.id,
+                  text,
+                  files?.map((f) => ({ name: f.name, data: f.data })),
+                ),
+              )
+            )?.delivery
+          }
           onReview={(decision) => void act((c) => c.reviewNote(note.id, decision))}
           onOpenPr={async () => {
             await act((c) => c.openPr(note.id))
@@ -209,13 +220,14 @@ export function App() {
           agents={agents}
           defaultAgent={defaultAgent}
           onCancel={() => setComposing(false)}
-          onCreate={async (title, body, agent, run) => {
+          onCreate={async (title, body, agent, model, run) => {
             setComposing(false)
             const column = view.columns[0]?.id
             if (!column) return
             const created = await act((c) => c.createNote(view.board.id, column, title, body))
             if (!created) return
             if (agent) await act((c) => c.assignNote(created.noteId, agent))
+            if (model) await act((c) => c.setModel(created.noteId, model))
             if (run && agent) await act((c) => c.runNote(created.noteId, agent))
             setSelected(created.noteId)
           }}

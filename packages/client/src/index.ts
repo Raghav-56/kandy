@@ -68,6 +68,9 @@ export class KandyClient {
   agents() {
     return this.req<{ agents: AgentInfo[] }>("GET", "/agents")
   }
+  models(agent: string) {
+    return this.req<{ models: string[] }>("GET", `/agents/${agent}/models`)
+  }
   boards() {
     return this.req<{ boards: Board[] }>("GET", "/boards")
   }
@@ -140,9 +143,10 @@ export class KandyClient {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/review`, { decision, comment })
   }
   /** Steer a note: reaches a live agent if it takes stdin, else queues a follow-up. */
-  message(noteId: string, text: string) {
+  message(noteId: string, text: string, files?: { name: string; data: string }[]) {
     return this.req<{ delivery: Delivery; seq: number }>("POST", `/notes/${noteId}/message`, {
       text,
+      files,
     })
   }
   diff(noteId: string) {

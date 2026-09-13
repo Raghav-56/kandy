@@ -13,7 +13,9 @@ import { Maximize2, Minimize2, X } from "lucide-react"
 import { ActivityLine, Button, Hint, LoadingBlock, StatusPill, Textarea } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { AgentSelect } from "@/features/agents/AgentSelect"
+import { ModelSelect } from "@/features/agents/ModelSelect"
 import { DiffView } from "@/features/diff/DiffView"
+import { Attachments, type Attached } from "@/features/notes/Attachments"
 import { InlineEdit } from "@/features/notes/InlineEdit"
 import { PrBadge } from "@/features/notes/PrBadge"
 import { LOOK } from "@/features/notes/status"
@@ -33,8 +35,9 @@ export type NoteDetailProps = {
   onCancel: (runId: string) => void
   onAssign: (agent: AgentId) => void
   onPolicy: (policy: Policy) => void
+  onModel: (model: string | null) => void
   onEdit: (patch: { title?: string; body?: string }) => Promise<boolean>
-  onSteer: (text: string) => Promise<"live" | "queued" | undefined>
+  onSteer: (text: string, files?: Attached[]) => Promise<"live" | "queued" | undefined>
   onReview: (decision: "merge" | "discard") => void
   onOpenPr: () => Promise<void>
   onDelete: () => void
@@ -56,6 +59,7 @@ export function NoteDetail(p: NoteDetailProps) {
   const [sending, setSending] = useState(false)
   const [delivery, setDelivery] = useState<string | null>(null)
   const [pring, setPring] = useState(false)
+  const [files, setFiles] = useState<Attached[]>([])
   const [full, setFull] = useState(false)
 
   const run = p.view.runs.find((r) => r.id === p.note.runId)
@@ -77,12 +81,13 @@ export function NoteDetail(p: NoteDetailProps) {
 
   async function send() {
     const text = draft.trim()
-    if (!text || sending) return
+    if ((!text && files.length === 0) || sending) return
     setSending(true)
-    const how = await p.onSteer(text)
+    const how = await p.onSteer(text, files)
     setSending(false)
     if (how) {
       setDraft("")
+      setFiles([])
       setDelivery(how === "live" ? "sent to the running agent" : "queued as a follow-up")
       setTimeout(() => setDelivery(null), 4000)
     }
@@ -180,7 +185,19 @@ export function NoteDetail(p: NoteDetailProps) {
             value={p.note.agent}
             agents={p.agents}
             onChange={p.onAssign}
-            className="w-[168px]"
+            className="w-[150px]"
+          />
+
+          <ModelSelect
+            agent={p.note.agent}
+            value={p.note.model}
+            onChange={p.onModel}
+            placeholder={
+              p.note.agent && p.view.board.models?.[p.note.agent]
+                ? `${p.view.board.models[p.note.agent]} (repo)`
+                : "Agent default"
+            }
+            className="w-[190px]"
           />
 
           <PolicyToggle value={p.note.policy ?? "repo"} onChange={p.onPolicy} disabled={live} />
@@ -274,22 +291,35 @@ export function NoteDetail(p: NoteDetailProps) {
         </div>
       )}
 
-      <div className="border-t border-hairline p-3">
-        <Textarea
-          rows={2}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={live ? "Steer the agent…" : "Say what to change, then send"}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send()
-            e.stopPropagation()
-          }}
-        />
-        <div className="mt-2 flex items-center gap-2">
-          <Button variant="default" onClick={() => void send()} disabled={!draft.trim() || sending}>
+      <div className="border-t p-3">
+        <Attachments files={files} onChange={setFiles}>
+          {({ onPaste }) => (
+            <Textarea
+              rows={2}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onPaste={onPaste}
+              placeholder={
+                live ? "Steer the agent — paste or drop files too" : "Say what to change, then send"
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send()
+                e.stopPropagation()
+              }}
+            />
+          )}
+        </Attachments>
+        <div className="mt-1 flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => void send()}
+            disabled={(!draft.trim() && files.length === 0) || sending}
+          >
             Send
           </Button>
-          <span className="text-[11px] text-faint">{delivery ?? "⌘↵ to send"}</span>
+          <span className="text-muted-foreground/70 text-[11px]">
+            {delivery ?? "⌘↵ to send"}
+          </span>
         </div>
       </div>
     </div>
@@ -310,7 +340,7 @@ export function NoteDetail(p: NoteDetailProps) {
 }
 
 function Sep() {
-  return <span className="text-faint">·</span>
+  return <span className="text-muted-foreground/60">·</span>
 }
 
 /**
