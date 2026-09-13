@@ -197,7 +197,11 @@ export function adoptStaged(noteId: string, worktree: string): Attachment[] {
   if (!existsSync(dir)) return []
 
   const names = readdirSync(dir)
+  // Nothing staged means nothing to do — and, deliberately, no drop directory
+  // in a worktree whose note never had an attachment.
   if (names.length === 0) return []
+
+  const adopted: Attachment[] = []
   const into = dropDir(worktree)
 
   for (const name of names) {
