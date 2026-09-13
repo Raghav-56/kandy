@@ -255,3 +255,24 @@ export type BoardView = {
 export function promptFor(note: { title: string; body: string }): string {
   return [note.title.trim(), note.body.trim()].filter(Boolean).join("\n\n")
 }
+
+/**
+ * The inverse of `promptFor`: a blob of prose becomes a titled note.
+ *
+ * Pasting three paragraphs into a single-line title used to keep the first
+ * line's worth of characters and drop the rest on the floor. A note already
+ * *is* a first line plus a remainder — that is exactly how `promptFor` puts one
+ * back together — so a paste splits the same way round rather than inventing a
+ * second convention for the same shape.
+ */
+export function splitPrompt(text: string): { title: string; body: string } {
+  const normalised = text.replace(/\r\n?/g, "\n")
+  const nl = normalised.indexOf("\n")
+  if (nl === -1) return { title: normalised.trim(), body: "" }
+  return {
+    title: normalised.slice(0, nl).trim(),
+    // Only the blank line that `promptFor` inserted is eaten; interior
+    // paragraph breaks are the paste's own formatting and are left alone.
+    body: normalised.slice(nl + 1).replace(/^\n+/, "").trimEnd(),
+  }
+}

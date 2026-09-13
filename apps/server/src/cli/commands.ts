@@ -4,7 +4,7 @@ import { homedir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
-import type { AgentId, Board, BoardView, Note } from "@kandy/core"
+import { splitPrompt, type AgentId, type Board, type BoardView, type Note } from "@kandy/core"
 import { banner, berry, bold, dim, faint, heat, lemon, mint, sparkline, statusTag } from "./banner.js"
 import { client, DEFAULT_PORT, ensureUp } from "./daemon.js"
 import type { Reclaimable } from "../gc.js"
@@ -70,16 +70,16 @@ export async function cmdNew(
 
   // A shell gives us one string, so the first line is the title and the rest
   // is the detail. The agent is given both either way; the split only decides
-  // what shows in the list.
-  const [first = "", ...rest] = title.split("\n")
-  const { noteId } = await api.createNote(here.board.id, column, first.trim(), rest.join("\n").trim())
+  // what shows in the list. Same rule as a paste into the composer.
+  const { title: first, body: rest } = splitPrompt(title)
+  const { noteId } = await api.createNote(here.board.id, column, first, rest)
 
   const agent = opts.agent
   if (agent) await api.assignNote(noteId, agent)
   if (opts.run && agent) await api.runNote(noteId, agent)
 
   out(
-    `  ${mint("✓")} ${bold(first.trim())}` +
+    `  ${mint("✓")} ${bold(first)}` +
       (opts.run && agent ? dim(`  running with ${agent}`) : agent ? dim(`  assigned to ${agent}`) : ""),
   )
   out(dim(`    http://127.0.0.1:${opts.port}`))

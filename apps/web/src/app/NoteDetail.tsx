@@ -7,9 +7,10 @@ import type {
   Forge,
   Note,
   Policy,
+  StagedFile,
   TranscriptFrame,
 } from "@kandy/core"
-import { Maximize2, Minimize2, X } from "lucide-react"
+import { Maximize2, Minimize2, Paperclip, X } from "lucide-react"
 import { ActivityLine, Button, Confirm, Hint, LoadingBlock, StatusPill, Textarea } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { AgentSelect } from "@/features/agents/AgentSelect"
@@ -38,6 +39,9 @@ export type NoteDetailProps = {
   onModel: (model: string | null) => void
   onEdit: (patch: { title?: string; body?: string }) => Promise<boolean>
   onSteer: (text: string, files?: Attached[]) => Promise<"live" | "queued" | undefined>
+  /** Files held for this note until it has a worktree to put them in. */
+  loadStaged: () => Promise<StagedFile[]>
+  onUnstage: (name: string) => Promise<StagedFile[]>
   onReview: (decision: "merge" | "discard") => void
   /** Raise this note to full access and continue it. */
   onEscalate: () => Promise<void>
@@ -68,6 +72,7 @@ export function NoteDetail(p: NoteDetailProps) {
   const [delivery, setDelivery] = useState<string | null>(null)
   const [pring, setPring] = useState(false)
   const [files, setFiles] = useState<Attached[]>([])
+  const [staged, setStaged] = useState<StagedFile[]>([])
   const [full, setFull] = useState(false)
   const [ask, setAsk] = useState<null | "merge" | "pr" | "discard" | "delete" | "escalate">(null)
   const [busy, setBusy] = useState(false)
@@ -106,6 +111,18 @@ export function NoteDetail(p: NoteDetailProps) {
   useEffect(() => {
     setDiff(null)
   }, [p.note.id])
+
+  // Staged files live on the daemon, not in this component's state, which is
+  // the whole point: they are still here after a reload. Re-read them whenever
+  // the note changes or a run starts, since starting one moves them out.
+  useEffect(() => {
+    let stale = false
+    setStaged([])
+    void p.loadStaged().then((s) => !stale && setStaged(s))
+    return () => {
+      stale = true
+    }
+  }, [p.note.id, p.note.runId])
 
   useEffect(() => {
     if (reviewable) setTab("diff")
@@ -334,6 +351,35 @@ export function NoteDetail(p: NoteDetailProps) {
             Delete
           </button>
         </nav>
+      )}
+
+      {staged.length > 0 && (
+        <div className="border-t border-hairline px-4 py-2.5">
+          <p className="text-faint mb-1.5 text-[11px]">
+            Waiting for a workspace — handed to the agent when this note runs.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {staged.map((f) => (
+              <span
+                key={f.name}
+                className="bg-muted flex items-center gap-1.5 rounded-md py-1 pr-1 pl-2 text-[11.5px]"
+              >
+                <Paperclip className="size-3 opacity-60" />
+                <span className="max-w-[160px] truncate">{f.name}</span>
+                <span className="text-muted-foreground/70 tabular-nums">
+                  {Math.ceil(f.bytes / 1024)}KB
+                </span>
+                <button
+                  onClick={() => void p.onUnstage(f.name).then(setStaged)}
+                  aria-label={`Remove ${f.name}`}
+                  className="hover:bg-background rounded p-0.5"
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
       )}
 
       <div className={cn("flex min-h-0 flex-1", split && "border-t border-hairline")}>

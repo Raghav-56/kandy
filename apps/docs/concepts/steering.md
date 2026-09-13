@@ -34,6 +34,22 @@ into the note's **own worktree**, so the path handed to the agent is one it can
 open with the tools it already has, and they are discarded with the worktree at
 review. No upload service, no new capability, nothing to clean up.
 
+A note being *composed* has no worktree — worktrees are made at run time — so a
+screenshot pasted into the composer is held under kandy's state directory, keyed
+by note id, and moved into the worktree the moment the run starts. The prompt
+then names it by a relative path the agent can open. Nothing is written into
+your repository for a note you have not run.
+
+That staging area is on disk, so attachments survive a page reload, and a daemon
+restart, between writing a note and running it. The one thing that does not
+survive is a reload with the composer still open: an unsaved note is unsaved,
+files and all.
+
+Images and text are accepted, up to 8MB each and ten per note, decided from the
+file's bytes rather than its name. Anything else is refused **with a reason** —
+an attachment that silently fails to arrive is indistinguishable from an agent
+ignoring it.
+
 ## Blocked
 
 In headless mode, an agent that cannot ask for permission does not hang — it

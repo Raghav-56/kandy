@@ -27,6 +27,14 @@ export function App() {
   const [composing, setComposing] = useState(false)
   const [newBoard, setNewBoard] = useState(false)
   const [palette, setPalette] = useState(false)
+  /**
+   * A file the daemon would not take.
+   *
+   * The composer applies the same rule before uploading, so this is the
+   * backstop — but a refusal must be said out loud wherever it happens, since a
+   * screenshot that never arrives looks exactly like an agent ignoring it.
+   */
+  const [notice, setNotice] = useState<string | null>(null)
   const [page, setPage] = useState<View>("board")
   const { theme, setTheme } = useTheme()
 
@@ -133,12 +141,15 @@ export function App() {
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
-        {error && (
+        {(error ?? notice) && (
           <button
-            onClick={clearError}
+            onClick={() => {
+              clearError()
+              setNotice(null)
+            }}
             className="shrink-0 border-b border-[#4a2b38] bg-[#241419] px-4 py-2.5 text-left text-[12px] text-[#efb9cb]"
           >
-            {error} <span className="ml-2 text-faint">dismiss</span>
+            {error ?? notice} <span className="ml-2 text-faint">dismiss</span>
           </button>
         )}
 
@@ -201,16 +212,20 @@ export function App() {
           onPolicy={(policy) => void act((c) => c.setPolicy(note.id, policy))}
           onModel={(model) => void act((c) => c.setModel(note.id, model))}
           onEdit={async (patch) => (await act((c) => c.editNote(note.id, patch))) !== undefined}
-          onSteer={async (text, files) =>
-            (
-              await act((c) =>
-                c.message(
-                  note.id,
-                  text,
-                  files?.map((f) => ({ name: f.name, data: f.data })),
-                ),
-              )
-            )?.delivery
+          onSteer={async (text, files) => {
+            const sent = await act((c) =>
+              c.message(
+                note.id,
+                text,
+                files?.map((f) => ({ name: f.name, data: f.data })),
+              ),
+            )
+            if (sent?.rejected?.length) setNotice(sent.rejected.map((r) => r.reason).join("; "))
+            return sent?.delivery
+          }}
+          loadStaged={async () => (await act((c) => c.attachments(note.id)))?.attachments ?? []}
+          onUnstage={async (name) =>
+            (await act((c) => c.unattach(note.id, name)))?.attachments ?? []
           }
           onReview={(decision) => void act((c) => c.reviewNote(note.id, decision))}
           onEscalate={async () => {
@@ -232,12 +247,23 @@ export function App() {
           agents={agents}
           defaultAgent={defaultAgent}
           onCancel={() => setComposing(false)}
-          onCreate={async (title, body, agent, model, run) => {
+          onCreate={async (title, body, agent, model, run, files) => {
             setComposing(false)
             const column = view.columns[0]?.id
             if (!column) return
-            const created = await act((c) => c.createNote(view.board.id, column, title, body))
+            // The files travel with the note. They have nowhere else to be —
+            // the worktree that will hold them does not exist until it runs.
+            const created = await act((c) =>
+              c.createNote(
+                view.board.id,
+                column,
+                title,
+                body,
+                files.map((f) => ({ name: f.name, data: f.data })),
+              ),
+            )
             if (!created) return
+            if (created.rejected?.length) setNotice(created.rejected.map((r) => r.reason).join("; "))
             if (agent) await act((c) => c.assignNote(created.noteId, agent))
             if (model) await act((c) => c.setModel(created.noteId, model))
             if (run && agent) await act((c) => c.runNote(created.noteId, agent))

@@ -22,6 +22,19 @@ Status is **machine state**. A note arrives in `running` because a process
 started, not because anyone dragged it — which is why the board is a list sorted
 by what needs you, rather than columns you push cards between.
 
+## Writing one
+
+The name and the detail are two fields, and the agent is given both — the split
+decides what shows in the list, not what gets sent.
+
+So a paste is split the same way round. Drop three paragraphs into the name and
+the first line names the note while the rest lands in the detail, rather than
+the browser keeping line one and discarding the remainder without saying so.
+`kandy "…"` from a shell splits an argument by the same rule.
+
+Paste a screenshot into either field and it is attached — see
+[attachments](/concepts/steering#attachments).
+
 ## A run
 
 One execution of a note by an agent. A note may have several over its life:

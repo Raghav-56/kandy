@@ -15,6 +15,7 @@ import {
 } from "@kandy/core"
 import type { Engine } from "./engine.js"
 import { adapter } from "./agents/index.js"
+import { adoptStaged, describe as describeAttachments } from "./attach.js"
 import { commitTrailers } from "./attribution.js"
 import { priceUsage } from "./pricing.js"
 import {
@@ -312,10 +313,18 @@ export class Runner {
       ? view.runs.filter((r) => r.noteId === q.noteId && r.agentSessionId).at(-1)?.agentSessionId
       : undefined
 
+    // Anything attached while the note was being written has been waiting in
+    // the state dir for a workspace to exist. It exists now, so the files move
+    // in and the prompt names them by a path the agent can actually open.
+    const attached = adoptStaged(q.noteId, worktree.path)
+    if (attached.length) {
+      this.say(q.runId, "system", `attached ${attached.map((f) => f.relPath).join(", ")}`)
+    }
+
     const agentId = q.agent
     const spec = a.spawn({
       cwd: worktree.path,
-      prompt: q.prompt ?? promptFor(note),
+      prompt: (q.prompt ?? promptFor(note)) + describeAttachments(attached),
       policy: note.policy ?? "repo",
       // Note pin wins over the board default; neither means the agent's own.
       ...(note.model ?? view.board.models?.[agentId]

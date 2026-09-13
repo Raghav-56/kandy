@@ -22,9 +22,22 @@ export type Commands = {
   /** Forget a board. Notes go with it; the repository does not. */
   "POST /boards/:id/remove": { req: {}; res: {} }
   "POST /notes": {
-    req: { boardId: BoardId; columnId: ColumnId; title: string; body?: string }
-    res: { noteId: NoteId }
+    req: {
+      boardId: BoardId
+      columnId: ColumnId
+      title: string
+      body?: string
+      /** Base64. Staged under the new note's id until it has a worktree. */
+      files?: UploadFile[]
+    }
+    res: { noteId: NoteId; attachments: StagedFile[]; rejected: Rejection[] }
   }
+  /** Attach to an existing note — its worktree if it has one, the stage if not. */
+  "POST /notes/:id/attach": {
+    req: { files: UploadFile[] }
+    res: { attachments: StagedFile[]; rejected: Rejection[] }
+  }
+  "POST /notes/:id/unattach": { req: { name: string }; res: { attachments: StagedFile[] } }
   "POST /notes/:id/edit": { req: { title?: string; body?: string }; res: {} }
   "POST /notes/:id/move": { req: { columnId: ColumnId; before?: NoteId; after?: NoteId }; res: {} }
   "POST /notes/:id/assign": { req: { agent: AgentId }; res: {} }
@@ -52,7 +65,10 @@ export type Commands = {
   }
   "POST /runs/:id/cancel": { req: {}; res: {} }
   /** Steer a note: talk to the live agent, or queue a follow-up that resumes it. */
-  "POST /notes/:id/message": { req: { text: string }; res: { delivery: Delivery } }
+  "POST /notes/:id/message": {
+    req: { text: string; files?: UploadFile[] }
+    res: { delivery: Delivery; rejected: Rejection[] }
+  }
   "POST /runs/:id/respond": {
     req: { requestId: string; decision: "allow" | "deny"; comment?: string }
     res: {}
@@ -81,7 +97,23 @@ export type Queries = {
   "GET /boards/:id/forge": { res: Forge }
   /** Directory listing, for choosing a repo without typing a path. */
   "GET /repo/browse": { res: Listing }
+  /** Files waiting for this note's worktree. Empty once it has run. */
+  "GET /notes/:id/attachments": { res: { attachments: StagedFile[] } }
 }
+
+/** A file on its way to an agent. Base64 so the payload stays plain JSON. */
+export type UploadFile = { name: string; data: string }
+
+/** A file held for a note, named as the agent will see it. */
+export type StagedFile = { name: string; bytes: number }
+
+/**
+ * A file we would not take, and why.
+ *
+ * Said out loud rather than dropped: a screenshot that quietly never arrives
+ * looks exactly like an agent ignoring it.
+ */
+export type Rejection = { name: string; reason: string }
 
 /**
  * How a steering message reached the agent. Surfaced to the user because the

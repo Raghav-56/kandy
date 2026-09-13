@@ -1,17 +1,19 @@
 import { useRef, useState, type DragEvent } from "react"
 import { Paperclip, X } from "lucide-react"
+import { refuseAttachment } from "@kandy/core"
 import { Button } from "@/ui"
 import { cn } from "@/lib/utils"
 
-export type Attached = { name: string; data: string; bytes: number }
+export type Attached = {
+  name: string
+  data: string
+  bytes: number
+  /** MIME type, when the browser gave us one worth drawing a thumbnail from. */
+  type: string
+}
 
-/** 8MB each. A screenshot is well under; a video is not what this is for. */
-const MAX = 8 * 1024 * 1024
-
-async function toBase64(file: File): Promise<string> {
-  const buf = await file.arrayBuffer()
+function encode(bytes: Uint8Array): string {
   let binary = ""
-  const bytes = new Uint8Array(buf)
   // Chunked, because spreading a large array into String.fromCharCode blows
   // the argument limit on anything bigger than a small image.
   for (let i = 0; i < bytes.length; i += 0x8000) {
@@ -20,12 +22,18 @@ async function toBase64(file: File): Promise<string> {
   return btoa(binary)
 }
 
+/** A data URL for the chip, or null for anything that isn't a picture. */
+export function thumbnail(f: Attached): string | null {
+  return f.type.startsWith("image/") ? `data:${f.type};base64,${f.data}` : null
+}
+
 /**
  * Files handed to the agent along with a message.
  *
- * Drop, paste or pick. They are written into the note's worktree, so the agent
- * opens them with the tools it already has rather than us inventing a way to
- * show it an image.
+ * Drop, paste or pick. They end up in the note's worktree, so the agent opens
+ * them with the tools it already has rather than us inventing a way to show it
+ * an image — and for a note that has not run yet, the daemon holds them until
+ * there is a worktree to put them in.
  */
 export function Attachments({
   files,
@@ -38,18 +46,25 @@ export function Attachments({
 }) {
   const input = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
-  const [tooBig, setTooBig] = useState<string | null>(null)
+  const [refused, setRefused] = useState<string[]>([])
 
   async function add(list: FileList | File[]) {
     const next: Attached[] = []
+    const no: string[] = []
     for (const file of Array.from(list)) {
-      if (file.size > MAX) {
-        setTooBig(file.name)
-        setTimeout(() => setTooBig(null), 4000)
+      // Decided from the bytes by the same rule the daemon applies, so a file
+      // the UI takes is never thrown away later — and one it won't take says
+      // so here, while the person is still looking at it.
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const reason = refuseAttachment(file.name, bytes)
+      if (reason) {
+        no.push(reason)
         continue
       }
-      next.push({ name: file.name, data: await toBase64(file), bytes: file.size })
+      next.push({ name: file.name, data: encode(bytes), bytes: file.size, type: file.type })
     }
+    setRefused(no)
+    if (no.length) setTimeout(() => setRefused([]), 6000)
     if (next.length) onChange([...files, ...next])
   }
 
@@ -74,7 +89,15 @@ export function Attachments({
               key={f.name + i}
               className="bg-muted flex items-center gap-1.5 rounded-md py-1 pr-1 pl-2 text-[11.5px]"
             >
-              <Paperclip className="size-3 opacity-60" />
+              {thumbnail(f) ? (
+                <img
+                  src={thumbnail(f)!}
+                  alt=""
+                  className="border-border/60 size-5 shrink-0 rounded-sm border object-cover"
+                />
+              ) : (
+                <Paperclip className="size-3 opacity-60" />
+              )}
               <span className="max-w-[160px] truncate">{f.name}</span>
               <span className="text-muted-foreground/70 tabular-nums">
                 {Math.ceil(f.bytes / 1024)}KB
@@ -101,9 +124,11 @@ export function Attachments({
         },
       })}
 
-      {tooBig && (
-        <p className="text-berry mt-1.5 text-[11px]">{tooBig} is over 8MB — too big to attach.</p>
-      )}
+      {refused.map((reason) => (
+        <p key={reason} className="text-berry mt-1.5 text-[11px]">
+          {reason}
+        </p>
+      ))}
 
       <input
         ref={input}

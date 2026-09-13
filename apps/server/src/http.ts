@@ -16,7 +16,15 @@ import type { Runner } from "./runner.js"
 import type { PrWatch } from "./prwatch.js"
 import { detectForge, openPr } from "./forge.js"
 import { serveStatic } from "./static.js"
-import { describe, saveAttachments } from "./attach.js"
+import {
+  clearStaged,
+  describe,
+  saveAttachments,
+  screen,
+  stageAttachments,
+  stagedFor,
+  unstageAttachment,
+} from "./attach.js"
 import { defaultModelFor, modelsFor, warmPrices } from "./pricing.js"
 import { computeStats } from "./stats.js"
 import { list as listDir, nativePick, suggestions } from "./browse.js"
@@ -303,7 +311,13 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   }
 
   if (req.method === "POST" && routed === "/notes") {
-    const body = await json<{ boardId: string; columnId: string; title: string; body?: string }>(req)
+    const body = await json<{
+      boardId: string
+      columnId: string
+      title: string
+      body?: string
+      files?: { name: string; data: string }[]
+    }>(req)
     if (!body?.boardId || !body?.columnId || !body?.title)
       return fail(res, 400, "bad_request", "boardId, columnId and title required")
 
@@ -323,7 +337,28 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
         pos: between(last?.pos ?? null, null),
       }),
     )
-    return send(res, 200, { ok: true, seq: e.seq, noteId })
+
+    // A note being composed has no worktree — worktrees are made at run time —
+    // so its files wait in the state dir under this id until it runs. Nothing
+    // is written into the user's repository for a note nobody has run.
+    const attached = body.files?.length
+      ? stageAttachments(noteId, body.files)
+      : { staged: [], rejected: [] }
+
+    return send(res, 200, {
+      ok: true,
+      seq: e.seq,
+      noteId,
+      attachments: attached.staged,
+      rejected: attached.rejected,
+    })
+  }
+
+  // GET /notes/:id/attachments — what is staged for a note that hasn't run.
+  if (req.method === "GET" && parts[0] === "notes" && parts[2] === "attachments") {
+    const noteId = parts[1]!
+    if (!deps.engine.boardOf(noteId)) return fail(res, 404, "note_not_found", `no note ${noteId}`)
+    return send(res, 200, { attachments: stagedFor(noteId) })
   }
 
   // GET /notes/:id/diff
@@ -501,7 +536,35 @@ async function noteAction(
       }
     }
 
+    case "attach": {
+      const b = await json<{ files: { name: string; data: string }[] }>(req)
+      if (!b?.files?.length) return fail(res, 400, "bad_request", "files required")
+      const wt = deps.runner.worktreeOf(noteId)
+      // Once there is a workspace the files belong in it — that is the path the
+      // agent opens. Before there is one they wait in the state dir.
+      if (wt) {
+        const { accepted, rejected } = screen(b.files)
+        const saved = saveAttachments(wt.path, accepted)
+        return send(res, 200, {
+          ok: true,
+          seq: deps.engine.head(),
+          attachments: saved.map((f) => ({ name: f.name, bytes: f.bytes })),
+          rejected,
+        })
+      }
+      const { staged, rejected } = stageAttachments(noteId, b.files)
+      return send(res, 200, { ok: true, seq: deps.engine.head(), attachments: staged, rejected })
+    }
+
+    case "unattach": {
+      const b = await json<{ name: string }>(req)
+      if (!b?.name) return fail(res, 400, "bad_request", "name required")
+      unstageAttachment(noteId, b.name)
+      return send(res, 200, { ok: true, seq: deps.engine.head(), attachments: stagedFor(noteId) })
+    }
+
     case "delete": {
+      clearStaged(noteId)
       const e = emit(deps, event("note.deleted", { noteId }))
       return send(res, 200, { ok: true, seq: e.seq })
     }
@@ -521,17 +584,31 @@ async function noteAction(
         return fail(res, 400, "bad_request", "text or files required")
 
       // Attachments go into the note's worktree, so the path we hand the agent
-      // is one it can actually open.
+      // is one it can actually open. A note with no worktree is about to get
+      // one — steering it queues a run — so its files are staged and the run
+      // moves them in and names them in the prompt itself. Refusing here was
+      // the old behaviour and it made attaching to a not-yet-run note
+      // impossible for no reason the user could see.
       let text = (b.text ?? "").trim()
+      const rejected: { name: string; reason: string }[] = []
       if (b.files?.length) {
         const wt = deps.runner.worktreeOf(noteId)
-        if (!wt) return fail(res, 409, "no_branch", "this note has no workspace yet — run it first")
-        text += describe(saveAttachments(wt.path, b.files))
+        if (wt) {
+          const screened = screen(b.files)
+          rejected.push(...screened.rejected)
+          text += describe(saveAttachments(wt.path, screened.accepted))
+        } else {
+          rejected.push(...stageAttachments(noteId, b.files).rejected)
+        }
+        // A message that was nothing but a file we would not take has nothing
+        // left to send. Say why, rather than poking the agent with "".
+        if (!text && rejected.length === b.files.length)
+          return fail(res, 400, "bad_request", rejected.map((r) => r.reason).join("; "))
       }
 
       try {
         const delivery = deps.runner.steer(view.board.id, noteId, text)
-        return send(res, 200, { ok: true, seq: deps.engine.head(), delivery })
+        return send(res, 200, { ok: true, seq: deps.engine.head(), delivery, rejected })
       } catch (err) {
         return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))
       }
@@ -587,6 +664,9 @@ async function noteAction(
         deps.runner.forget(noteId)
       }
 
+      // Merged or discarded, the note is finished with; anything still staged
+      // for it would outlive the thing it was attached to.
+      clearStaged(noteId)
       const e = emit(deps, event("review.decided", { noteId, ...b }))
       deps.runner.syncColumn(view.board.id, noteId)
       return send(res, 200, { ok: true, seq: e.seq })

@@ -12,8 +12,11 @@ import type {
   OutputLine,
   Policy,
   PullRequest,
+  Rejection,
   RepoCheck,
+  StagedFile,
   Stats,
+  UploadFile,
   StreamFrame,
   TranscriptFrame,
 } from "@kandy/core"
@@ -107,13 +110,29 @@ export class KandyClient {
     return this.req<BoardView>("GET", `/boards/${boardId}/view`)
   }
 
-  createNote(boardId: string, columnId: string, title: string, body = "") {
-    return this.req<{ noteId: string; seq: number }>("POST", "/notes", {
-      boardId,
-      columnId,
-      title,
-      body,
+  createNote(boardId: string, columnId: string, title: string, body = "", files?: UploadFile[]) {
+    return this.req<{ noteId: string; seq: number; attachments: StagedFile[]; rejected: Rejection[] }>(
+      "POST",
+      "/notes",
+      { boardId, columnId, title, body, files },
+    )
+  }
+  /** Attach to a note: its worktree if it has one, otherwise held until it runs. */
+  attach(noteId: string, files: UploadFile[]) {
+    return this.req<{ attachments: StagedFile[]; rejected: Rejection[]; seq: number }>(
+      "POST",
+      `/notes/${noteId}/attach`,
+      { files },
+    )
+  }
+  unattach(noteId: string, name: string) {
+    return this.req<{ attachments: StagedFile[]; seq: number }>("POST", `/notes/${noteId}/unattach`, {
+      name,
     })
+  }
+  /** What is waiting for this note's worktree. Survives a reload; nothing local does. */
+  attachments(noteId: string) {
+    return this.req<{ attachments: StagedFile[] }>("GET", `/notes/${noteId}/attachments`)
   }
   editNote(noteId: string, patch: { title?: string; body?: string }) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/edit`, patch)
@@ -168,11 +187,12 @@ export class KandyClient {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/review`, { decision, comment })
   }
   /** Steer a note: reaches a live agent if it takes stdin, else queues a follow-up. */
-  message(noteId: string, text: string, files?: { name: string; data: string }[]) {
-    return this.req<{ delivery: Delivery; seq: number }>("POST", `/notes/${noteId}/message`, {
-      text,
-      files,
-    })
+  message(noteId: string, text: string, files?: UploadFile[]) {
+    return this.req<{ delivery: Delivery; seq: number; rejected: Rejection[] }>(
+      "POST",
+      `/notes/${noteId}/message`,
+      { text, files },
+    )
   }
   diff(noteId: string) {
     return this.req<{
