@@ -19,6 +19,7 @@ import { closeAskChannel, openAskChannel, type Permissions } from "./permission.
 import { adapter } from "./agents/index.js"
 import { adoptStaged, describe as describeAttachments } from "./attach.js"
 import { commitTrailers } from "./attribution.js"
+import { composeCommitMessage } from "./message.js"
 import { priceUsage } from "./pricing.js"
 import {
   carryInto,
@@ -543,18 +544,25 @@ export class Runner {
   }
 
   /**
-   * The subject line for whatever the agent left uncommitted.
+   * The message for whatever the agent left uncommitted.
    *
-   * The note's title, because that is the one sentence someone already wrote
-   * describing this work. It used to be `kandy: note_m2d904cm893j2fp0`, which
-   * says nothing to anyone reading `git log --oneline` — least of all the
-   * person who wrote the note. The id is still recorded, as a trailer, where a
-   * machine can find it and a human isn't forced to.
+   * The note's title and body, because that is what someone already wrote
+   * describing this work — the title says what, the body says why. It used to
+   * be `kandy: note_m2d904cm893j2fp0`, which says nothing to anyone reading
+   * `git log --oneline` — least of all the person who wrote the note. The id
+   * is still recorded, as a trailer, where a machine can find it and a human
+   * isn't forced to.
+   *
+   * No footer here, unlike a merge commit: the diff numbers describe the
+   * commit this call is about to create, so they cannot be known yet.
    */
   private commitMessage(l: Live): string {
     const note = this.getView(l.boardId)?.notes.find((n) => n.id === l.noteId)
-    const title = note?.title.trim().split("\n")[0]?.trim()
-    return title || `kandy: ${l.noteId}`
+    return composeCommitMessage({
+      id: l.noteId,
+      title: note?.title ?? "",
+      body: note?.body ?? "",
+    })
   }
 
   /**

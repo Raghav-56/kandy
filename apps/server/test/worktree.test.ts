@@ -115,7 +115,9 @@ test("a conflicting merge is reported and leaves the repo clean", async () => {
   execFileSync("git", ["add", "-A"], { cwd: dir })
   execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "main"], { cwd: dir })
 
-  const result = await mergeBranch(dir, wt.branch)
+  const result = await mergeBranch(dir, wt.branch, {
+    note: { id: "note_f", title: "Conflict on purpose", body: "" },
+  })
   assert.equal(result.merged, false)
   assert.ok(result.conflict)
   // A half-merge the user has to discover on their own is worse than a refusal.
@@ -130,7 +132,9 @@ test("a clean merge lands on the base branch", async () => {
   execFileSync("git", ["add", "-A"], { cwd: wt.path })
   execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "add"], { cwd: wt.path })
 
-  const result = await mergeBranch(dir, wt.branch)
+  const result = await mergeBranch(dir, wt.branch, {
+    note: { id: "note_g", title: "Add a file", body: "" },
+  })
   assert.equal(result.merged, true)
   assert.equal(existsSync(path.join(dir, "ADDED.md")), true)
   await removeWorktree(dir, wt.path, true)
@@ -226,15 +230,32 @@ test("a merge commit is unsigned by default and signed on request", async () => 
   const plain = await createWorktree(dir, "note_k", "plain")
   writeFileSync(path.join(plain.path, "ONE.md"), "1\n")
   await commitLeftovers(plain, "one")
-  assert.equal((await mergeBranch(dir, plain.branch)).merged, true)
-  assert.equal(message(dir), `kandy: merge ${plain.branch}\n`)
+  assert.equal(
+    (
+      await mergeBranch(dir, plain.branch, {
+        note: { id: "note_k", title: "Add one", body: "" },
+      })
+    ).merged,
+    true,
+  )
+  // The note's words, and nothing else — no trailer block, not even a branch
+  // name. The default has to stay indistinguishable from an unsigned commit.
+  assert.equal(message(dir), "Add one\n")
   await removeWorktree(dir, plain.path, true)
 
   const signed = await createWorktree(dir, "note_l", "signed")
   writeFileSync(path.join(signed.path, "TWO.md"), "2\n")
   await commitLeftovers(signed, "two")
   const trailers = commitTrailers({ noteId: "note_l", runId: "run_m", agent: "codex" })
-  assert.equal((await mergeBranch(dir, signed.branch, trailers)).merged, true)
+  assert.equal(
+    (
+      await mergeBranch(dir, signed.branch, {
+        note: { id: "note_l", title: "Add two", body: "" },
+        trailers,
+      })
+    ).merged,
+    true,
+  )
   assert.equal(
     execFileSync("git", ["log", "-1", "--format=%(trailers:key=Kandy-Note,valueonly)"], { cwd: dir })
       .toString()
