@@ -20,6 +20,7 @@ import type {
   StreamFrame,
   TranscriptFrame,
 } from "@kandy/core"
+import { EVENT_TYPES } from "@kandy/core"
 import { installEventSource } from "./sse.js"
 
 export { installEventSource, NodeEventSource, SseDecoder, type SseMessage } from "./sse.js"
@@ -292,33 +293,3 @@ export class KandyClient {
     return () => es.close()
   }
 }
-
-const EVENT_TYPES = [
-  "board.created",
-  "column.created",
-  "note.created",
-  "note.edited",
-  "note.moved",
-  "note.assigned",
-  "note.status",
-  "note.deleted",
-  "run.requested",
-  "run.started",
-  "run.output",
-  "run.tool",
-  "run.session",
-  "run.metrics",
-  "note.policy",
-  "note.permission",
-  "note.model",
-  "board.models",
-  "board.policy",
-  "board.removed",
-  "note.pr",
-  "board.setup",
-  "run.blocked",
-  "run.unblocked",
-  "run.finished",
-  "review.opened",
-  "review.decided",
-] as const

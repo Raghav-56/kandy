@@ -143,6 +143,55 @@ export type KandyEventMap = {
 export type KandyEventType = keyof KandyEventMap
 
 /**
+ * Every event name, at runtime.
+ *
+ * The SSE stream names each event, and named events do not reach `onmessage` —
+ * a listener has to be bound per name. The client kept its own hand-written
+ * copy of this list, and `board.attribution` was missing from it, so toggling
+ * commit trailers saved to the daemon and then silently never reached the UI:
+ * the switch flipped back and stayed wrong until a reload.
+ *
+ * The check below makes that a compile error rather than a dead setting. Add a
+ * member to KandyEventMap without adding it here and `_exhaustive` stops
+ * type-checking.
+ */
+export const EVENT_TYPES = [
+  "board.created",
+  "board.setup",
+  "board.removed",
+  "board.models",
+  "board.policy",
+  "board.attribution",
+  "column.created",
+  "note.created",
+  "note.edited",
+  "note.moved",
+  "note.assigned",
+  "note.model",
+  "note.policy",
+  "note.status",
+  "note.deleted",
+  "note.permission",
+  "note.pr",
+  "run.requested",
+  "run.started",
+  "run.output",
+  "run.tool",
+  "run.session",
+  "run.blocked",
+  "run.unblocked",
+  "run.finished",
+  "run.metrics",
+  "review.opened",
+  "review.decided",
+] as const satisfies readonly KandyEventType[]
+
+/** Fails to compile if KandyEventMap gains a member EVENT_TYPES does not list. */
+type _Missing = Exclude<KandyEventType, (typeof EVENT_TYPES)[number]>
+const _exhaustive: _Missing extends never ? true : _Missing = true
+void _exhaustive
+
+/**
  * Transcript frames: what the agent is saying and doing, right now.
  *
  * These are deliberately NOT domain events. They are high volume, they are
