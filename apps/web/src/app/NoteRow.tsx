@@ -52,7 +52,7 @@ export const NoteRow = memo(function NoteRow({
        is itself a <button>, and a button nested in a button is invalid markup
        that browsers resolve by dropping the inner one. Overlaying it also
        means a click on delete never reaches the row's own onClick. */
-    <div className="group/row relative">
+    <div className="group/row relative" data-flip={note.id}>
     <button
       onClick={() => onSelect(note.id)}
       data-note={note.id}

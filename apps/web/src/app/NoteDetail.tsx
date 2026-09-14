@@ -35,6 +35,8 @@ export type NoteDetailProps = {
   frames: TranscriptFrame[]
   activity: ActivityFrame | undefined
   forge: Forge | null
+  /** Tracked repo paths, for `@` in the reply box. */
+  paths: string[]
   /** Questions this note's agent is standing still waiting for. Usually empty. */
   prompts: PermissionPrompt[]
   onClose: () => void
@@ -463,6 +465,7 @@ export function NoteDetail(p: NoteDetailProps) {
           onSubmit={() => void send()}
           files={files}
           onFiles={setFiles}
+          paths={p.paths}
           busy={sending}
           hint={delivery ?? null}
           placeholder={

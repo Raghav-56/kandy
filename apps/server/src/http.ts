@@ -39,6 +39,7 @@ import {
   diffStat,
   mergeBranch,
   removeWorktree,
+  trackedFiles,
 } from "./worktree.js"
 
 import { authorized } from "./auth.js"
@@ -123,6 +124,19 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
 
   if (req.method === "GET" && routed === "/agents") {
     return send(res, 200, { agents: await detectAll() })
+  }
+
+  // GET /boards/:id/files — tracked paths, for the composer's `@` picker
+  if (req.method === "GET" && parts[0] === "boards" && parts[2] === "files" && parts[1]) {
+    const view = deps.engine.view(parts[1]!)
+    if (!view) return fail(res, 404, "board_not_found", "no such board")
+    try {
+      return send(res, 200, { files: await trackedFiles(view.board.repoPath) })
+    } catch (err) {
+      // A repo that cannot be read is not an error worth a banner; the picker
+      // simply has nothing to offer.
+      return send(res, 200, { files: [], error: err instanceof Error ? err.message : String(err) })
+    }
   }
 
   // GET /repo/browse?path=... — directory listing for the picker

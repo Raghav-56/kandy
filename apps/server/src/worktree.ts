@@ -9,7 +9,7 @@ import { worktreeRoot } from "./paths.js"
 
 const exec = promisify(execFile)
 
-async function git(cwd: string, ...args: string[]): Promise<string> {
+export async function git(cwd: string, ...args: string[]): Promise<string> {
   const { stdout } = await exec("git", args, { cwd, maxBuffer: 32 * 1024 * 1024 })
   return stdout.trim()
 }
@@ -370,4 +370,20 @@ export async function checkRepo(p: string): Promise<{
  *  so callers surface this rather than swallowing it. */
 export async function isDirty(repoPath: string): Promise<boolean> {
   return (await git(repoPath, "status", "--porcelain")) !== ""
+}
+
+/**
+ * Every file git is tracking, for the composer's `@` picker.
+ *
+ * `ls-files` rather than a directory walk: it already knows what is tracked
+ * and what is ignored, so node_modules and build output never appear without
+ * anyone maintaining a list of things to skip.
+ *
+ * Capped, because a monorepo can track tens of thousands of paths and this
+ * crosses the wire to fill a menu that shows eight of them.
+ */
+export async function trackedFiles(repoPath: string, cap = 20000): Promise<string[]> {
+  const out = await git(repoPath, "ls-files", "-z")
+  const all = out.split("\0").filter(Boolean)
+  return all.slice(0, cap)
 }

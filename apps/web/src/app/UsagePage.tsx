@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { useCountUp } from "@/hooks/useCountUp"
 import type { BoardView } from "@kandy/core"
 import { Empty, Hint, Kbd, Separator } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
@@ -71,12 +72,13 @@ export function UsagePage({ view }: { view: BoardView | null }) {
       <p className="text-muted-foreground mt-1 text-[12.5px]">{view.board.name}</p>
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Metric
+        <CountMetric
           label="Spend"
-          value={`${anyEstimated ? "≈" : ""}${money(totalCost) ?? "$0.00"}`}
+          to={totalCost}
+          format={(n) => `${anyEstimated ? "≈" : ""}${money(n) ?? "$0.00"}`}
           note={anyEstimated ? "partly estimated" : "as reported"}
         />
-        <Metric label="Tokens" value={compact(totalTokens) ?? "0"} />
+        <CountMetric label="Tokens" to={totalTokens} format={(n) => compact(n) ?? "0"} />
         <Metric label="Runs" value={String(view.runs.length)} note={unpriced ? `${unpriced} unpriced` : undefined} />
         <Metric label="Agent time" value={duration(0, totalTime)} />
       </div>
@@ -148,4 +150,24 @@ function Metric({ label, value, note }: { label: string; value: string; note?: s
       {note && <p className="text-muted-foreground/70 mt-0.5 text-[11px]">{note}</p>}
     </div>
   )
+}
+
+/**
+ * A metric that counts to its figure.
+ *
+ * Only spend and tokens get this. Run count and elapsed time are facts you
+ * read once; these two are the ones you watch change while an agent works.
+ */
+function CountMetric({
+  label,
+  to,
+  format,
+  note,
+}: {
+  label: string
+  to: number
+  format: (n: number) => string
+  note?: string
+}) {
+  return <Metric label={label} value={format(useCountUp(to))} note={note} />
 }

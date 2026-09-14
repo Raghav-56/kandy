@@ -63,6 +63,9 @@ export function App() {
   const [boards, setBoards] = useState<Board[]>([])
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [forge, setForge] = useState<Forge | null>(null)
+  /* Tracked paths for the composer's `@` picker. Fetched once per board —
+     it is a few hundred strings and it changes when git does, not live. */
+  const [paths, setPaths] = useState<string[]>([])
 
   const [composing, setComposing] = useState(false)
   /* Carried from the quick bar into the modal, so expanding never costs you
@@ -161,6 +164,15 @@ export function App() {
     setForge(null)
     if (!boardId) return
     void client.forge(boardId).then(setForge).catch(() => setForge(null))
+  }, [boardId, client])
+
+  useEffect(() => {
+    setPaths([])
+    if (!boardId) return
+    void client
+      .files(boardId)
+      .then((r) => setPaths(r.files))
+      .catch(() => setPaths([]))
   }, [boardId, client])
 
   const note = view?.notes.find((n) => n.id === selected) ?? null
@@ -339,6 +351,7 @@ export function App() {
           <BoardComposer
             agents={agents}
             defaultAgent={defaultAgent}
+            paths={paths}
             onExpand={(draft) => {
               setHandoff(draft)
               setComposing(true)
@@ -398,6 +411,7 @@ export function App() {
           frames={note.runId ? (transcript[note.runId] ?? []) : []}
           activity={note.runId ? activity[note.runId] : undefined}
           forge={forge}
+          paths={paths}
           prompts={view.prompts.filter((q) => q.noteId === note.id)}
           onClose={() => setSelected(null)}
           onRun={(agent) => void act((c) => c.runNote(note.id, agent))}

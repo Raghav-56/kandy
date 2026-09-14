@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { ChevronRight } from "lucide-react"
 import type { ActivityFrame, BoardView, Note, PermissionPrompt } from "@kandy/core"
 import { Button, Confirm, Empty, Kbd } from "@/ui"
@@ -6,6 +6,7 @@ import { Logo } from "@/brand/Logo"
 import { GROUPS, LOOK } from "@/features/notes/status"
 import { cn } from "@/lib/utils"
 import { NoteRow } from "./NoteRow"
+import { useFlip } from "@/hooks/useFlip"
 
 /**
  * The list, grouped by what you should deal with first.
@@ -37,6 +38,11 @@ export function TriageList({
   /* One dialog for the whole list rather than one per row: a Confirm inside
      NoteRow would mount a Dialog for every note on the board, and NoteRow is
      memoised precisely because this list repaints on every streamed event. */
+  /* Rows animate from where they were when a run moves them between groups.
+     The key is the rendered order, so a status change triggers a measure and a
+     repaint that changes nothing does not. */
+  const list = useRef<HTMLDivElement>(null)
+
   const [pending, setPending] = useState<Note | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -51,6 +57,14 @@ export function TriageList({
         .sort(byUrgencyThenRecency),
     })).filter((g) => g.notes.length > 0)
   }, [view.notes])
+
+  /* Which rows, in which group, in which order — the only thing that should
+     make a row animate. A streamed token changes the view but not this. */
+  const order = useMemo(
+    () => groups.map((g) => `${g.key}:${g.notes.map((n) => n.id).join(",")}`).join("|"),
+    [groups],
+  )
+  useFlip(list, order)
 
   if (view.notes.length === 0) {
     return (
@@ -71,7 +85,7 @@ export function TriageList({
   const open = view.notes.filter((n) => n.status !== "done").length
 
   return (
-    <div className="mx-auto w-full max-w-[820px] px-4 pt-4 pb-36">
+    <div ref={list} className="mx-auto w-full max-w-[820px] px-4 pt-4 pb-36">
       {/* Above every group, including "Needs you". A blocked note was refused
           and carried on; these are agents standing still with a person in the
           loop, and nothing else on the board outranks that. */}

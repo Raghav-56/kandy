@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowUp, Paperclip } from "lucide-react"
 import { Attachments, type Attached } from "@/features/notes/Attachments"
 import { cn } from "@/lib/utils"
@@ -30,6 +30,7 @@ export function PromptBox({
   autoFocus,
   rows = 2,
   maxRows = 12,
+  paths = [],
   className,
 }: {
   value: string
@@ -47,10 +48,64 @@ export function PromptBox({
   autoFocus?: boolean
   rows?: number
   maxRows?: number
+  /** Repo paths offered after an `@`. Empty means the affordance is off. */
+  paths?: string[]
   className?: string
 }) {
   const box = useRef<HTMLTextAreaElement>(null)
   const empty = !value.trim() && files.length === 0
+
+  /*
+   * `@` opens a path picker.
+   *
+   * The query is whatever follows the last `@` that still has no whitespace
+   * after it, so it closes itself the moment you type a space — which is what
+   * a token boundary means here, and avoids needing an explicit dismiss.
+   */
+  const [cursor, setCursor] = useState(0)
+  const mention = useMemo(() => {
+    if (paths.length === 0) return null
+    const upto = value.slice(0, cursor)
+    const at = upto.lastIndexOf("@")
+    if (at === -1) return null
+    const q = upto.slice(at + 1)
+    if (/\s/.test(q)) return null
+    // Only after a boundary, so an email address never opens a file picker.
+    const before = at === 0 ? "" : upto[at - 1]!
+    if (before && !/\s/.test(before)) return null
+    return { at, q }
+  }, [value, cursor, paths.length])
+
+  const hits = useMemo(() => {
+    if (!mention) return []
+    const q = mention.q.toLowerCase()
+    const scored = paths
+      .filter((p) => p.toLowerCase().includes(q))
+      // A match on the filename beats one buried in a directory name.
+      .sort((a, b) => {
+        const an = a.slice(a.lastIndexOf("/") + 1).toLowerCase().startsWith(q) ? 0 : 1
+        const bn = b.slice(b.lastIndexOf("/") + 1).toLowerCase().startsWith(q) ? 0 : 1
+        return an - bn || a.length - b.length
+      })
+    return scored.slice(0, 8)
+  }, [mention, paths])
+
+  const [pick, setPick] = useState(0)
+  useEffect(() => setPick(0), [mention?.q])
+
+  const insert = (path: string) => {
+    if (!mention) return
+    const next = value.slice(0, mention.at) + "@" + path + " " + value.slice(cursor)
+    onChange(next)
+    queueMicrotask(() => {
+      const el = box.current
+      if (!el) return
+      const at = mention.at + path.length + 2
+      el.focus()
+      el.setSelectionRange(at, at)
+      setCursor(at)
+    })
+  }
 
   /*
    * Grow with the text, up to a point.
@@ -70,7 +125,7 @@ export function PromptBox({
   return (
     <div
       className={cn(
-        "border-line bg-surface rounded-2xl border shadow-lg shadow-black/5",
+        "border-line bg-surface relative rounded-2xl border shadow-lg shadow-black/5",
         "focus-within:border-grape/45 focus-within:ring-grape/12 transition-colors focus-within:ring-3",
         className,
       )}
@@ -83,11 +138,43 @@ export function PromptBox({
               rows={rows}
               autoFocus={autoFocus}
               value={value}
-              onChange={(e) => onChange(e.target.value)}
+              onChange={(e) => {
+                // Track the caret here as well as on keyup: a paste moves it
+                // without a keystroke, and the picker reads from it.
+                setCursor(e.target.selectionStart)
+                onChange(e.target.value)
+              }}
               onPaste={onPaste}
               placeholder={placeholder}
               className="placeholder:text-muted-foreground/45 min-h-0 flex-1 resize-none bg-transparent py-1.5 text-[14px] leading-[1.55] outline-none"
+              onSelect={(e) => setCursor(e.currentTarget.selectionStart)}
+              onClick={(e) => setCursor(e.currentTarget.selectionStart)}
+              onKeyUp={(e) => setCursor(e.currentTarget.selectionStart)}
               onKeyDown={(e) => {
+                // While the picker is open it owns the arrows and Enter —
+                // otherwise Enter would send a half-typed path.
+                if (hits.length > 0) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault()
+                    setPick((i) => (i + 1) % hits.length)
+                    return
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault()
+                    setPick((i) => (i - 1 + hits.length) % hits.length)
+                    return
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault()
+                    insert(hits[pick]!)
+                    return
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault()
+                    setCursor(-1)
+                    return
+                  }
+                }
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault()
                   if (!empty && !busy) onSubmit()
@@ -124,6 +211,36 @@ export function PromptBox({
           </div>
         )}
       </Attachments>
+
+      {hits.length > 0 && (
+        <div className="border-line bg-surface absolute bottom-[calc(100%+6px)] left-0 z-30 w-full overflow-hidden rounded-xl border shadow-xl shadow-black/20">
+          <p className="label border-hairline border-b px-3 py-1.5">Files in this repo</p>
+          {hits.map((path, i) => (
+            <button
+              key={path}
+              type="button"
+              // mousedown, not click: click fires after blur, by which point
+              // the textarea has lost the selection this inserts against.
+              onMouseDown={(e) => {
+                e.preventDefault()
+                insert(path)
+              }}
+              onMouseEnter={() => setPick(i)}
+              className={cn(
+                "flex w-full items-baseline gap-2 px-3 py-1.5 text-left",
+                i === pick ? "bg-accent" : "hover:bg-accent/60",
+              )}
+            >
+              <span className="truncate font-mono text-[12px]">
+                {path.slice(path.lastIndexOf("/") + 1)}
+              </span>
+              <span className="text-muted-foreground/60 min-w-0 flex-1 truncate text-right font-mono text-[10.5px]">
+                {path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="border-hairline flex flex-wrap items-center gap-1.5 border-t px-2.5 py-1.5">
         {controls}

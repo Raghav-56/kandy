@@ -148,6 +148,10 @@ export class KandyClient {
   stats(boardId: string) {
     return this.req<Stats>("GET", `/boards/${boardId}/stats`)
   }
+  /** Tracked paths in the board's repo, for the composer's `@` picker. */
+  files(boardId: string) {
+    return this.req<{ files: string[] }>("GET", `/boards/${boardId}/files`)
+  }
   forge(boardId: string) {
     return this.req<Forge>("GET", `/boards/${boardId}/forge`)
   }
