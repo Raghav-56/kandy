@@ -16,6 +16,21 @@ trouble was a run failing. Two fields, no secrets:
 | Claude Code | `claudeAiOauth.refreshTokenExpiresAt`, `subscriptionType` | `accessToken`, `refreshToken` |
 | Codex | `auth_mode`, and whether `OPENAI_API_KEY` is set | `tokens.*` |
 
+**Source order matters, and getting it wrong shipped a false alarm.** On macOS the live
+credential is in the Keychain (`Claude Code-credentials`) and `~/.claude/.credentials.json` is
+left behind from before Claude Code moved. Reading the file first reported a sign-in that had
+expired a month earlier while the real one had another fortnight on it — telling a signed-in
+person to sign in again, which is worse than not checking. The Keychain is consulted first and the
+file only when it yields nothing, so a relic can never outvote the credential in use.
+
+Reading the Keychain item is silent: it is the user's own item and `security` hands it over
+without a prompt. If it ever refuses, the answer is null.
+
+Worth knowing: [T3 Code declines to probe for this at
+all](https://github.com/pingdotgg/t3code/issues/7878) — Claude Code's local init succeeds on
+cached credentials, so their reliable signal is a 401 at run time. A cheerful "ready" here is a
+best guess about a file, not a promise the next run will authenticate.
+
 Codex records no expiry. kandy reports `expiresAt: null` there rather than deriving one from
 `last_refresh`, because a guess wearing a timestamp is worse than saying nothing: null means "it
 did not say", never "it is fine".

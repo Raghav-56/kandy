@@ -1,7 +1,11 @@
 import { homedir } from "node:os"
+import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import type { AgentAdapter, AgentEvent } from "./types.js"
+
+/** Claude Code's own Keychain item name on macOS. */
+const KEYCHAIN_ITEM = "Claude Code-credentials"
 
 /**
  * Claude Code adapter.
@@ -201,19 +205,32 @@ function summarize(name: unknown, input: Record<string, unknown> | undefined): s
 }
 
 /**
- * What the credential file says about itself.
+ * What Claude Code's stored credential says about itself.
  *
  * Only the metadata beside the tokens: when the sign-in dies and which plan it
- * is on. The tokens themselves are never read — kandy has no use for them, the
- * spawned child already has its own.
+ * is on. The tokens themselves are never read — kandy has no use for them, and
+ * the spawned child already has its own.
  *
- * `refreshTokenExpiresAt` is the one that matters. The access token expires
- * every few hours and Claude Code refreshes it silently; it is the refresh
- * token running out that makes you sign in again.
+ * The Keychain first, and this is the whole subtlety. On macOS Claude Code
+ * keeps the live credential in the Keychain and `~/.claude/.credentials.json`
+ * is left behind from before it moved, so reading the file reported a sign-in
+ * that expired a month ago while the real one was good for another fortnight.
+ * A false "expired" is worse than no expiry at all: it sends you to re-login
+ * for nothing.
+ *
+ * `refreshTokenExpiresAt` is the field that matters. The access token expires
+ * every few hours and is refreshed silently; it is the refresh token running
+ * out that makes you sign in again.
+ *
+ * Anything unreadable returns null, never a guess. T3 Code declines to probe
+ * for this at all — Claude Code's local init succeeds on cached credentials,
+ * so their reliable signal is a 401 at run time — which is a fair warning that
+ * a cheerful "ready" here is not a promise.
  */
 function readClaudeAuth(): { expiresAt: number | null; plan: string | null } | null {
+  const raw = keychainCredential() ?? fileCredential()
+  if (!raw) return null
   try {
-    const raw = readFileSync(path.join(homedir(), ".claude", ".credentials.json"), "utf8")
     const oauth = (JSON.parse(raw) as Record<string, any>)?.["claudeAiOauth"]
     if (!oauth) return null
     const exp = oauth["refreshTokenExpiresAt"] ?? oauth["expiresAt"]
@@ -222,7 +239,35 @@ function readClaudeAuth(): { expiresAt: number | null; plan: string | null } | n
       plan: typeof oauth["subscriptionType"] === "string" ? oauth["subscriptionType"] : null,
     }
   } catch {
-    // Unreadable or not JSON: say nothing rather than guess at a state.
+    return null
+  }
+}
+
+/** The live credential on macOS. Silent — no prompt for the user's own item. */
+function keychainCredential(): string | null {
+  if (process.platform !== "darwin") return null
+  try {
+    return execFileSync("security", ["find-generic-password", "-s", KEYCHAIN_ITEM, "-w"], {
+      encoding: "utf8",
+      timeout: 4000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim()
+  } catch {
+    // No item, or it declined to hand it over. Either way we know nothing.
+    return null
+  }
+}
+
+/**
+ * The file, which is authoritative on Linux and a relic on macOS.
+ *
+ * Only consulted when the Keychain gave nothing, so a stale copy can never
+ * outvote the credential actually in use.
+ */
+function fileCredential(): string | null {
+  try {
+    return readFileSync(path.join(homedir(), ".claude", ".credentials.json"), "utf8")
+  } catch {
     return null
   }
 }

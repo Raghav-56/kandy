@@ -84,6 +84,48 @@ test("detect and spawn work with a CLI executable and inherited environment", as
   }
 })
 
+test("a stale credential file never outvotes the live one", async () => {
+  /*
+   * The bug this exists for, and it shipped.
+   *
+   * On macOS Claude Code keeps the live credential in the Keychain and leaves
+   * ~/.claude/.credentials.json behind from before it moved. Reading the file
+   * reported a sign-in that had expired a month earlier while the real one was
+   * good for another fortnight — so kandy told a signed-in person to sign in
+   * again, which is worse than the missing detection it replaced.
+   *
+   * detect() is the seam: whichever source readAuth consults, a live answer
+   * has to win and an unreadable one has to be null rather than expired.
+   */
+  const dir = await mkdtemp(path.join(tmpdir(), "kandy-stale-"))
+  try {
+    const bin = path.join(dir, "fake")
+    await writeFile(bin, `#!${process.execPath}\nconsole.log('fake 1.0')\n`, { mode: 0o755 })
+    const cred = path.join(dir, "creds.json")
+    await writeFile(cred, "{}")
+
+    const stale = Date.now() - 30 * 86_400_000
+    const live = Date.now() + 14 * 86_400_000
+    const base = { ...aider, bin, credentials: [cred] }
+
+    // The live source answers; the stale file is never reached.
+    const preferred = await detect({ ...base, readAuth: () => ({ expiresAt: live, plan: "max" }) })
+    assert.equal(preferred.authed, true, "a live credential is signed in")
+    assert.equal(preferred.expiresAt, live)
+
+    // Only when nothing live is available does the older answer stand.
+    const fallback = await detect({ ...base, readAuth: () => ({ expiresAt: stale, plan: "max" }) })
+    assert.equal(fallback.authed, false)
+
+    // Unreadable is unknown, not expired: the file may simply not be the source.
+    const unknown = await detect({ ...base, readAuth: () => null })
+    assert.equal(unknown.expiresAt, null)
+    assert.equal(unknown.authed, true, "unknown expiry must not read as expired")
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test("an expired credential is not signed in", async () => {
   // The bug this exists for: a credential file outlives the credential in it,
   // so checking that the file is there reported a month-dead sign-in as ready
