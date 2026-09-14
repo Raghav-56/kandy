@@ -16,6 +16,7 @@ import {
 import { Backdrop } from "@/brand/Backdrop"
 import { Logo } from "@/brand/Logo"
 import { Composer } from "@/features/notes/Composer"
+import { BoardComposer } from "@/features/notes/BoardComposer"
 import { FirstRun } from "@/features/onboarding/FirstRun"
 import { NewBoardDialog } from "@/features/boards/NewBoardDialog"
 import { useBoard } from "@/hooks/useBoard"
@@ -64,6 +65,9 @@ export function App() {
   const [forge, setForge] = useState<Forge | null>(null)
 
   const [composing, setComposing] = useState(false)
+  /* Carried from the quick bar into the modal, so expanding never costs you
+     what you already typed. */
+  const [handoff, setHandoff] = useState("")
   const [newBoard, setNewBoard] = useState(false)
   const [palette, setPalette] = useState(false)
   /**
@@ -280,7 +284,7 @@ export function App() {
         className="min-w-0 flex-1"
       >
         <ResizablePanel id="board" minSize="28">
-          <main className="flex h-full min-w-0 flex-col">
+          <main className="relative flex h-full min-w-0 flex-col">
         {(error ?? notice) && (
           <button
             onClick={() => {
@@ -330,6 +334,37 @@ export function App() {
             <LoadingBlock className="pt-24" label="Opening the board" />
           )}
         </div>
+
+        {page === "board" && view && boards.length > 0 && (
+          <BoardComposer
+            agents={agents}
+            defaultAgent={defaultAgent}
+            onExpand={(draft) => {
+              setHandoff(draft)
+              setComposing(true)
+            }}
+            onCreate={async (title, agent, model, files) => {
+              const column = view.columns[0]?.id
+              if (!column) return
+              const created = await act((c) =>
+                c.createNote(
+                  view.board.id,
+                  column,
+                  title,
+                  "",
+                  files.map((f) => ({ name: f.name, data: f.data })),
+                ),
+              )
+              if (!created) return
+              if (created.rejected?.length)
+                setNotice(created.rejected.map((r) => r.reason).join("; "))
+              if (agent) await act((c) => c.assignNote(created.noteId, agent))
+              if (model) await act((c) => c.setModel(created.noteId, model))
+              // A one-liner with an agent picked is meant to go, not to sit.
+              if (agent) await act((c) => c.runNote(created.noteId, agent))
+            }}
+          />
+        )}
           </main>
         </ResizablePanel>
 
@@ -421,9 +456,14 @@ export function App() {
         <Composer
           agents={agents}
           defaultAgent={defaultAgent}
-          onCancel={() => setComposing(false)}
+          initialTitle={handoff}
+          onCancel={() => {
+            setComposing(false)
+            setHandoff("")
+          }}
           onCreate={async (title, body, agent, model, run, files) => {
             setComposing(false)
+            setHandoff("")
             const column = view.columns[0]?.id
             if (!column) return
             // The files travel with the note. They have nowhere else to be —

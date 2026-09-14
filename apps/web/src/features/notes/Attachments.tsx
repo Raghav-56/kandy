@@ -39,10 +39,17 @@ export function Attachments({
   files,
   onChange,
   children,
+  bare,
 }: {
   files: Attached[]
   onChange: (files: Attached[]) => void
-  children: (props: { onPaste: (e: React.ClipboardEvent) => void }) => React.ReactNode
+  children: (props: {
+    onPaste: (e: React.ClipboardEvent) => void
+    /** Open the file picker, for callers that place their own control. */
+    open: () => void
+  }) => React.ReactNode
+  /** Hide the built-in Attach button; the caller renders its own. */
+  bare?: boolean
 }) {
   const input = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
@@ -115,6 +122,7 @@ export function Attachments({
       )}
 
       {children({
+        open: () => input.current?.click(),
         onPaste: (e) => {
           const pasted = Array.from(e.clipboardData.files)
           if (pasted.length) {
@@ -140,15 +148,17 @@ export function Attachments({
           e.target.value = ""
         }}
       />
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => input.current?.click()}
-        className="text-muted-foreground mt-1 h-7 px-2"
-      >
-        <Paperclip className="size-3.5" />
-        Attach
-      </Button>
+      {!bare && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => input.current?.click()}
+          className="text-muted-foreground mt-1 h-7 px-2"
+        >
+          <Paperclip className="size-3.5" />
+          Attach
+        </Button>
+      )}
     </div>
   )
 }

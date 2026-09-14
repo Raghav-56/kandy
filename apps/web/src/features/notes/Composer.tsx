@@ -22,11 +22,14 @@ import { Attachments, type Attached } from "@/features/notes/Attachments"
 export function Composer({
   agents,
   defaultAgent,
+  initialTitle = "",
   onCancel,
   onCreate,
 }: {
   agents: AgentInfo[]
   defaultAgent: AgentId | null
+  /** A one-liner already typed into the board's bar, carried over on expand. */
+  initialTitle?: string
   onCancel: () => void
   onCreate: (
     title: string,
@@ -37,7 +40,7 @@ export function Composer({
     files: Attached[],
   ) => void
 }) {
-  const [title, setTitle] = useState("")
+  const [title, setTitle] = useState(initialTitle)
   const [body, setBody] = useState("")
   const [agent, setAgent] = useState<AgentId | "">(defaultAgent ?? "")
   const [model, setModel] = useState<string | null>(null)

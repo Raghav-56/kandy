@@ -19,7 +19,8 @@ import { AgentSelect } from "@/features/agents/AgentSelect"
 import { ModelSelect } from "@/features/agents/ModelSelect"
 import { DiffView } from "@/features/diff/DiffView"
 import { Ask, type Answer } from "@/features/notes/Ask"
-import { Attachments, type Attached } from "@/features/notes/Attachments"
+import { type Attached } from "@/features/notes/Attachments"
+import { PromptBox } from "@/features/notes/PromptBox"
 import { InlineEdit } from "@/features/notes/InlineEdit"
 import { PrBadge } from "@/features/notes/PrBadge"
 import { LOOK } from "@/features/notes/status"
@@ -454,35 +455,20 @@ export function NoteDetail(p: NoteDetailProps) {
       )}
 
       <div className="border-t p-3">
-        <Attachments files={files} onChange={setFiles}>
-          {({ onPaste }) => (
-            <Textarea
-              rows={2}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onPaste={onPaste}
-              placeholder={
-                live ? "Steer the agent — paste or drop files too" : "Say what to change, then send"
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send()
-                e.stopPropagation()
-              }}
-            />
-          )}
-        </Attachments>
-        <div className="mt-1 flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => void send()}
-            disabled={(!draft.trim() && files.length === 0) || sending}
-          >
-            Send
-          </Button>
-          <span className="text-muted-foreground/70 text-[11px]">
-            {delivery ?? "⌘↵ to send"}
-          </span>
-        </div>
+        {/* The same box the board composes with — steering a run and writing a
+            note are the same act, and used to look like two different ones. */}
+        <PromptBox
+          value={draft}
+          onChange={setDraft}
+          onSubmit={() => void send()}
+          files={files}
+          onFiles={setFiles}
+          busy={sending}
+          hint={delivery ?? null}
+          placeholder={
+            live ? "Steer the agent — paste or drop files too" : "Say what to change, then send"
+          }
+        />
       </div>
     </div>
   )
