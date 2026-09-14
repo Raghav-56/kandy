@@ -172,6 +172,24 @@ export class Store {
     }
   }
 
+  /**
+   * What the agent said last, for a PR body.
+   *
+   * The closing message of a run is the agent's own account of what it did —
+   * written for a person, because the last turn always is. It is the one piece
+   * of context a reviewer wants and the only place kandy had it was a
+   * transcript nobody reads after the fact.
+   */
+  lastSaid(runId: string): string | null {
+    const row = this.db
+      .prepare(
+        "SELECT text FROM transcript WHERE run_id = ? AND role = 'assistant' ORDER BY seq DESC LIMIT 1",
+      )
+      .get(runId) as { text?: string } | undefined
+    const text = row?.text?.trim()
+    return text ? text : null
+  }
+
   transcriptSince(runId: string, after = 0, limit = 1000): TranscriptFrame[] {
     const rows = this.db
       .prepare(

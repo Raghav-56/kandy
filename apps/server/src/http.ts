@@ -126,6 +126,21 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     return send(res, 200, { agents: await detectAll() })
   }
 
+  // GET /notes/:id/pr — what opening a PR would say, before it says it
+  if (req.method === "GET" && parts[0] === "notes" && parts[2] === "pr" && parts[1]) {
+    const view = deps.engine.boardOf(parts[1]!)
+    const note = view?.notes.find((n) => n.id === parts[1])
+    if (!view || !note) return fail(res, 404, "note_not_found", "no such note")
+    return send(res, 200, {
+      title: note.title,
+      body: prBody(note, {
+        model: note.model ?? (note.agent ? view.board.models?.[note.agent] : null) ?? null,
+        footer: view.board.attribution?.pr === true,
+        summary: note.runId ? deps.engine.store.lastSaid(note.runId) : null,
+      }),
+    })
+  }
+
   // GET /boards/:id/files — tracked paths, for the composer's `@` picker
   if (req.method === "GET" && parts[0] === "boards" && parts[2] === "files" && parts[1]) {
     const view = deps.engine.view(parts[1]!)
@@ -539,16 +554,21 @@ async function noteAction(
       const forge = await detectForge(view.board.repoPath)
       if (!forge.available) return fail(res, 409, "no_forge", forge.reason ?? "no forge available")
 
-      const b = await json<{ draft?: boolean }>(req)
+      const b = await json<{ draft?: boolean; title?: string; body?: string }>(req)
       try {
+        // Whatever the person edited in the dialog wins; the composed version
+        // is only a starting point, and a PR nobody could edit before it
+        // existed is how you get a wall of mechanical descriptions.
         const pr = await openPr(
           view.board.repoPath,
           note.branch,
-          note.title,
-          prBody(note, {
-            model: note.model ?? (note.agent ? view.board.models?.[note.agent] : null) ?? null,
-            footer: view.board.attribution?.pr === true,
-          }),
+          b?.title?.trim() || note.title,
+          b?.body ??
+              prBody(note, {
+              model: note.model ?? (note.agent ? view.board.models?.[note.agent] : null) ?? null,
+              footer: view.board.attribution?.pr === true,
+              summary: note.runId ? deps.engine.store.lastSaid(note.runId) : null,
+            }),
           b?.draft ?? false,
         )
         const e = emit(deps, event("note.pr", { noteId, pr }))

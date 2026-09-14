@@ -1,4 +1,4 @@
-import type { AgentId, Attribution } from "@kandy/core"
+import type { AgentId, DiffStat, Attribution } from "@kandy/core"
 
 /**
  * How kandy signs the history it produces.
@@ -86,23 +86,52 @@ export function withTrailers(message: string, trailers: readonly string[]): stri
  * than no URL — it looks like a reference and resolves to a connection error.
  */
 export function prBody(
-  note: { body: string; agent: AgentId | string | null },
-  opts: { model?: string | null; footer: boolean },
+  note: { title: string; body: string; agent: AgentId | string | null; stat?: DiffStat | null },
+  opts: { model?: string | null; footer: boolean; summary?: string | null },
 ): string {
+  const out: string[] = []
+
   const brief = note.body.trim()
-  const lines = [brief || "_No description given._"]
+  if (brief) {
+    out.push("### The brief", "", brief)
+  }
 
-  if (!opts.footer) return lines.join("\n")
+  /*
+   * What the agent said it did.
+   *
+   * Its closing message is written for a person — the last turn always is —
+   * and it is the difference between a reviewer knowing what to look for and
+   * reading a diff cold. Without it a PR opened from a note with no detail
+   * said "_No description given._" and nothing else, while this sat unread in
+   * a transcript.
+   */
+  const summary = opts.summary?.trim()
+  if (summary) {
+    if (out.length) out.push("")
+    out.push("### What the agent did", "", summary)
+  }
 
-  lines.push("", "---", "")
-  lines.push(
+  if (note.stat && note.stat.files > 0) {
+    if (out.length) out.push("")
+    out.push(
+      `\`${note.stat.files}\` file${note.stat.files === 1 ? "" : "s"} changed, ` +
+        `\`+${note.stat.insertions}\` \`-${note.stat.deletions}\``,
+    )
+  }
+
+  if (out.length === 0) out.push("_No description given._")
+
+  if (!opts.footer) return out.join("\n")
+
+  out.push("", "---", "")
+  out.push(
     note.agent
       ? `Written by \`${note.agent}\`${opts.model ? ` (\`${opts.model}\`)` : ""}, from a kandy note.`
       : "Opened from a kandy note.",
   )
-  lines.push("")
-  lines.push("🍬 Queued and run with [kandy](https://github.com/hiteshbandhu/kandy)")
-  return lines.join("\n")
+  out.push("")
+  out.push("🍬 Queued and run with [kandy](https://github.com/hiteshbandhu/kandy)")
+  return out.join("\n")
 }
 
 /** Normalize whatever a client sent into a complete, both-keys-present value. */

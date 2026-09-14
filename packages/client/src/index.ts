@@ -155,8 +155,16 @@ export class KandyClient {
   forge(boardId: string) {
     return this.req<Forge>("GET", `/boards/${boardId}/forge`)
   }
-  openPr(noteId: string, draft = false) {
-    return this.req<{ pr: PullRequest; seq: number }>("POST", `/notes/${noteId}/pr`, { draft })
+  /** What opening a PR would say — the starting point for the dialog. */
+  prPreview(noteId: string) {
+    return this.req<{ title: string; body: string }>("GET", `/notes/${noteId}/pr`)
+  }
+  openPr(noteId: string, opts: { draft?: boolean; title?: string; body?: string } = {}) {
+    return this.req<{ pr: PullRequest; seq: number }>("POST", `/notes/${noteId}/pr`, {
+      draft: opts.draft ?? false,
+      ...(opts.title !== undefined ? { title: opts.title } : {}),
+      ...(opts.body !== undefined ? { body: opts.body } : {}),
+    })
   }
   setModel(noteId: string, model: string | null) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/model`, { model })

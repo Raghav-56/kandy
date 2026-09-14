@@ -453,8 +453,9 @@ export function App() {
           onEscalate={async () => {
             await act((c) => c.escalateNote(note.id))
           }}
-          onOpenPr={async () => {
-            await act((c) => c.openPr(note.id))
+          onPrPreview={() => act((c) => c.prPreview(note.id))}
+          onOpenPr={async (draft) => {
+            await act((c) => c.openPr(note.id, draft))
           }}
           onDelete={() => {
             setSelected(null)

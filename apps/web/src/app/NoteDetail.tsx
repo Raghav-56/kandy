@@ -18,6 +18,10 @@ import {
   Button,
   Confirm,
   CopyLink,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
   Hint,
   LoadingBlock,
   StatusPill,
@@ -66,7 +70,9 @@ export type NoteDetailProps = {
   onWiden?: (wide: boolean) => void
   /** Raise this note to full access and continue it. */
   onEscalate: () => Promise<void>
-  onOpenPr: () => Promise<void>
+  /** What the PR would say, so it can be edited before it exists. */
+  onPrPreview: () => Promise<{ title: string; body: string } | undefined>
+  onOpenPr: (draft: { title: string; body: string }) => Promise<void>
   onDelete: () => void
   loadDiff: () => Promise<
     { diff: string; capturedAt: number | null; baseBranch: string | null } | undefined
@@ -95,6 +101,9 @@ export function NoteDetail(p: NoteDetailProps) {
   const [files, setFiles] = useState<Attached[]>([])
   const [staged, setStaged] = useState<StagedFile[]>([])
   const [full, setFull] = useState(false)
+  /* The PR as it stands before anyone has agreed to it. Fetched when the
+     dialog opens, because it depends on a transcript the board does not hold. */
+  const [pr, setPr] = useState<{ title: string; body: string } | null>(null)
   const [ask, setAsk] = useState<null | "merge" | "pr" | "discard" | "delete" | "escalate">(null)
   const [busy, setBusy] = useState(false)
 
@@ -151,6 +160,17 @@ export function NoteDetail(p: NoteDetailProps) {
   useEffect(() => {
     if (reviewable) setTab("diff")
   }, [reviewable])
+
+  useEffect(() => {
+    if (ask !== "pr") return setPr(null)
+    let stale = false
+    void p.onPrPreview().then((r) => {
+      if (!stale && r) setPr(r)
+    })
+    return () => {
+      stale = true
+    }
+  }, [ask])
 
   // What each confirmation needs to state about this particular note.
   const base = diff?.baseBranch ?? p.forge?.defaultBranch ?? "the base branch"
@@ -513,28 +533,68 @@ export function NoteDetail(p: NoteDetailProps) {
         onConfirm={() => confirmAction(() => p.onReview("merge"))}
       />
 
-      <Confirm
-        open={ask === "pr"}
-        onOpenChange={(v) => !v && setAsk(null)}
-        title="Open a pull request"
-        body={
-          <>
-            Pushes this branch to <b>{p.forge?.repo ?? "the remote"}</b> and opens a PR against{" "}
-            <b>{p.forge?.defaultBranch ?? base}</b>. This is the first thing kandy does that leaves
-            your machine. The note lands here automatically once the PR is merged.
-          </>
-        }
-        facts={facts}
-        confirmLabel="Push and open PR"
-        busy={busy || pring}
-        onConfirm={() =>
-          confirmAction(async () => {
-            setPring(true)
-            await p.onOpenPr()
-            setPring(false)
-          })
-        }
-      />
+      {/*
+        A pull request you can read before it exists.
+        
+        Opening one used to post the note's title and whatever was in its detail
+        field — which for a note written as a one-liner meant a PR body reading
+        "_No description given._" while the agent's own account of the work sat
+        unread in the transcript. Both are editable here, because a description
+        nobody could change before it was published is how a repository fills up
+        with PRs nobody wrote.
+      */}
+      <Dialog open={ask === "pr"} onOpenChange={(v) => !v && setAsk(null)}>
+        <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-[620px]">
+          <DialogTitle>Open a pull request</DialogTitle>
+          <DialogDescription asChild>
+            <div className="text-muted-foreground mt-1.5 text-[12.5px] leading-relaxed">
+              Pushes this branch to <b>{p.forge?.repo ?? "the remote"}</b> and opens a PR against{" "}
+              <b>{p.forge?.defaultBranch ?? base}</b>. This is the first thing kandy does that
+              leaves your machine. The note lands here automatically once the PR is merged.
+            </div>
+          </DialogDescription>
+
+          {pr === null ? (
+            <LoadingBlock className="py-10" label="Composing the description" />
+          ) : (
+            <div className="mt-4 space-y-2">
+              <input
+                value={pr.title}
+                onChange={(e) => setPr({ ...pr, title: e.target.value })}
+                aria-label="Pull request title"
+                className="border-line bg-bg focus-visible:border-grape/45 w-full rounded-lg border px-3 py-2 text-[13.5px] font-medium outline-none"
+              />
+              <Textarea
+                value={pr.body}
+                onChange={(e) => setPr({ ...pr, body: e.target.value })}
+                aria-label="Pull request description"
+                rows={12}
+                className="bg-bg max-h-[42vh] resize-none font-mono text-[12px] leading-[1.6]"
+              />
+            </div>
+          )}
+
+          <div className="mt-5 flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setAsk(null)} disabled={busy || pring}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!pr || !pr.title.trim() || busy || pring}
+              onClick={() =>
+                confirmAction(async () => {
+                  if (!pr) return
+                  setPring(true)
+                  await p.onOpenPr(pr)
+                  setPring(false)
+                })
+              }
+            >
+              {pring ? "Pushing…" : "Push and open PR"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Confirm
         open={ask === "discard"}
