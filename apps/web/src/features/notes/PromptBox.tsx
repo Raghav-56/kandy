@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { ArrowUp, Paperclip } from "lucide-react"
 import { Attachments, type Attached } from "@/features/notes/Attachments"
 import { cn } from "@/lib/utils"
@@ -110,17 +110,42 @@ export function PromptBox({
   /*
    * Grow with the text, up to a point.
    *
-   * A fixed two-row box means writing anything real happens through a
-   * viewport the size of a tweet. Height is reset before it is measured,
-   * or the box can only ever get taller.
+   * A fixed two-row box means writing anything real happens through a viewport
+   * the size of a tweet.
    */
-  useEffect(() => {
+  const fit = useCallback(() => {
     const el = box.current
     if (!el) return
-    const line = parseFloat(getComputedStyle(el).lineHeight) || 20
-    el.style.height = "auto"
-    el.style.height = `${Math.min(el.scrollHeight, line * maxRows)}px`
-  }, [value, maxRows])
+    const cs = getComputedStyle(el)
+    const line = parseFloat(cs.lineHeight) || 20
+    const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)
+
+    /*
+     * Collapse to zero before measuring, not to `auto`.
+     *
+     * This is a flex child, and `auto` inside a flex container reports the
+     * height the container gave it rather than the height its content needs —
+     * so an empty box measured as full, pinned itself to the twelve-row
+     * maximum, and squeezed the stream above it to nothing.
+     */
+    el.style.height = "0px"
+    const content = el.scrollHeight
+    el.style.height = `${Math.min(Math.max(content, line * rows + pad), line * maxRows + pad)}px`
+  }, [rows, maxRows])
+
+  useLayoutEffect(fit, [value, fit])
+
+  /*
+   * And once more after the first frame.
+   *
+   * On mount the measurement runs before the surrounding flex layout and the
+   * web font have settled, and comes out at the maximum. One re-measure on the
+   * next frame is enough; after that every keystroke re-runs it anyway.
+   */
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(fit)
+    return () => cancelAnimationFrame(id)
+  }, [fit])
 
   return (
     <div
@@ -146,7 +171,7 @@ export function PromptBox({
               }}
               onPaste={onPaste}
               placeholder={placeholder}
-              className="placeholder:text-muted-foreground/45 min-h-0 flex-1 resize-none bg-transparent py-1.5 text-[14px] leading-[1.55] outline-none"
+              className="placeholder:text-muted-foreground/45 min-h-0 w-full flex-1 resize-none self-end overflow-y-auto bg-transparent py-1.5 text-[14px] leading-[1.55] outline-none"
               onSelect={(e) => setCursor(e.currentTarget.selectionStart)}
               onClick={(e) => setCursor(e.currentTarget.selectionStart)}
               onKeyUp={(e) => setCursor(e.currentTarget.selectionStart)}

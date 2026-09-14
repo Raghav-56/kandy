@@ -233,7 +233,6 @@ export function NoteDetail(p: NoteDetailProps) {
             <CopyLink
               path={`/b/${p.note.boardId}/n/${p.note.id}`}
               label="Copy link to this note"
-              className="mr-0.5"
             />
             <Hint text={full ? "Narrow" : "Widen — stream beside diff"}>
               <Button

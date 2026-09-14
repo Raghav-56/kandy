@@ -1,7 +1,7 @@
 import { memo } from "react"
 import { Trash2 } from "lucide-react"
 import type { ActivityFrame, Note, Run } from "@kandy/core"
-import { ActivityLine, CopyLink, Hint, StatusPill } from "@/ui"
+import { ActivityLine, Button, CopyLink, Hint, StatusPill } from "@/ui"
 import { AgentMark } from "@/features/agents/AgentMark"
 import { PrBadge } from "@/features/notes/PrBadge"
 import { LOOK } from "@/features/notes/status"
@@ -146,17 +146,24 @@ export const NoteRow = memo(function NoteRow({
           "opacity-0 group-hover/row:opacity-100 focus-within:opacity-100",
         )}
       >
-        <CopyLink path={`/b/${note.boardId}/n/${note.id}`} label="Copy link to this note" />
+        <CopyLink
+          path={`/b/${note.boardId}/n/${note.id}`}
+          label="Copy link to this note"
+          size="icon-xs"
+        />
 
-      <button
-        type="button"
-        onClick={() => onRequestDelete(note)}
-        aria-label={`Delete note: ${note.title}`}
-        title="Delete note"
-        className="text-muted-foreground/70 hover:bg-berry/12 hover:text-berry grid place-items-center rounded-md p-1 transition"
-      >
-        <Trash2 className="size-3.5" />
-      </button>
+        <Hint text="Delete note">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => onRequestDelete(note)}
+            aria-label={`Delete note: ${note.title}`}
+            className="hover:bg-berry/12 hover:text-berry"
+          >
+            <Trash2 className="size-3" />
+          </Button>
+        </Hint>
       </span>
     </div>
   )
