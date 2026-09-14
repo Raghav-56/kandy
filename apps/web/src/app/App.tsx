@@ -247,6 +247,10 @@ export function App() {
       <Sidebar
         boards={boards}
         boardId={boardId}
+        /* There are no accounts in kandy — this is whoever owns the machine,
+           read off the repo path. A footer that says "Account" and means
+           nothing is worse than one that says your name. */
+        user={boards[0]?.repoPath.match(/^\/(?:Users|home)\/([^/]+)/)?.[1] ?? "this machine"}
         view={view}
         agents={agents}
         page={page}

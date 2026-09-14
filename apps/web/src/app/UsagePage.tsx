@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import type { BoardView } from "@kandy/core"
-import { Empty, Hint, Separator } from "@/ui"
+import { Empty, Hint, Kbd, Separator } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { Gauge } from "lucide-react"
 import { compact, cost, duration, money } from "@/lib/utils"
@@ -50,6 +50,7 @@ export function UsagePage({ view }: { view: BoardView | null }) {
 
   const totalCost = view.runs.reduce((t, r) => t + (r.costUsd ?? 0), 0)
   const totalTokens = view.runs.reduce((t, r) => t + (r.tokens ?? 0), 0)
+  const held = view.notes.filter((n) => n.status === "done" && n.worktree).length
   const totalTime = view.runs.reduce((t, r) => t + ((r.endedAt ?? Date.now()) - r.startedAt), 0)
   const anyEstimated = view.runs.some((r) => r.costSource === "estimated")
   const unpriced = view.runs.filter((r) => r.tokens !== null && r.costUsd === null).length
@@ -79,6 +80,15 @@ export function UsagePage({ view }: { view: BoardView | null }) {
         <Metric label="Runs" value={String(view.runs.length)} note={unpriced ? `${unpriced} unpriced` : undefined} />
         <Metric label="Agent time" value={duration(0, totalTime)} />
       </div>
+
+      {/* Disk is the cost this page was missing. Every finished note keeps a
+          whole checkout until it is reclaimed, and nothing anywhere said so. */}
+      {held > 0 && (
+        <p className="text-muted-foreground/70 mt-3 text-[11.5px] leading-relaxed">
+          {held} finished {held === 1 ? "note is" : "notes are"} still holding a worktree — a whole
+          checkout each. <Kbd>kandy gc</Kbd> gives the disk back and leaves every branch where it is.
+        </p>
+      )}
 
       <section className="mt-8">
         <h2 className="text-[13px] font-semibold">By agent</h2>

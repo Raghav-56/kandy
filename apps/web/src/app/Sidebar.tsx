@@ -17,21 +17,18 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Hint,
   Kbd,
   Sidebar as SidebarRoot,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarSeparator,
   StatusPill,
   useSidebar,
 } from "@/ui"
@@ -43,6 +40,12 @@ import { cn, money } from "@/lib/utils"
 /* kandy's row: 13px and 34px tall, against shadcn's 14px and 32px. Applied in
    one place so the nav, the footer and anything added later cannot drift. */
 const ROW = "h-[34px] text-[13px]"
+
+/** kandy has no accounts. The name is whoever owns this machine. */
+function initials(name: string): string {
+  const parts = name.trim().split(/[\s._-]+/).filter(Boolean)
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?"
+}
 
 export type View = "board" | "usage" | "settings"
 
@@ -76,6 +79,7 @@ export function Sidebar({
   onBoardChange,
   onNewBoard,
   onNewNote,
+  user,
 }: {
   boards: Board[]
   boardId: string | null
@@ -88,6 +92,7 @@ export function Sidebar({
   onBoardChange: (id: string) => void
   onNewBoard: () => void
   onNewNote: () => void
+  user: string
 }) {
   const notes = view?.notes ?? []
   const n = (f: (s: string) => boolean) => notes.filter((x) => f(x.status)).length
@@ -103,6 +108,7 @@ export function Sidebar({
   const estimated = runs.some((r) => r.costSource === "estimated")
 
   const current = boards.find((b) => b.id === boardId) ?? null
+  const ready = agents.filter((a) => a.installed && a.authed)
 
   /* One badge, not four. The list already shows every status; what belongs
      here is the single most urgent thing, so the rail can carry it too. */
@@ -248,46 +254,82 @@ export function Sidebar({
       </SidebarContent>
 
       <SidebarFooter className="border-sidebar-border border-t p-2">
-        <SidebarGroup className="group-data-[collapsible=icon]:hidden p-0 pb-1">
-          <SidebarGroupLabel className="label h-auto px-2 pt-0 pb-1.5 text-[10.5px]">
-            Agents
-          </SidebarGroupLabel>
-          <SidebarGroupContent className="flex flex-col gap-1 px-2">
-            {agents
-              .filter((a) => a.installed)
-              .map((a) => (
-                <Hint
-                  key={a.id}
-                  text={`${agentLabel(a.id)}${a.version ? ` — ${a.version}` : ""}${a.authed ? "" : " · not signed in"}`}
-                >
-                  <span className="flex w-fit items-center gap-2 py-0.5">
-                    <AgentMark agent={a.id} size={13} />
-                    <span
-                      className={cn(
-                        "text-[11.5px]",
-                        a.authed ? "text-muted-foreground" : "text-muted-foreground/50",
-                      )}
-                    >
-                      {agentLabel(a.id)}
-                    </span>
-                  </span>
-                </Hint>
-              ))}
-          </SidebarGroupContent>
-        </SidebarGroup>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              className={ROW}
-              onClick={() => onTheme(theme === "dark" ? "light" : "dark")}
-              tooltip={theme === "dark" ? "Switch to light" : "Switch to dark"}
-            >
-              {theme === "dark" ? <Sun /> : <Moon />}
-              <span>{theme === "dark" ? "Light" : "Dark"}</span>
-            </SidebarMenuButton>
-            <SidebarMenuBadge className="text-muted-foreground/70 group-data-[collapsible=icon]:hidden">
-              <Kbd>⌘K</Kbd>
-            </SidebarMenuBadge>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  size="lg"
+                  tooltip="You and this machine"
+                  className="data-[state=open]:bg-sidebar-accent"
+                >
+                  <span className="bg-grape/15 text-grape grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold">
+                    {initials(user)}
+                  </span>
+                  <div className="grid flex-1 text-left leading-tight">
+                    <span className="truncate text-[12.5px] font-medium">{user}</span>
+                    <span className="text-muted-foreground truncate text-[11px]">
+                      {ready.length > 0
+                        ? `${ready.length} ${ready.length === 1 ? "agent" : "agents"} ready`
+                        : "no agent ready"}
+                    </span>
+                  </div>
+                  <ChevronsUpDown className="ml-auto size-3.5 shrink-0 opacity-60" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent
+                align="start"
+                side="top"
+                sideOffset={6}
+                className="w-[--radix-dropdown-menu-trigger-width] min-w-[240px]"
+              >
+                {/* Agents moved here from the body. They are a fact about this
+                    machine, not a place to go, and they only matter when you
+                    are asking why something will not run. */}
+                <DropdownMenuLabel className="label">Agents</DropdownMenuLabel>
+                {agents
+                  .filter((a) => a.installed)
+                  .map((a) => (
+                    <div key={a.id} className="flex items-center gap-2 px-2 py-1.5 text-[12.5px]">
+                      <AgentMark agent={a.id} size={13} />
+                      <span className="min-w-0 flex-1 truncate">{agentLabel(a.id)}</span>
+                      <span
+                        className={cn(
+                          "shrink-0 text-[11px]",
+                          a.authed ? "text-mint" : "text-lemon",
+                        )}
+                      >
+                        {a.authed ? "ready" : "not signed in"}
+                      </span>
+                    </div>
+                  ))}
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem onSelect={() => onPage("settings")} className="gap-2">
+                  <Settings2 className="size-3.5" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onPage("usage")} className="gap-2">
+                  <Gauge className="size-3.5" />
+                  Usage
+                  {spend > 0 && (
+                    <span className="text-muted-foreground ml-auto text-[11px] tabular-nums">
+                      {estimated ? "≈" : ""}
+                      {money(spend)}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => onTheme(theme === "dark" ? "light" : "dark")}
+                  className="gap-2"
+                >
+                  {theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+                  {theme === "dark" ? "Light appearance" : "Dark appearance"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
