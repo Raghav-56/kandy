@@ -3,6 +3,7 @@ import { useCountUp } from "@/hooks/useCountUp"
 import type { BoardView } from "@kandy/core"
 import { Empty, Hint, Kbd, Separator } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
+import { RankedBars, SplitBar } from "@/features/usage/Charts"
 import { Gauge } from "lucide-react"
 import { compact, cost, duration, money } from "@/lib/utils"
 
@@ -92,13 +93,36 @@ export function UsagePage({ view }: { view: BoardView | null }) {
         </p>
       )}
 
-      <section className="mt-8">
-        <h2 className="text-[13px] font-semibold">By agent</h2>
-        <div className="mt-3 space-y-1">
+      <section className="mt-9">
+        <h2 className="text-[13px] font-semibold">Split between agents</h2>
+        <p className="text-muted-foreground mt-1 text-[12px]">
+          Of {money(totalCost) ?? "$0.00"} spent, and who spent it.
+        </p>
+        <SplitBar
+          className="mt-4"
+          total={totalCost > 0 ? totalCost : totalTokens}
+          parts={[...byAgent.entries()].map(([agent, v], i) => ({
+            key: agent,
+            label: agentLabel(agent as never),
+            value: totalCost > 0 ? v.cost : v.tokens,
+            display:
+              totalCost > 0
+                ? (cost(v.cost, v.estimated ? "estimated" : "reported") ?? "—")
+                : `${compact(v.tokens)} tok`,
+            // Fixed order, never cycled: an agent keeps its colour whether or
+            // not the other one has run today.
+            mark: i === 0 ? "var(--color-mark-1)" : "var(--color-mark-2)",
+          }))}
+        />
+
+        <ul className="mt-5 space-y-0.5">
           {[...byAgent.entries()].map(([agent, v]) => (
-            <div key={agent} className="flex items-center gap-3 rounded-lg px-3 py-2.5 odd:bg-muted/40">
+            <li
+              key={agent}
+              className="odd:bg-muted/40 flex items-center gap-3 rounded-lg px-3 py-2"
+            >
               <AgentMark agent={agent as never} size={14} />
-              <span className="flex-1 text-[13px]">{agentLabel(agent as never)}</span>
+              <span className="flex-1 text-[12.5px]">{agentLabel(agent as never)}</span>
               <span className="text-muted-foreground w-20 text-right text-[12px] tabular-nums">
                 {v.runs} runs
               </span>
@@ -108,35 +132,32 @@ export function UsagePage({ view }: { view: BoardView | null }) {
               <span className="w-20 text-right text-[12.5px] tabular-nums">
                 {v.cost > 0 ? cost(v.cost, v.estimated ? "estimated" : "reported") : "—"}
               </span>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
 
-      <Separator className="my-8" />
+      <Separator className="my-9" />
 
       <section>
-        <h2 className="text-[13px] font-semibold">By note</h2>
-        <div className="mt-3 space-y-1">
-          {rows.map((r) => (
-            <div key={r.title} className="flex items-center gap-3 rounded-lg px-3 py-2.5 odd:bg-muted/40">
-              {r.agent && <AgentMark agent={r.agent as never} size={13} />}
-              <span className="min-w-0 flex-1 truncate text-[13px]">{r.title}</span>
-              <span className="text-muted-foreground w-24 text-right text-[12px] tabular-nums">
-                {compact(r.tokens)} tok
-              </span>
-              <span className="w-20 text-right text-[12.5px] tabular-nums">
-                {r.cost > 0 ? (
-                  <Hint text={r.estimated ? "Estimated from tokens — this agent reports no cost." : "Reported by the agent."}>
-                    <span>{cost(r.cost, r.estimated ? "estimated" : "reported")}</span>
-                  </Hint>
-                ) : (
-                  "—"
-                )}
-              </span>
-            </div>
-          ))}
-        </div>
+        <h2 className="text-[13px] font-semibold">Where it went</h2>
+        <p className="text-muted-foreground mt-1 text-[12px]">
+          Every note that has run, dearest first. Bar length is cost against the
+          most expensive one.
+        </p>
+        {/* The bars and the numbers are the same rows — this is the table,
+            readable as a shape. */}
+        <RankedBars
+          className="mt-4"
+          max={rows[0]?.cost ?? 0}
+          rows={rows.map((r, i) => ({
+            key: `${r.title}-${i}`,
+            label: r.title,
+            value: r.cost,
+            display: r.cost > 0 ? (cost(r.cost, r.estimated ? "estimated" : "reported") ?? "—") : "—",
+            meta: `${compact(r.tokens)} tok`,
+          }))}
+        />
       </section>
     </div>
   )

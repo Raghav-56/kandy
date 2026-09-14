@@ -33,6 +33,25 @@
   --color-grape: #a794f0;
 
   /* Tinted surfaces for the accents, so a badge never needs a bespoke hex. */
+  /*
+   * Chart marks, which are not the UI accents.
+   *
+   * The accent colours are tuned to read as *text* on their surface, which
+   * puts them near OKLCH L 0.75 — too light to sit as a filled mark. These are
+   * the same hues stepped into the band a mark needs (0.48–0.67 dark,
+   * 0.43–0.77 light) and checked with the palette validator: lightness band,
+   * chroma floor, CVD separation, normal-vision separation and contrast, in
+   * both modes. One pair serves both themes, so a chart never restates its
+   * colours per theme.
+   *
+   * `--mark-1` and `--mark-2` are identity (which agent). `--mark-solo` is the
+   * single hue for a one-measure ranking, where a colour ramp would imply an
+   * order the data does not have.
+   */
+  --color-mark-1: #c2527c;
+  --color-mark-2: #3f7fc4;
+  --color-mark-solo: #7a63cf;
+
   --color-berry-bg: #2a161f;
   --color-mint-bg: #15241d;
   --color-lemon-bg: #262013;
