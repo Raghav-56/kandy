@@ -57,7 +57,16 @@ test("detect and spawn work with a CLI executable and inherited environment", as
     const bin = path.join(dir, "aider")
     await writeFile(bin, `#!${process.execPath}\nif (process.argv.includes('--version')) console.log('aider fixture');\nelse { console.log(process.env.KANDY_ADAPTER_TEST); console.log('Applied edit to example.ts'); }\n`, { mode: 0o755 })
     const detected = await detect({ ...aider, bin })
-    assert.deepEqual(detected, { id: "aider", installed: true, authed: true, version: "aider fixture" })
+    // aider declares no credential file and no readAuth: it validates its own
+    // provider setup, so kandy has nothing to say about expiry or plan.
+    assert.deepEqual(detected, {
+      id: "aider",
+      installed: true,
+      authed: true,
+      version: "aider fixture",
+      expiresAt: null,
+      plan: null,
+    })
     const spec = aider.spawn(opts)
     const child = spawn(bin, spec.args, { cwd: dir, env: { ...process.env, KANDY_ADAPTER_TEST: "inherited" }, stdio: ["pipe", "pipe", "pipe"] })
     child.stdin.end()
@@ -70,6 +79,35 @@ test("detect and spawn work with a CLI executable and inherited environment", as
       { kind: "tool", tool: "edit", detail: "example.ts", status: "completed" },
     ])
     assert.equal((await detect({ ...aider, bin: path.join(dir, "missing") })).authed, false)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("an expired credential is not signed in", async () => {
+  // The bug this exists for: a credential file outlives the credential in it,
+  // so checking that the file is there reported a month-dead sign-in as ready
+  // and the first sign of trouble was a run failing.
+  const dir = await mkdtemp(path.join(tmpdir(), "kandy-auth-"))
+  try {
+    const bin = path.join(dir, "fake")
+    await writeFile(bin, `#!${process.execPath}\nconsole.log('fake 1.0')\n`, { mode: 0o755 })
+    const cred = path.join(dir, "creds.json")
+    await writeFile(cred, "{}")
+
+    const base = { ...aider, bin, credentials: [cred] }
+    const dead = await detect({ ...base, readAuth: () => ({ expiresAt: Date.now() - 1000, plan: "max" }) })
+    assert.equal(dead.authed, false, "an expired sign-in is not usable")
+    assert.equal(dead.plan, "max", "the plan is still worth reporting")
+
+    const live = await detect({ ...base, readAuth: () => ({ expiresAt: Date.now() + 86_400_000, plan: "max" }) })
+    assert.equal(live.authed, true)
+
+    // No expiry recorded means "it did not say", never "it is fine" — but with
+    // the file present there is nothing to contradict, so it stays usable.
+    const silent = await detect({ ...base, readAuth: () => ({ expiresAt: null, plan: "chatgpt" }) })
+    assert.equal(silent.authed, true)
+    assert.equal(silent.expiresAt, null)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
