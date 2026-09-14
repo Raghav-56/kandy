@@ -11,6 +11,7 @@ import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
+  SidebarProvider,
 } from "@/ui"
 import { Backdrop } from "@/brand/Backdrop"
 import { Logo } from "@/brand/Logo"
@@ -28,6 +29,23 @@ import { Sidebar, type View } from "./Sidebar"
 import { TriageList } from "./TriageList"
 
 const DETAIL_SIZE_KEY = "kandy.detail-size"
+
+/**
+ * Whether the sidebar was left collapsed.
+ *
+ * The sidebar writes its own cookie but never reads one — shadcn's provider
+ * expects a server to read it and hand back `defaultOpen`, which is how it
+ * works in Next. There is no server rendering here, so without this the rail
+ * sprang back open on every reload and ⌘B only lasted until you refreshed.
+ */
+function sidebarWasOpen(): boolean {
+  try {
+    const c = document.cookie.split("; ").find((x) => x.startsWith("sidebar_state="))
+    return c ? c.split("=")[1] !== "false" : true
+  } catch {
+    return true
+  }
+}
 
 function readDetailSize(): number {
   try {
@@ -219,7 +237,10 @@ export function App() {
 
   return (
     <TooltipProvider delayDuration={250}>
-    <div className="flex h-full">
+    {/* The provider owns the collapsed/expanded state, remembers it, and binds
+        ⌘B. It lays out as a flex row, so it replaces the wrapper that was
+        doing that by hand. */}
+    <SidebarProvider className="h-full" defaultOpen={sidebarWasOpen()}>
       <Backdrop />
 
       <Sidebar
@@ -227,7 +248,6 @@ export function App() {
         boardId={boardId}
         view={view}
         agents={agents}
-        connected={connected}
         page={page}
         theme={theme}
         onPage={setPage}
@@ -460,7 +480,7 @@ export function App() {
           })
         }}
       />
-    </div>
+    </SidebarProvider>
     </TooltipProvider>
   )
 }
