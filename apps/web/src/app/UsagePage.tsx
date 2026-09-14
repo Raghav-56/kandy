@@ -1,9 +1,10 @@
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useCountUp } from "@/hooks/useCountUp"
-import type { BoardView } from "@kandy/core"
+import type { BoardView, Stats } from "@kandy/core"
+import type { KandyClient } from "@kandy/client"
 import { Empty, Hint, Kbd, Separator } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
-import { RankedBars, SplitBar } from "@/features/usage/Charts"
+import { Activity, Funnel, Hours, RankedBars, SplitBar } from "@/features/usage/Charts"
 import { Gauge } from "lucide-react"
 import { compact, cost, duration, money } from "@/lib/utils"
 
@@ -15,7 +16,34 @@ import { compact, cost, duration, money } from "@/lib/utils"
  * both says how much of it is estimated instead of presenting one confident
  * number that is partly a guess.
  */
-export function UsagePage({ view }: { view: BoardView | null }) {
+export function UsagePage({
+  view,
+  client,
+}: {
+  view: BoardView | null
+  client: KandyClient
+}) {
+  /*
+   * The daemon already computes all of this — funnel, activity, hours, tools —
+   * for `kandy stats`, and the web app had never asked for it. Fetched rather
+   * than derived here so the CLI and the board cannot drift into two different
+   * answers about the same board.
+   */
+  const [stats, setStats] = useState<Stats | null>(null)
+  const boardId = view?.board.id ?? null
+  useEffect(() => {
+    setStats(null)
+    if (!boardId) return
+    let stale = false
+    void client
+      .stats(boardId)
+      .then((r) => !stale && setStats(r))
+      .catch(() => undefined)
+    return () => {
+      stale = true
+    }
+  }, [boardId, client])
+
   const rows = useMemo(() => {
     if (!view) return []
     const byNote = new Map<string, { title: string; runs: number; tokens: number; cost: number; estimated: boolean; agent: string | null }>()
@@ -149,6 +177,71 @@ export function UsagePage({ view }: { view: BoardView | null }) {
           ))}
         </ul>
       </section>
+
+      {stats && (
+        <>
+          <Separator className="my-9" />
+
+          <div className="grid gap-9 sm:grid-cols-2">
+            <section>
+              <h2 className="text-[13px] font-semibold">Where work goes</h2>
+              <p className="text-muted-foreground mt-1 text-[12px]">
+                And where it stops. {stats.firstTry.landed} of {stats.firstTry.of} landed on the
+                first run.
+              </p>
+              <Funnel
+                className="mt-4"
+                stages={[
+                  { key: "written", label: "Written", value: stats.funnel.written },
+                  { key: "ran", label: "Ran", value: stats.funnel.ran },
+                  { key: "reviewed", label: "Reviewed", value: stats.funnel.reviewed },
+                  { key: "landed", label: "Landed", value: stats.funnel.landed },
+                ]}
+              />
+            </section>
+
+            <section>
+              <h2 className="text-[13px] font-semibold">When you run them</h2>
+              <p className="text-muted-foreground mt-1 text-[12px]">
+                Runs started in each hour, across the whole board.
+              </p>
+              <Hours className="mt-4" hours={stats.hours} />
+            </section>
+          </div>
+
+          <Separator className="my-9" />
+
+          <section>
+            <h2 className="text-[13px] font-semibold">Twelve weeks</h2>
+            <p className="text-muted-foreground mt-1 text-[12px]">
+              Runs per day, empty days included — a gap says the board sat still.
+            </p>
+            <Activity className="mt-4" daily={stats.daily} />
+          </section>
+
+          {stats.tools.length > 0 && (
+            <>
+              <Separator className="my-9" />
+              <section>
+                <h2 className="text-[13px] font-semibold">What the agents reached for</h2>
+                <p className="text-muted-foreground mt-1 text-[12px]">
+                  Tool calls across every run.
+                </p>
+                <RankedBars
+                  className="mt-4"
+                  max={stats.tools[0]?.calls ?? 0}
+                  rows={stats.tools.slice(0, 8).map((t) => ({
+                    key: t.tool,
+                    label: t.tool,
+                    value: t.calls,
+                    display: String(t.calls),
+                  }))}
+                />
+              </section>
+            </>
+          )}
+        </>
+      )}
 
       <Separator className="my-9" />
 

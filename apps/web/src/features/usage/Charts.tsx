@@ -112,3 +112,163 @@ export function SplitBar({
     </div>
   )
 }
+
+/**
+ * Where work goes, and where it stops.
+ *
+ * The one shape only kandy can draw: a note is written, run, reviewed, and
+ * lands — and the interesting number is what fell out between two steps, not
+ * the stages themselves. Each row is labelled with its own count and the drop
+ * is called out beside it, because "21 → 20" is the fact and a shape alone
+ * makes you measure it with your eye.
+ */
+export function Funnel({
+  stages,
+  className,
+}: {
+  stages: { key: string; label: string; value: number }[]
+  className?: string
+}) {
+  const top = stages[0]?.value ?? 0
+  if (top <= 0) return null
+
+  return (
+    <ol className={cn("space-y-2", className)}>
+      {stages.map((st, i) => {
+        const prev = i === 0 ? null : stages[i - 1]!.value
+        const lost = prev === null ? 0 : prev - st.value
+        return (
+          <li key={st.key}>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[12.5px]">{st.label}</span>
+              <span className="text-[12.5px] tabular-nums">
+                {st.value}
+                {lost > 0 && (
+                  <span className="text-muted-foreground/70 ml-2 text-[11px]">−{lost}</span>
+                )}
+              </span>
+            </div>
+            <span className="mt-1 block h-2 w-full rounded-full bg-[var(--color-hairline)]">
+              <span
+                className="block h-full rounded-full bg-[var(--color-mark-solo)]"
+                style={{ width: `${(st.value / top) * 100}%` }}
+              />
+            </span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/**
+ * Counts across an ordinal run — the hours of a day.
+ *
+ * Bars rather than a line: an hour is a bucket, not a point on a continuum,
+ * and a line between 23:00 and 00:00 would draw a slope across a boundary
+ * nothing crosses. Only the busiest hour is labelled; a number over every bar
+ * is twenty-four numbers nobody reads.
+ */
+export function Hours({ hours, className }: { hours: number[]; className?: string }) {
+  const max = Math.max(...hours, 0)
+  if (max <= 0) return null
+  const peak = hours.indexOf(max)
+
+  return (
+    <div className={className}>
+      <div className="flex h-24 items-end gap-[3px]">
+        {hours.map((n, h) => (
+          <div
+            key={h}
+            title={`${String(h).padStart(2, "0")}:00 — ${n} run${n === 1 ? "" : "s"}`}
+            className="group/h flex h-full flex-1 flex-col justify-end"
+          >
+            <span
+              className={cn(
+                "block w-full rounded-t-[3px]",
+                h === peak ? "bg-[var(--color-mark-solo)]" : "bg-[var(--color-mark-solo)]/35",
+              )}
+              style={{ height: `${Math.max((n / max) * 100, n > 0 ? 4 : 0)}%` }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="text-muted-foreground/60 mt-1.5 flex justify-between text-[10px] tabular-nums">
+        <span>00</span>
+        <span>06</span>
+        <span>12</span>
+        <span>18</span>
+        <span>23</span>
+      </div>
+      <p className="text-muted-foreground mt-2 text-[12px]">
+        Busiest at {String(peak).padStart(2, "0")}:00 — {max} run{max === 1 ? "" : "s"}.
+      </p>
+    </div>
+  )
+}
+
+/**
+ * Twelve weeks of days, including the empty ones.
+ *
+ * A gap is information: it says the board sat still, which a list of only the
+ * days that had runs would hide. One hue in four steps rather than a colour
+ * scale — this is magnitude, and magnitude is what a single hue getting darker
+ * is for.
+ */
+export function Activity({
+  daily,
+  className,
+}: {
+  daily: { date: string; runs: number }[]
+  className?: string
+}) {
+  const max = Math.max(...daily.map((d) => d.runs), 0)
+  if (daily.length === 0) return null
+
+  // Pad the front so the first column starts on the right weekday.
+  const offset = new Date(daily[0]!.date + "T00:00:00").getDay()
+  const cells: ({ date: string; runs: number } | null)[] = [
+    ...Array.from({ length: offset }, () => null),
+    ...daily,
+  ]
+  const weeks: (typeof cells)[] = []
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
+
+  const step = (runs: number) => {
+    if (runs === 0) return "bg-[var(--color-hairline)]"
+    const q = runs / max
+    if (q > 0.66) return "bg-[var(--color-mark-solo)]"
+    if (q > 0.33) return "bg-[var(--color-mark-solo)]/70"
+    return "bg-[var(--color-mark-solo)]/40"
+  }
+
+  return (
+    <div className={className}>
+      <div className="flex gap-[3px] overflow-x-auto">
+        {weeks.map((week, w) => (
+          <div key={w} className="flex flex-col gap-[3px]">
+            {week.map((d, i) =>
+              d === null ? (
+                <span key={i} className="size-[11px]" />
+              ) : (
+                <span
+                  key={d.date}
+                  title={`${d.date} — ${d.runs} run${d.runs === 1 ? "" : "s"}`}
+                  className={cn("size-[11px] rounded-[3px]", step(d.runs))}
+                />
+              ),
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="text-muted-foreground/60 mt-2.5 flex items-center gap-1.5 text-[10.5px]">
+        <span>Less</span>
+        <span className="size-[9px] rounded-[2px] bg-[var(--color-hairline)]" />
+        <span className="size-[9px] rounded-[2px] bg-[var(--color-mark-solo)]/40" />
+        <span className="size-[9px] rounded-[2px] bg-[var(--color-mark-solo)]/70" />
+        <span className="size-[9px] rounded-[2px] bg-[var(--color-mark-solo)]" />
+        <span>More</span>
+      </div>
+    </div>
+  )
+}

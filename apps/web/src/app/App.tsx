@@ -311,7 +311,7 @@ export function App() {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {page === "usage" ? (
-            <UsagePage view={view} />
+            <UsagePage view={view} client={client} />
           ) : page === "settings" ? (
             <SettingsPage
               view={view}
