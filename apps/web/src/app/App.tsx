@@ -16,6 +16,7 @@ import {
 import { Backdrop } from "@/brand/Backdrop"
 import { Logo } from "@/brand/Logo"
 import { Composer } from "@/features/notes/Composer"
+import { FirstRun } from "@/features/onboarding/FirstRun"
 import { NewBoardDialog } from "@/features/boards/NewBoardDialog"
 import { useBoard } from "@/hooks/useBoard"
 import { useTheme } from "@/hooks/useTheme"
@@ -320,17 +321,7 @@ export function App() {
               }}
             />
           ) : boards.length === 0 ? (
-            <Empty
-              className="pt-[18vh]"
-              icon={<Logo size={44} />}
-              title="Point kandy at a repository"
-              body="Every note you write becomes one job for one agent — run in its own worktree, on its own branch, so several can work at once without colliding."
-              action={
-                <Button variant="default" size="default" onClick={() => setNewBoard(true)}>
-                  Choose a repo
-                </Button>
-              }
-            />
+            <FirstRun agents={agents} onChooseRepo={() => setNewBoard(true)} />
           ) : (
             <LoadingBlock className="pt-24" label="Opening the board" />
           )}

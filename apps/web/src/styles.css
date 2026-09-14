@@ -307,7 +307,9 @@ body {
   --popover: #1a1922;
   --popover-foreground: #ece9f4;
 
-  --primary: #ece9f4;
+  /* Dimmed a step below --color-ink. At text size ink reads as "bright";
+     filled across a button it read as white, which nothing else here is. */
+  --primary: #d7d2e4;
   --primary-foreground: #131219;
 
   --secondary: #22212d;
