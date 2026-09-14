@@ -87,6 +87,37 @@ test("with the footer on, a reviewer gets the brief, the agent and the model", (
   assert.match(body, /kandy/)
 })
 
+test("a note with no brief still gets a body, from what the agent said", () => {
+  // The case that started this: a one-line note has no detail field, so the
+  // body used to be "_No description given._" while the agent's own account
+  // of the work sat unread in the transcript.
+  const body = prBody(
+    { body: "", agent: "claude" },
+    { footer: false, model: "opus", summary: "Added docs/13-diagrams.md — eight diagrams." },
+  )
+  assert.equal(body, "Added docs/13-diagrams.md — eight diagrams.")
+})
+
+test("headings appear only once there is more than one section", () => {
+  // A heading over a single paragraph is furniture; structure should show up
+  // when it is doing something.
+  const alone = prBody({ body: "Fix the thing.", agent: "claude" }, { footer: false })
+  assert.ok(!alone.includes("###"), "one section needs no heading")
+
+  const both = prBody(
+    { body: "Fix the thing.", agent: "claude", stat: { files: 2, insertions: 10, deletions: 3 } },
+    { footer: false, summary: "Fixed it." },
+  )
+  assert.match(both, /### The brief/)
+  assert.match(both, /### What the agent did/)
+  assert.match(both, /### The diff/)
+  assert.match(both, /2` files changed, `\+10` `-3`/)
+})
+
+test("with nothing at all to say, the body says so", () => {
+  assert.equal(prBody({ body: "", agent: null }, { footer: false }), "_No description given._")
+})
+
 test("the PR footer never links to the board", () => {
   // The board is http://127.0.0.1:4477 on one laptop. A link only the author
   // can open is worse than no link: it reads as a reference and resolves to a

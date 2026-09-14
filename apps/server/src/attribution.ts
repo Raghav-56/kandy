@@ -86,52 +86,58 @@ export function withTrailers(message: string, trailers: readonly string[]): stri
  * than no URL — it looks like a reference and resolves to a connection error.
  */
 export function prBody(
-  note: { title: string; body: string; agent: AgentId | string | null; stat?: DiffStat | null },
+  note: { body: string; agent: AgentId | string | null; stat?: DiffStat | null },
   opts: { model?: string | null; footer: boolean; summary?: string | null },
 ): string {
-  const out: string[] = []
-
   const brief = note.body.trim()
-  if (brief) {
-    out.push("### The brief", "", brief)
-  }
 
   /*
    * What the agent said it did.
    *
    * Its closing message is written for a person — the last turn always is —
    * and it is the difference between a reviewer knowing what to look for and
-   * reading a diff cold. Without it a PR opened from a note with no detail
+   * reading a diff cold. Without it, a PR opened from a note with no detail
    * said "_No description given._" and nothing else, while this sat unread in
    * a transcript.
    */
   const summary = opts.summary?.trim()
-  if (summary) {
-    if (out.length) out.push("")
-    out.push("### What the agent did", "", summary)
-  }
 
-  if (note.stat && note.stat.files > 0) {
-    if (out.length) out.push("")
-    out.push(
-      `\`${note.stat.files}\` file${note.stat.files === 1 ? "" : "s"} changed, ` +
-        `\`+${note.stat.insertions}\` \`-${note.stat.deletions}\``,
-    )
-  }
+  const stat =
+    note.stat && note.stat.files > 0
+      ? `\`${note.stat.files}\` file${note.stat.files === 1 ? "" : "s"} changed, ` +
+        `\`+${note.stat.insertions}\` \`-${note.stat.deletions}\``
+      : null
 
-  if (out.length === 0) out.push("_No description given._")
+  const sections: { heading: string; text: string }[] = []
+  if (brief) sections.push({ heading: "The brief", text: brief })
+  if (summary) sections.push({ heading: "What the agent did", text: summary })
+  if (stat) sections.push({ heading: "The diff", text: stat })
 
-  if (!opts.footer) return out.join("\n")
+  /*
+   * Headings only once there is more than one thing to head.
+   *
+   * A note with a written brief and no run is just that brief; putting "### The
+   * brief" above a single paragraph is furniture. Structure appears when
+   * structure is doing something.
+   */
+  const lines =
+    sections.length === 0
+      ? ["_No description given._"]
+      : sections.length === 1
+        ? [sections[0]!.text]
+        : sections.flatMap((sec, i) => (i === 0 ? [] : [""]).concat([`### ${sec.heading}`, "", sec.text]))
 
-  out.push("", "---", "")
-  out.push(
+  if (!opts.footer) return lines.join("\n")
+
+  lines.push("", "---", "")
+  lines.push(
     note.agent
       ? `Written by \`${note.agent}\`${opts.model ? ` (\`${opts.model}\`)` : ""}, from a kandy note.`
       : "Opened from a kandy note.",
   )
-  out.push("")
-  out.push("🍬 Queued and run with [kandy](https://github.com/hiteshbandhu/kandy)")
-  return out.join("\n")
+  lines.push("")
+  lines.push("🍬 Queued and run with [kandy](https://github.com/hiteshbandhu/kandy)")
+  return lines.join("\n")
 }
 
 /** Normalize whatever a client sent into a complete, both-keys-present value. */
