@@ -58,6 +58,8 @@ export async function detect(a: AgentAdapter): Promise<AgentInfo> {
     version,
     expiresAt,
     plan: detail?.plan ?? null,
+    // Filled in where runs are known; detection alone has never seen one fail.
+    authFailedAt: null,
   }
 }
 

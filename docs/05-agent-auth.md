@@ -26,10 +26,30 @@ file only when it yields nothing, so a relic can never outvote the credential in
 Reading the Keychain item is silent: it is the user's own item and `security` hands it over
 without a prompt. If it ever refuses, the answer is null.
 
-Worth knowing: [T3 Code declines to probe for this at
-all](https://github.com/pingdotgg/t3code/issues/7878) — Claude Code's local init succeeds on
-cached credentials, so their reliable signal is a 401 at run time. A cheerful "ready" here is a
-best guess about a file, not a promise the next run will authenticate.
+[T3 Code declines to probe for this at all](https://github.com/pingdotgg/t3code/issues/7878) —
+Claude Code's local init succeeds on cached credentials, so their reliable signal is a 401 at run
+time. They are right that a file is a guess, so kandy does both.
+
+## The certain signal: a run that was refused
+
+`isAuthFailure` in core reads an agent's failure text, and a match marks that agent as rejected
+until one of its runs completes. It outranks everything above: a credential that looks fine proves
+nothing, a run that actually tried and was refused proves quite a lot.
+
+Two things this had to get right, and both were found by running it rather than reading it.
+
+**Either pipe.** Claude Code reports the refusal as a JSON error on stdout, which becomes a
+transcript frame. A CLI that has simply lost its login writes to stderr and exits — and stderr is
+deliberately kept out of the transcript, so watching only transcript frames missed that kind
+entirely. Both are watched now.
+
+**Narrowly.** On the board this was written against, one error frame in ten was an auth failure;
+the rest were a failed `git worktree add`, an unsupported model, and a hook-trust warning.
+Matching "failed" or "token" would have sent someone to re-login over a git error — the same false
+alarm as trusting a stale credential file, which this file already has one story about.
+
+The state is in memory, not the log. It is an observation about this machine now, not a fact about
+the board, and a restart should re-learn it rather than repeat a stale warning.
 
 Codex records no expiry. kandy reports `expiresAt: null` there rather than deriving one from
 `last_refresh`, because a guess wearing a timestamp is worse than saying nothing: null means "it

@@ -113,7 +113,9 @@ export function Sidebar({
   /* An expired sign-in is worse than a missing one: nothing looks wrong until
      a run fails, so the footer says it without being opened. */
   const stale = agents.filter(
-    (a) => a.installed && a.expiresAt !== null && a.expiresAt <= Date.now(),
+    (a) =>
+      a.installed &&
+      (a.authFailedAt !== null || (a.expiresAt !== null && a.expiresAt <= Date.now())),
   )
 
   /* One badge, not four. The list already shows every status; what belongs
@@ -281,7 +283,7 @@ export function Sidebar({
                     <span className="truncate text-[12.5px] font-medium">{user}</span>
                     <span className="text-muted-foreground truncate text-[11px]">
                       {stale.length > 0
-                        ? `${stale.length} sign-in${stale.length === 1 ? "" : "s"} expired`
+                        ? `${stale.length} sign-in${stale.length === 1 ? "" : "s"} need${stale.length === 1 ? "s" : ""} attention`
                         : ready.length > 0
                           ? `${ready.length} ${ready.length === 1 ? "agent" : "agents"} ready`
                           : "no agent ready"}

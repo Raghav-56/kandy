@@ -15,6 +15,21 @@ export function authState(a: AgentInfo): {
 } {
   if (!a.installed) return { label: "not installed", tone: "off", detail: null }
 
+  /*
+   * A run that was actually refused outranks anything a file says.
+   *
+   * The CLI's own init succeeds on cached credentials, so a credential that
+   * looks fine proves nothing — this is the one signal that has been tested
+   * against the real thing.
+   */
+  if (a.authFailedAt !== null) {
+    return {
+      label: "sign-in rejected",
+      tone: "warn",
+      detail: `A run was refused ${relDays(a.authFailedAt)}. Run \`${a.id}\` once and sign in again.`,
+    }
+  }
+
   if (a.expiresAt !== null && a.expiresAt <= Date.now()) {
     return {
       label: "sign-in expired",

@@ -123,7 +123,19 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   }
 
   if (req.method === "GET" && routed === "/agents") {
-    return send(res, 200, { agents: await detectAll() })
+    /*
+     * What the files say, corrected by what actually happened.
+     *
+     * A run that was refused outranks a credential that looks fine, because
+     * the CLI's own init succeeds on cached credentials and only a real
+     * attempt proves anything.
+     */
+    const failures = new Map(deps.runner.agentsFailingAuth().map((f) => [f.agent, f.at]))
+    const agents = (await detectAll()).map((a) => {
+      const at = failures.get(a.id) ?? null
+      return at ? { ...a, authed: false, authFailedAt: at } : { ...a, authFailedAt: null }
+    })
+    return send(res, 200, { agents })
   }
 
   // GET /notes/:id/pr — what opening a PR would say, before it says it

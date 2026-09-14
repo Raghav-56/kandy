@@ -177,6 +177,15 @@ export type AgentInfo = {
    * figure on the Usage page notional.
    */
   plan: string | null
+  /**
+   * When a run last failed to authenticate with this agent, if one has.
+   *
+   * Outranks everything above it. A credential file is a guess — the CLI's own
+   * init succeeds on cached credentials — so a run that actually tried and was
+   * refused is the only certain evidence, and it sets `authed` false whatever
+   * the file says.
+   */
+  authFailedAt: number | null
 }
 
 export type OutputLine = {

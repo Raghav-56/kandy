@@ -66,6 +66,7 @@ test("detect and spawn work with a CLI executable and inherited environment", as
       version: "aider fixture",
       expiresAt: null,
       plan: null,
+      authFailedAt: null,
     })
     const spec = aider.spawn(opts)
     const child = spawn(bin, spec.args, { cwd: dir, env: { ...process.env, KANDY_ADAPTER_TEST: "inherited" }, stdio: ["pipe", "pipe", "pipe"] })

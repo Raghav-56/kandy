@@ -4,6 +4,7 @@ import {
   between,
   event,
   id,
+  isAuthFailure,
   laneColumn,
   notesIn,
   promptFor,
@@ -138,6 +139,25 @@ export class Runner {
   /** Last notice written per run, to suppress immediate repeats. */
   private lastNotice = new Map<string, string>()
 
+  /**
+   * Agents whose last run could not authenticate, and when.
+   *
+   * A credential file is a guess — Claude Code's local init succeeds on cached
+   * credentials, so the certain signal that a sign-in is dead is a run failing
+   * to use it. Held in memory rather than the log: it is an observation about
+   * this machine right now, not a fact about the board, and a restart should
+   * re-learn it rather than repeat a stale warning.
+   *
+   * Cleared the moment that agent completes a run, because whatever was wrong
+   * plainly is not any more.
+   */
+  private readonly authFailed = new Map<AgentId, number>()
+
+  /** Agents that failed to authenticate since the daemon started. */
+  agentsFailingAuth(): { agent: AgentId; at: number }[] {
+    return [...this.authFailed.entries()].map(([agent, at]) => ({ agent, at }))
+  }
+
   private say(
     runId: string,
     role: "assistant" | "user" | "tool" | "system" | "error",
@@ -148,6 +168,13 @@ export class Runner {
     // its hook-trust warning and its truncated-skills notice each time. Saying
     // the same thing twice in a row trains people to skim the notices that
     // matter, so a consecutive duplicate is dropped.
+    if (role === "error") {
+      // Noticed here rather than at exit, so it is caught whichever path the
+      // failure takes out of a run.
+      const agent = this.live.get(runId)?.agent
+      if (agent && isAuthFailure(text)) this.authFailed.set(agent, Date.now())
+    }
+
     if (role === "system" || role === "error") {
       const key = `${role}:${text}`
       if (this.lastNotice.get(runId) === key) return
@@ -535,10 +562,24 @@ export class Runner {
 
     child.stderr?.on("data", (chunk: Buffer) => {
       for (const line of chunk.toString().split("\n")) {
+        if (!line.trim()) continue
         // Raw stderr is kept for debugging but stays out of the transcript —
         // agent CLIs write progress spinners and deprecation notices there,
         // and a transcript full of noise is a transcript nobody reads.
-        if (line.trim()) this.engine.store.appendOutput(runId, "stderr", line)
+        this.engine.store.appendOutput(runId, "stderr", line)
+        /*
+         * Watched anyway, for one thing.
+         *
+         * An agent can refuse to authenticate down either pipe: Claude Code
+         * reports it as a JSON error on stdout, a CLI that has simply lost its
+         * login usually writes to stderr and exits. Checking only the
+         * transcript missed the second kind entirely, which a test with a
+         * deliberately unauthenticated agent found.
+         */
+        if (isAuthFailure(line)) {
+          const agent = this.live.get(runId)?.agent
+          if (agent) this.authFailed.set(agent, Date.now())
+        }
       }
     })
   }
@@ -620,6 +661,8 @@ export class Runner {
     }
 
     const status = signal ? "cancelled" : code === 0 ? "succeeded" : "failed"
+    // Whatever was wrong with this agent's sign-in, it plainly is not now.
+    if (status === "succeeded" && l) this.authFailed.delete(l.agent)
     this.emit(event("run.finished", { runId, noteId, status, exitCode: code, error }))
 
     if (status === "succeeded" && l) {
