@@ -13,7 +13,16 @@ import type {
 } from "@kandy/core"
 import { canAsk } from "@kandy/core"
 import { Maximize2, Minimize2, Paperclip, X } from "lucide-react"
-import { ActivityLine, Button, Confirm, Hint, LoadingBlock, StatusPill, Textarea } from "@/ui"
+import {
+  ActivityLine,
+  Button,
+  Confirm,
+  CopyLink,
+  Hint,
+  LoadingBlock,
+  StatusPill,
+  Textarea,
+} from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { AgentSelect } from "@/features/agents/AgentSelect"
 import { ModelSelect } from "@/features/agents/ModelSelect"
@@ -221,6 +230,11 @@ export function NoteDetail(p: NoteDetailProps) {
           </div>
 
           <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
+            <CopyLink
+              path={`/b/${p.note.boardId}/n/${p.note.id}`}
+              label="Copy link to this note"
+              className="mr-0.5"
+            />
             <Hint text={full ? "Narrow" : "Widen — stream beside diff"}>
               <Button
                 variant="ghost"

@@ -17,6 +17,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  CopyLink,
   Kbd,
   Sidebar as SidebarRoot,
   SidebarContent,
@@ -167,6 +168,7 @@ export function Sidebar({
                     <FolderGit2 className="size-3.5 shrink-0 opacity-70" />
                     <span className="min-w-0 flex-1 truncate">{b.name}</span>
                     {b.id === boardId && <Check className="text-mint size-3.5 shrink-0" />}
+                    <CopyLink path={`/b/${b.id}`} label={`Copy link to ${b.name}`} size={3} />
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />

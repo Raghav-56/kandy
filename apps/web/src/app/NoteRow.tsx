@@ -1,7 +1,7 @@
 import { memo } from "react"
 import { Trash2 } from "lucide-react"
 import type { ActivityFrame, Note, Run } from "@kandy/core"
-import { ActivityLine, Hint, StatusPill } from "@/ui"
+import { ActivityLine, CopyLink, Hint, StatusPill } from "@/ui"
 import { AgentMark } from "@/features/agents/AgentMark"
 import { PrBadge } from "@/features/notes/PrBadge"
 import { LOOK } from "@/features/notes/status"
@@ -138,21 +138,26 @@ export const NoteRow = memo(function NoteRow({
       </span>
     </button>
 
+      <span
+        className={cn(
+          "absolute right-2.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5 transition",
+          /* Hidden until wanted, but never unreachable: keyboard focus inside
+             brings the whole group back. */
+          "opacity-0 group-hover/row:opacity-100 focus-within:opacity-100",
+        )}
+      >
+        <CopyLink path={`/b/${note.boardId}/n/${note.id}`} label="Copy link to this note" />
+
       <button
         type="button"
         onClick={() => onRequestDelete(note)}
         aria-label={`Delete note: ${note.title}`}
         title="Delete note"
-        className={cn(
-          "absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 transition",
-          "text-muted-foreground/70 hover:bg-berry/12 hover:text-berry",
-          /* Hidden until wanted, but never unreachable: keyboard focus brings
-             it back, so it is not a mouse-only action. */
-          "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
-        )}
+        className="text-muted-foreground/70 hover:bg-berry/12 hover:text-berry grid place-items-center rounded-md p-1 transition"
       >
         <Trash2 className="size-3.5" />
       </button>
+      </span>
     </div>
   )
 })
