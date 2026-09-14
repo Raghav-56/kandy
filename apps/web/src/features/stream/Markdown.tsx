@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { cn } from "@/lib/utils"
+import { GithubMark } from "@/ui/GithubMark"
 
 /**
  * Agents write markdown. Showing it raw means reading `**Verified**:` and
@@ -17,8 +18,25 @@ export function Markdown({ children, className }: { children: string; className?
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ node: _node, ...props }) => (
-            <a {...props} target="_blank" rel="noreferrer noopener" className="text-sky underline underline-offset-2" />
+          /*
+            A link that leaves for GitHub says so.
+            
+            Agents cite pull requests, issues and files constantly, and a bare
+            blue span gives no clue whether it is a heading in this page or a
+            trip to the forge. The mark is only added for github.com itself, so
+            an unrelated host never borrows its authority.
+          */
+          a: ({ node: _node, href, children, ...props }) => (
+            <a
+              {...props}
+              href={href}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-sky inline-flex items-baseline gap-1 underline underline-offset-2"
+            >
+              {isGithub(href) && <GithubMark className="size-3 shrink-0 self-center opacity-80" />}
+              {children}
+            </a>
           ),
           code: ({ node: _node, className: cls, children, ...props }) => {
             const inline = !String(cls ?? "").includes("language-")
@@ -41,4 +59,15 @@ export function Markdown({ children, className }: { children: string; className?
       </ReactMarkdown>
     </div>
   )
+}
+
+/** github.com and its subdomains only — never a host that merely contains it. */
+function isGithub(href: string | undefined): boolean {
+  if (!href) return false
+  try {
+    const { hostname } = new URL(href, window.location.origin)
+    return hostname === "github.com" || hostname.endsWith(".github.com")
+  } catch {
+    return false
+  }
 }

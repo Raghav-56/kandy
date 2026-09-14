@@ -18,6 +18,7 @@ import {
   Button,
   Confirm,
   CopyLink,
+  GithubMark,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -25,6 +26,10 @@ import {
   Hint,
   LoadingBlock,
   StatusPill,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   Textarea,
 } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
@@ -36,6 +41,7 @@ import { type Attached } from "@/features/notes/Attachments"
 import { PromptBox } from "@/features/notes/PromptBox"
 import { InlineEdit } from "@/features/notes/InlineEdit"
 import { PrBadge } from "@/features/notes/PrBadge"
+import { Markdown } from "@/features/stream/Markdown"
 import { LOOK } from "@/features/notes/status"
 import { Transcript } from "@/features/stream/Transcript"
 import { cn, compact, cost, duration } from "@/lib/utils"
@@ -104,6 +110,7 @@ export function NoteDetail(p: NoteDetailProps) {
   /* The PR as it stands before anyone has agreed to it. Fetched when the
      dialog opens, because it depends on a transcript the board does not hold. */
   const [pr, setPr] = useState<{ title: string; body: string } | null>(null)
+  const [prTab, setPrTab] = useState<"write" | "preview">("write")
   const [ask, setAsk] = useState<null | "merge" | "pr" | "discard" | "delete" | "escalate">(null)
   const [busy, setBusy] = useState(false)
 
@@ -162,7 +169,10 @@ export function NoteDetail(p: NoteDetailProps) {
   }, [reviewable])
 
   useEffect(() => {
-    if (ask !== "pr") return setPr(null)
+    if (ask !== "pr") {
+      setPrTab("write")
+      return setPr(null)
+    }
     let stale = false
     void p.onPrPreview().then((r) => {
       if (!stale && r) setPr(r)
@@ -358,19 +368,30 @@ export function NoteDetail(p: NoteDetailProps) {
           {live && run && (
             <Button onClick={() => p.onCancel(run.id)}>Stop</Button>
           )}
-          {/* Where this work can go: two destinations and a bin, so "merge"
-              never has to mean two different things. Each asks first, and the
-              question says what will actually happen to this branch. */}
+          {/*
+            Work leaves here through a pull request, or it does not leave.
+
+            There used to be a "Merge here" beside this, which merged the branch
+            into the base on this laptop and pushed nothing. Nobody lands work
+            that way — a merge nobody else can see is a commit you have to
+            remember to do something about later. The engine still merges on
+            that path, because prwatch.ts uses it to record a PR that was merged
+            on GitHub; it is only gone as something to press.
+          */}
           {reviewable && (
             <>
-              <Button size="sm" onClick={() => setAsk("merge")}>
-                Merge here
-              </Button>
-              {p.forge?.available && !p.note.pr && (
-                <Button variant="outline" size="sm" onClick={() => setAsk("pr")} disabled={pring}>
+              {p.note.pr ? (
+                <Button size="sm" asChild>
+                  <a href={p.note.pr.url} target="_blank" rel="noreferrer">
+                    <GithubMark className="size-3.5" />
+                    Review on GitHub
+                  </a>
+                </Button>
+              ) : p.forge?.available ? (
+                <Button size="sm" onClick={() => setAsk("pr")} disabled={pring}>
                   {pring ? "Opening…" : "Open a PR"}
                 </Button>
-              )}
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"
@@ -517,32 +538,6 @@ export function NoteDetail(p: NoteDetailProps) {
     <aside className="bg-card flex h-full w-full flex-col border-l">
       {body}
 
-      <Confirm
-        open={ask === "merge"}
-        onOpenChange={(v) => !v && setAsk(null)}
-        title="Merge here"
-        body={
-          <>
-            Merges this note's branch into <b>{base}</b> on this machine. Nothing is pushed. The
-            branch and its worktree are removed afterwards; your own working tree is not touched.
-          </>
-        }
-        facts={facts}
-        confirmLabel="Merge"
-        busy={busy}
-        onConfirm={() => confirmAction(() => p.onReview("merge"))}
-      />
-
-      {/*
-        A pull request you can read before it exists.
-        
-        Opening one used to post the note's title and whatever was in its detail
-        field — which for a note written as a one-liner meant a PR body reading
-        "_No description given._" while the agent's own account of the work sat
-        unread in the transcript. Both are editable here, because a description
-        nobody could change before it was published is how a repository fills up
-        with PRs nobody wrote.
-      */}
       <Dialog open={ask === "pr"} onOpenChange={(v) => !v && setAsk(null)}>
         <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-[620px]">
           <DialogTitle>Open a pull request</DialogTitle>
@@ -564,13 +559,40 @@ export function NoteDetail(p: NoteDetailProps) {
                 aria-label="Pull request title"
                 className="border-line bg-bg focus-visible:border-grape/45 w-full rounded-lg border px-3 py-2 text-[13.5px] font-medium outline-none"
               />
-              <Textarea
-                value={pr.body}
-                onChange={(e) => setPr({ ...pr, body: e.target.value })}
-                aria-label="Pull request description"
-                rows={12}
-                className="bg-bg max-h-[42vh] resize-none font-mono text-[12px] leading-[1.6]"
-              />
+
+              {/* Write and Preview, because the body is markdown and GitHub is
+                  where it lands — reading it as prose before pushing is how you
+                  notice a heading that never closed or a list that is one line. */}
+              <Tabs value={prTab} onValueChange={(v) => setPrTab(v as "write" | "preview")}>
+                <TabsList className="h-8">
+                  <TabsTrigger value="write" className="text-[12.5px]">
+                    Write
+                  </TabsTrigger>
+                  <TabsTrigger value="preview" className="text-[12.5px]">
+                    Preview
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="write" className="mt-2">
+                  <Textarea
+                    value={pr.body}
+                    onChange={(e) => setPr({ ...pr, body: e.target.value })}
+                    aria-label="Pull request description"
+                    rows={13}
+                    className="bg-bg h-[42vh] resize-none font-mono text-[12px] leading-[1.6]"
+                  />
+                </TabsContent>
+
+                <TabsContent value="preview" className="mt-2">
+                  <div className="border-line bg-bg h-[42vh] overflow-y-auto rounded-lg border px-3.5 py-3">
+                    {pr.body.trim() ? (
+                      <Markdown>{pr.body}</Markdown>
+                    ) : (
+                      <p className="text-muted-foreground/60 text-[12.5px]">Nothing to preview.</p>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
           )}
 
