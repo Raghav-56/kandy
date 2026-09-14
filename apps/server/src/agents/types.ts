@@ -82,8 +82,15 @@ export type AgentAdapter = {
   id: AgentId
   /** Binary to look for on PATH. */
   bin: string
-  /** Credential paths, checked for existence only — never read. Empty delegates auth to the CLI. */
+  /** Credential paths. Existence is the floor; `readAuth` may say more. */
   credentials: string[]
+  /**
+   * Non-secret facts from the credential file: when it expires, what plan it
+   * is on. Tokens are never read, only the metadata beside them — which is the
+   * difference between "there is a file" and "you can actually run something".
+   * Omit it for an agent that validates its own setup.
+   */
+  readAuth?: () => { expiresAt: number | null; plan: string | null } | null
   spawn(opts: SpawnOptions): SpawnSpec
   /** One line of stdout → zero or more events. */
   parse(line: string): AgentEvent[]

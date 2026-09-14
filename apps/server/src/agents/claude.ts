@@ -1,4 +1,5 @@
 import { homedir } from "node:os"
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import type { AgentAdapter, AgentEvent } from "./types.js"
 
@@ -29,6 +30,7 @@ import type { AgentAdapter, AgentEvent } from "./types.js"
 export const claude: AgentAdapter = {
   id: "claude",
   bin: "claude",
+  readAuth: () => readClaudeAuth(),
   credentials: [
     path.join(homedir(), ".claude", ".credentials.json"),
     // macOS keeps the credential in the Keychain, leaving only this behind.
@@ -196,4 +198,31 @@ function summarize(name: unknown, input: Record<string, unknown> | undefined): s
     pick("description") ??
     ""
   return first.replace(/\s+/g, " ").slice(0, 200) || String(name ?? "")
+}
+
+/**
+ * What the credential file says about itself.
+ *
+ * Only the metadata beside the tokens: when the sign-in dies and which plan it
+ * is on. The tokens themselves are never read — kandy has no use for them, the
+ * spawned child already has its own.
+ *
+ * `refreshTokenExpiresAt` is the one that matters. The access token expires
+ * every few hours and Claude Code refreshes it silently; it is the refresh
+ * token running out that makes you sign in again.
+ */
+function readClaudeAuth(): { expiresAt: number | null; plan: string | null } | null {
+  try {
+    const raw = readFileSync(path.join(homedir(), ".claude", ".credentials.json"), "utf8")
+    const oauth = (JSON.parse(raw) as Record<string, any>)?.["claudeAiOauth"]
+    if (!oauth) return null
+    const exp = oauth["refreshTokenExpiresAt"] ?? oauth["expiresAt"]
+    return {
+      expiresAt: typeof exp === "number" ? exp : null,
+      plan: typeof oauth["subscriptionType"] === "string" ? oauth["subscriptionType"] : null,
+    }
+  } catch {
+    // Unreadable or not JSON: say nothing rather than guess at a state.
+    return null
+  }
 }

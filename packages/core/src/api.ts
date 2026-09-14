@@ -158,9 +158,25 @@ export type Delivery = "live" | "queued"
 export type AgentInfo = {
   id: AgentId
   installed: boolean
-  /** Best-effort: whether a credential exists. Never reads the credential. */
+  /** Signed in *and* not expired. A stale credential is not usable. */
   authed: boolean
   version: string | null
+  /**
+   * When the sign-in stops working, if the CLI records it.
+   *
+   * Claude Code writes `refreshTokenExpiresAt`; once that passes you have to
+   * sign in again, and until kandy read it a month-dead credential still
+   * showed as ready — you found out when a run failed. Codex records no expiry,
+   * so this stays null there and absence means "it did not say", never "fine".
+   */
+  expiresAt: number | null
+  /**
+   * How the agent is paid for: a plan name, or "api" for a key.
+   *
+   * On a subscription there is no per-token bill, which is what makes every
+   * figure on the Usage page notional.
+   */
+  plan: string | null
 }
 
 export type OutputLine = {

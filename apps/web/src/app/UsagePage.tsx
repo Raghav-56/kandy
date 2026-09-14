@@ -54,7 +54,6 @@ export function UsagePage({ view }: { view: BoardView | null }) {
   const totalTokens = view.runs.reduce((t, r) => t + (r.tokens ?? 0), 0)
   const held = view.notes.filter((n) => n.status === "done" && n.worktree).length
   const totalTime = view.runs.reduce((t, r) => t + ((r.endedAt ?? Date.now()) - r.startedAt), 0)
-  const anyEstimated = view.runs.some((r) => r.costSource === "estimated")
   const unpriced = view.runs.filter((r) => r.tokens !== null && r.costUsd === null).length
 
   const byAgent = new Map<string, { tokens: number; cost: number; runs: number; estimated: boolean }>()
@@ -76,13 +75,27 @@ export function UsagePage({ view }: { view: BoardView | null }) {
         <CountMetric
           label="Spend"
           to={totalCost}
-          format={(n) => `${anyEstimated ? "≈" : ""}${money(n) ?? "$0.00"}`}
-          note={anyEstimated ? "partly estimated" : "as reported"}
+          format={(n) => money(n) ?? "$0.00"}
+          note="estimated"
         />
         <CountMetric label="Tokens" to={totalTokens} format={(n) => compact(n) ?? "0"} />
         <Metric label="Runs" value={String(view.runs.length)} note={unpriced ? `${unpriced} unpriced` : undefined} />
         <Metric label="Agent time" value={duration(0, totalTime)} />
       </div>
+
+      {/*
+        Said once, rather than a symbol on every number.
+
+        Both agents run on plans — Claude Code on a subscription, Codex on a
+        ChatGPT account — so none of these figures is a charge anybody makes.
+        Claude reports dollars for a turn and Codex reports only tokens, which
+        kandy prices from a rate table, and neither is a bill.
+      */}
+      <p className="text-muted-foreground/70 mt-3 text-[11.5px] leading-relaxed">
+        Every figure here is an estimate. These agents run on subscriptions, so nothing below is
+        billed per token — it is what the same work would cost at API rates, which is useful for
+        comparing notes against each other and not for predicting an invoice.
+      </p>
 
       {/* Disk is the cost this page was missing. Every finished note keeps a
           whole checkout until it is reclaimed, and nothing anywhere said so. */}
@@ -96,7 +109,7 @@ export function UsagePage({ view }: { view: BoardView | null }) {
       <section className="mt-9">
         <h2 className="text-[13px] font-semibold">Split between agents</h2>
         <p className="text-muted-foreground mt-1 text-[12px]">
-          Of {money(totalCost) ?? "$0.00"} spent, and who spent it.
+          Of {money(totalCost) ?? "$0.00"} estimated, and who ran it up.
         </p>
         <SplitBar
           className="mt-4"

@@ -3,6 +3,7 @@ import type { AgentInfo } from "@kandy/core"
 import { Button } from "@/ui"
 import { Logo } from "@/brand/Logo"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
+import { authState } from "@/features/agents/authState"
 import { cn } from "@/lib/utils"
 
 /**
@@ -114,11 +115,13 @@ function Step({
 
 /** One agent, and the two facts that decide whether it can run anything. */
 function AgentRow({ agent: a }: { agent: AgentInfo }) {
-  const state = !a.installed
-    ? { label: "not installed", tone: "text-muted-foreground/50" }
-    : !a.authed
-      ? { label: "not signed in", tone: "text-lemon" }
-      : { label: "ready", tone: "text-mint" }
+  const state = authState(a)
+  const tone =
+    state.tone === "ready"
+      ? "text-mint"
+      : state.tone === "warn"
+        ? "text-lemon"
+        : "text-muted-foreground/50"
 
   return (
     <div className="flex items-center gap-2.5">
@@ -131,7 +134,7 @@ function AgentRow({ agent: a }: { agent: AgentInfo }) {
           {a.version}
         </span>
       )}
-      <span className={cn("ml-auto shrink-0 text-[11.5px]", state.tone)}>{state.label}</span>
+      <span className={cn("ml-auto shrink-0 text-[11.5px]", tone)}>{state.label}</span>
     </div>
   )
 }

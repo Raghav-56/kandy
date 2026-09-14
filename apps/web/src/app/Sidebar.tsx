@@ -35,6 +35,7 @@ import {
 } from "@/ui"
 import { Logo } from "@/brand/Logo"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
+import { authState } from "@/features/agents/authState"
 import type { Theme } from "@/hooks/useTheme"
 import { cn, money } from "@/lib/utils"
 
@@ -106,10 +107,14 @@ export function Sidebar({
 
   const runs = view?.runs ?? []
   const spend = runs.reduce((t, r) => t + (r.costUsd ?? 0), 0)
-  const estimated = runs.some((r) => r.costSource === "estimated")
 
   const current = boards.find((b) => b.id === boardId) ?? null
   const ready = agents.filter((a) => a.installed && a.authed)
+  /* An expired sign-in is worse than a missing one: nothing looks wrong until
+     a run fails, so the footer says it without being opened. */
+  const stale = agents.filter(
+    (a) => a.installed && a.expiresAt !== null && a.expiresAt <= Date.now(),
+  )
 
   /* One badge, not four. The list already shows every status; what belongs
      here is the single most urgent thing, so the rail can carry it too. */
@@ -141,7 +146,12 @@ export function Sidebar({
                     <span className="truncate text-[13.5px] font-semibold tracking-[-0.02em]">
                       {current?.name ?? "kandy"}
                     </span>
-                    <span className="text-muted-foreground truncate text-[11px]">
+                    <span
+                      className={cn(
+                        "truncate text-[11px]",
+                        stale.length > 0 ? "text-lemon" : "text-muted-foreground",
+                      )}
+                    >
                       {current ? shortPath(current.repoPath) : "no repo yet"}
                     </span>
                   </div>
@@ -225,14 +235,13 @@ export function Sidebar({
                   className={ROW}
                   isActive={page === "usage"}
                   onClick={() => onPage("usage")}
-                  tooltip={spend > 0 ? `Usage — ${estimated ? "≈" : ""}${money(spend)}` : "Usage"}
+                  tooltip={spend > 0 ? `Usage — ${money(spend)} estimated` : "Usage"}
                 >
                   <Gauge />
                   <span>Usage</span>
                 </SidebarMenuButton>
                 {spend > 0 && (
                   <SidebarMenuBadge className="text-muted-foreground tabular-nums group-data-[collapsible=icon]:hidden">
-                    {estimated ? "≈" : ""}
                     {money(spend)}
                   </SidebarMenuBadge>
                 )}
@@ -271,9 +280,11 @@ export function Sidebar({
                   <div className="grid flex-1 text-left leading-tight">
                     <span className="truncate text-[12.5px] font-medium">{user}</span>
                     <span className="text-muted-foreground truncate text-[11px]">
-                      {ready.length > 0
-                        ? `${ready.length} ${ready.length === 1 ? "agent" : "agents"} ready`
-                        : "no agent ready"}
+                      {stale.length > 0
+                        ? `${stale.length} sign-in${stale.length === 1 ? "" : "s"} expired`
+                        : ready.length > 0
+                          ? `${ready.length} ${ready.length === 1 ? "agent" : "agents"} ready`
+                          : "no agent ready"}
                     </span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-3.5 shrink-0 opacity-60" />
@@ -299,10 +310,14 @@ export function Sidebar({
                       <span
                         className={cn(
                           "shrink-0 text-[11px]",
-                          a.authed ? "text-mint" : "text-lemon",
+                          authState(a).tone === "ready"
+                            ? "text-mint"
+                            : authState(a).tone === "warn"
+                              ? "text-lemon"
+                              : "text-muted-foreground/50",
                         )}
                       >
-                        {a.authed ? "ready" : "not signed in"}
+                        {authState(a).label}
                       </span>
                     </div>
                   ))}
@@ -318,8 +333,7 @@ export function Sidebar({
                   Usage
                   {spend > 0 && (
                     <span className="text-muted-foreground ml-auto text-[11px] tabular-nums">
-                      {estimated ? "≈" : ""}
-                      {money(spend)}
+                        {money(spend)}
                     </span>
                   )}
                 </DropdownMenuItem>

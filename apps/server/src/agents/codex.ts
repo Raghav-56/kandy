@@ -33,6 +33,7 @@ let pinnedModel: string | undefined
 export const codex: AgentAdapter = {
   id: "codex",
   bin: "codex",
+  readAuth: () => readCodexAuth(),
   credentials: [path.join(homedir(), ".codex", "auth.json")],
 
   spawn({ cwd, prompt, resume, policy, model }) {
@@ -255,4 +256,23 @@ function activeModel(): string | null {
     cachedModel = null
   }
   return cachedModel
+}
+
+/**
+ * Codex records no expiry, so this only reports how it is paid for.
+ *
+ * `auth_mode` is "chatgpt" for a subscription and the file carries an
+ * OPENAI_API_KEY instead when it is a key. Returning a null expiry is the
+ * honest answer: kandy cannot tell whether this sign-in still works, and
+ * inventing a date from `last_refresh` would be a guess wearing a timestamp.
+ */
+function readCodexAuth(): { expiresAt: number | null; plan: string | null } | null {
+  try {
+    const raw = readFileSync(path.join(homedir(), ".codex", "auth.json"), "utf8")
+    const d = JSON.parse(raw) as Record<string, any>
+    const plan = d["OPENAI_API_KEY"] ? "api" : typeof d["auth_mode"] === "string" ? d["auth_mode"] : null
+    return { expiresAt: null, plan }
+  } catch {
+    return null
+  }
 }

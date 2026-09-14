@@ -34,13 +34,30 @@ export async function detect(a: AgentAdapter): Promise<AgentInfo> {
   } catch {
     installed = false
   }
+  /*
+   * Existence is the floor, not the answer.
+   *
+   * A credential file outlives the credential in it. Claude Code's refresh
+   * token expires and the file stays exactly where it was, so kandy reported
+   * "ready" for a sign-in that had been dead for a month — and you found out
+   * when a run failed instead of when you looked.
+   *
+   * Only the metadata beside the tokens is read: the expiry and the plan.
+   * Agents that record no expiry return null for it, and null means "it did
+   * not say", never "it is fine".
+   */
+  const present = a.credentials.length === 0 ? installed : a.credentials.some((p) => existsSync(p))
+  const detail = present && a.readAuth ? a.readAuth() : null
+  const expiresAt = detail?.expiresAt ?? null
+  const expired = expiresAt !== null && expiresAt <= Date.now()
+
   return {
     id: a.id,
     installed,
-    // Existence only. We never open these files.
-    // Agents without a credential probe validate their own provider setup.
-    authed: a.credentials.length === 0 ? installed : a.credentials.some((p) => existsSync(p)),
+    authed: present && !expired,
     version,
+    expiresAt,
+    plan: detail?.plan ?? null,
   }
 }
 

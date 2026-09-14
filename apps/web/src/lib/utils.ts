@@ -22,16 +22,19 @@ export function money(usd: number | null): string | null {
 }
 
 /**
- * Cost with its provenance attached.
+ * A cost figure.
  *
- * An estimate is marked with ≈ rather than hidden behind a disclaimer: the
- * reader sees at a glance which numbers are billed and which are computed from
- * tokens, and a total made of both can say how much of it is which.
+ * There used to be a ≈ on anything priced from tokens rather than billed. It
+ * marked the wrong boundary: both agents here run on subscriptions, so *no*
+ * figure on that page is a charge anyone makes — the tilde implied the rest
+ * were exact. Usage says once, in a sentence, that all of it is an estimate,
+ * which is both truer and easier to read than a symbol on every number.
+ *
+ * `source` is kept in the data because provenance is still worth recording;
+ * it is just not a per-number decoration.
  */
-export function cost(usd: number | null, source?: string): string | null {
-  const m = money(usd)
-  if (m === null) return null
-  return source === "estimated" ? `≈${m}` : m
+export function cost(usd: number | null, _source?: string): string | null {
+  return money(usd)
 }
 
 export function compact(n: number | null): string | null {

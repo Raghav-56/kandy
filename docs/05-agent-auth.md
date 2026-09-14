@@ -6,7 +6,21 @@ We spawn the user's already-installed CLI as a child process. It inherits the en
 therefore inherits whatever credential the user already logged in with. We never read a token,
 never store one, never transmit one.
 
-Observed credential locations (existence verified; contents never read):
+We do now read the **metadata beside** the tokens — when the sign-in expires and which plan it is
+on — and nothing else. The reason is that existence was not enough: a credential file outlives the
+credential inside it, so an expired Claude Code sign-in still looked ready and the first sign of
+trouble was a run failing. Two fields, no secrets:
+
+| Agent | Read | Not read |
+| --- | --- | --- |
+| Claude Code | `claudeAiOauth.refreshTokenExpiresAt`, `subscriptionType` | `accessToken`, `refreshToken` |
+| Codex | `auth_mode`, and whether `OPENAI_API_KEY` is set | `tokens.*` |
+
+Codex records no expiry. kandy reports `expiresAt: null` there rather than deriving one from
+`last_refresh`, because a guess wearing a timestamp is worse than saying nothing: null means "it
+did not say", never "it is fine".
+
+Observed credential locations:
 
 | Agent | Credential |
 | --- | --- |
@@ -95,3 +109,19 @@ are emitted separately without counting tokens or turns twice. Process exit,
 not a usage summary, finishes the run. Output formats follow
 [aider's implementation](https://github.com/Aider-AI/aider/blob/main/aider/coders/base_coder.py)
 and flags follow its [scripting interface](https://aider.chat/docs/scripting.html).
+
+## What this means for the Usage page
+
+Both of the agents kandy ships adapters for are normally used on a plan — Claude Code on a
+subscription, Codex on a ChatGPT account. On a plan there is no per-token bill, so **no figure on
+the Usage page is a charge anyone makes.**
+
+On top of that, only Claude reports a dollar amount for a turn at all. Codex reports tokens and
+kandy prices them from a rate table, which is arithmetic on an assumed rate for a model kandy may
+not even know: of 24 Codex runs on this repo's own board, zero carried a cost from the agent and
+seventeen carried no model either.
+
+kandy used to mark the derived ones with a `≈`. That drew the wrong line — it implied the
+unmarked figures were exact when none of them is a bill. Usage says it once, in a sentence, and
+the numbers are left clean. `costSource` is still recorded per run, because provenance is worth
+keeping even when it is not worth printing on every row.
