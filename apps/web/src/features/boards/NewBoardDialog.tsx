@@ -1,44 +1,56 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { KandyClient } from "@kandy/client"
-import type { RepoCheck } from "@kandy/core"
+import type { Board, RepoCheck } from "@kandy/core"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/ui"
-import { FolderPicker } from "@/features/boards/FolderPicker"
+import { RepoPicker } from "@/features/boards/RepoPicker"
 import { Button } from "@/ui"
 import { Input } from "@/ui"
 
 /**
- * A board is a repo. Validating the path while it's typed — rather than at the
- * first run, three clicks later — is the difference between a tool that feels
- * solid and one that feels like it's guessing.
+ * A board is a repo, so this dialog has one real question.
+ *
+ * It used to ask three: browse or type, which folder, and what to call it —
+ * two of which have obvious answers. Picking from the repos on this machine
+ * answers the first two at once, and the name defaults to the folder, so it
+ * only appears once there is a repo to name.
+ *
+ * The path is still validated as it settles rather than at the first run three
+ * clicks later, which is the difference between a tool that feels solid and
+ * one that feels like it's guessing.
  */
 export function NewBoardDialog({
   open,
   onOpenChange,
   client,
+  boards,
   onCreated,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   client: KandyClient
+  /** What's already here, so the same repo isn't added twice by accident. */
+  boards: Board[]
   onCreated: (boardId: string) => void
 }) {
-  const [path, setPath] = useState("")
+  const [query, setQuery] = useState("")
   const [name, setName] = useState("")
   const [check, setCheck] = useState<RepoCheck | null>(null)
   const [busy, setBusy] = useState(false)
-  // Browsing is the default; typing is the escape hatch for people who already
-  // know the path and would rather not click through to it.
-  const [typing, setTyping] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const taken = useMemo(() => new Set(boards.map((b) => b.repoPath)), [boards])
+  // Only a path can be checked; a half-typed repo name is a search, not a guess
+  // at a directory, and checking it would flash "not a git repository" at
+  // someone who is still typing.
+  const path = /[/~]/.test(query) ? query.trim() : ""
+
   useEffect(() => {
-    if (!path.trim()) return setCheck(null)
+    if (!path) return setCheck(null)
     let stale = false
-    // Debounced: the user is still typing a path, and every keystroke would
-    // otherwise be a git process.
+    // Debounced: every keystroke would otherwise be a git process.
     const t = setTimeout(() => {
       void client
-        .checkRepo(path.trim())
+        .checkRepo(path)
         .then((r) => !stale && setCheck(r))
         .catch(() => !stale && setCheck(null))
     }, 250)
@@ -48,6 +60,13 @@ export function NewBoardDialog({
     }
   }, [path, client])
 
+  function reset() {
+    setQuery("")
+    setName("")
+    setCheck(null)
+    setError(null)
+  }
+
   async function create() {
     if (!check?.isRepo || busy) return
     setBusy(true)
@@ -56,8 +75,7 @@ export function NewBoardDialog({
       const { board } = await client.createBoard(name.trim() || check.name || "board", check.path)
       onCreated(board.id)
       onOpenChange(false)
-      setPath("")
-      setName("")
+      reset()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -66,59 +84,46 @@ export function NewBoardDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        onOpenChange(v)
+        if (!v) reset()
+      }}
+    >
       <DialogContent>
         <DialogTitle>New board</DialogTitle>
         <DialogDescription>
           Point it at a git repository. Every note runs in its own worktree off that repo.
         </DialogDescription>
 
-        <div className="mt-6 space-y-4">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="label">Repository</span>
-              <button
-                onClick={() => setTyping((t) => !t)}
-                className="text-[11px] text-faint transition-colors hover:text-dim"
-              >
-                {typing ? "browse instead" : "type a path"}
-              </button>
-            </div>
+        <div className="mt-5 space-y-3">
+          <RepoPicker
+            client={client}
+            query={query}
+            onQuery={setQuery}
+            // Picking writes the path into the same field, in the short form —
+            // so what you chose is visible and still editable, rather than
+            // being swallowed by a control that now says nothing.
+            onPick={(p) => setQuery(short(p))}
+            taken={taken}
+          />
 
-            <div className="mt-1.5">
-              {typing ? (
-                <Input
-                  autoFocus
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  placeholder="~/Developer/kandy"
-                  className="font-mono"
-                  onKeyDown={(e) => e.key === "Enter" && void create()}
-                />
-              ) : (
-                <FolderPicker
-                  client={client}
-                  onPick={(p) => {
-                    setPath(p)
-                    setTyping(true)
-                  }}
-                />
-              )}
-            </div>
+          <RepoStatus query={path} check={check} taken={taken} />
 
-            {(typing || path) && <RepoStatus path={path} check={check} />}
-          </div>
-
-          <label className="block">
-            <span className="label">Name</span>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={check?.name ?? "optional — defaults to the folder name"}
-              className="mt-1.5"
-              onKeyDown={(e) => e.key === "Enter" && void create()}
-            />
-          </label>
+          {/* Naming is a detail of a repo you've already chosen, so it waits
+              until there is one. Blank means the folder name. */}
+          {check?.isRepo && (
+            <label className="flex items-center gap-3">
+              <span className="label shrink-0">Call it</span>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={check.name ?? "board"}
+                onKeyDown={(e) => e.key === "Enter" && void create()}
+              />
+            </label>
+          )}
         </div>
 
         {error && (
@@ -145,24 +150,43 @@ export function NewBoardDialog({
   )
 }
 
-function RepoStatus({ path, check }: { path: string; check: RepoCheck | null }) {
-  if (!path.trim())
-    return <p className="mt-2 text-[11.5px] text-faint">Absolute path, or ~ for home.</p>
-  if (!check) return <p className="mt-2 text-[11.5px] text-faint">Checking…</p>
+/** `/Users/you/x` is `~/x`. The home prefix is noise in every one of these. */
+function short(p: string): string {
+  return p.replace(/^\/Users\/[^/]+/, "~")
+}
+
+function RepoStatus({
+  query,
+  check,
+  taken,
+}: {
+  query: string
+  check: RepoCheck | null
+  taken: Set<string>
+}) {
+  if (!query) return null
+  if (!check) return <p className="text-[11.5px] text-faint">Checking…</p>
 
   if (!check.isRepo) {
-    return <p className="mt-2 text-[11.5px] text-berry">{check.error ?? "Not a git repository."}</p>
+    return <p className="text-[11.5px] text-berry">{check.error ?? "Not a git repository."}</p>
   }
 
   return (
-    <div className="mt-2 space-y-1 text-[11.5px]">
-      <div className="flex items-center gap-1.5 text-mint">
+    <div className="space-y-1 text-[11.5px]">
+      <div className="flex items-center gap-1.5">
         <span className="h-1.5 w-1.5 rounded-full bg-mint" />
-        <span className="font-mono text-dim">{check.path}</span>
+        {/* The path only when it isn't already the thing you typed — repeating
+            the field back is filler; resolving `.` or a symlink is news. */}
+        {short(check.path) !== query && (
+          <span className="font-mono text-dim">{short(check.path)}</span>
+        )}
+        <span className="text-faint">
+          on {check.branch} at {check.head}
+        </span>
       </div>
-      <div className="text-faint">
-        on {check.branch} at {check.head}
-      </div>
+      {taken.has(check.path) && (
+        <div className="text-lemon">This repo already has a board. You'll get a second one.</div>
+      )}
       {/* Worth saying plainly: notes branch from HEAD and will not see
           uncommitted work. Discovering that later feels like a betrayal. */}
       {check.dirty && (

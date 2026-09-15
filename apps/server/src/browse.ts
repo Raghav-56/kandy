@@ -79,6 +79,57 @@ export function suggestions(): Entry[] {
 }
 
 /**
+ * The git repositories on this machine, most recently touched first.
+ *
+ * Browsing a filesystem to find a repo means reading past Applications and
+ * DaVinci Resolve Media to get to the four folders that could ever be an
+ * answer. This looks one level inside the places people keep code and returns
+ * only directories that actually contain a `.git`, which is the list the
+ * dialog was asking you to assemble by hand.
+ *
+ * One level deep on purpose. A full scan of a home directory is slow, hits
+ * node_modules and Library, and finds vendored repos nobody wants to adopt.
+ * Anything kept somewhere unusual still has the path field and the native
+ * picker.
+ */
+export function repos(limit = 40): Entry[] {
+  const home = homedir()
+  const roots = ["Developer", "Projects", "code", "src", "work", "repos", "dev", "git", "Documents"]
+  const found: { entry: Entry; at: number }[] = []
+  const seen = new Set<string>()
+
+  const consider = (dir: string) => {
+    if (seen.has(dir) || !existsSync(path.join(dir, ".git"))) return
+    seen.add(dir)
+    let at = 0
+    try {
+      at = statSync(path.join(dir, ".git")).mtimeMs
+    } catch {
+      // Unreadable is not a reason to hide it; it just sorts last.
+    }
+    found.push({ entry: { name: path.basename(dir), path: dir, isRepo: true }, at })
+  }
+
+  consider(home)
+  for (const r of roots) {
+    const root = path.join(home, r)
+    if (!existsSync(root)) continue
+    consider(root)
+    let kids: string[] = []
+    try {
+      kids = readdirSync(root, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && !d.name.startsWith("."))
+        .map((d) => path.join(root, d.name))
+    } catch {
+      continue
+    }
+    for (const k of kids) consider(k)
+  }
+
+  return found.sort((a, b) => b.at - a.at).slice(0, limit).map((f) => f.entry)
+}
+
+/**
  * The OS folder chooser, on macOS.
  *
  * The daemon and the browser are the same machine in normal use, so this is a

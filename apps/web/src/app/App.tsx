@@ -506,6 +506,7 @@ export function App() {
         open={newBoard}
         onOpenChange={setNewBoard}
         client={client}
+        boards={boards}
         onCreated={(id) => void refreshBoards(id)}
       />
 

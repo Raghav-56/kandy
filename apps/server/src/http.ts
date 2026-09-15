@@ -28,7 +28,7 @@ import {
 } from "./attach.js"
 import { defaultModelFor, modelsFor, warmPrices } from "./pricing.js"
 import { computeStats } from "./stats.js"
-import { list as listDir, nativePick, suggestions } from "./browse.js"
+import { list as listDir, nativePick, repos, suggestions } from "./browse.js"
 import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
 import { coerceAttribution, commitTrailers, prBody } from "./attribution.js"
@@ -183,6 +183,8 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
       return send(res, 200, {
         ...listDir(p ?? homedir()),
         suggestions: suggestions(),
+        // The list the picker actually wants: repos, not every folder.
+        repos: repos(),
       })
     } catch (err) {
       return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))

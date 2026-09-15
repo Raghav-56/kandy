@@ -233,6 +233,14 @@ export type Listing = {
   isRepo: boolean
   /** Places repos usually live, so the picker opens somewhere useful. */
   suggestions: DirEntry[]
+  /**
+   * Every git repo the daemon could find, newest first.
+   *
+   * The answer to "which repo?" is almost always one of these, so the dialog
+   * offers the list rather than a filesystem to walk. Independent of `path`:
+   * it does not change as you browse.
+   */
+  repos: DirEntry[]
 }
 
 export type Stats = {
