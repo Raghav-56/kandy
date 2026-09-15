@@ -40,9 +40,6 @@ import type { AgentAdapter, AgentEvent } from "./types.js"
  * to price rather than recorded as a run that cost nothing.
  */
 
-/** Set by spawn(), read by parse() — the model this process was told to use. */
-let pinnedModel: string | undefined
-
 export const opencode: AgentAdapter = {
   id: "opencode",
   bin: "opencode",
@@ -50,8 +47,6 @@ export const opencode: AgentAdapter = {
   credentials: [authFile()],
 
   spawn({ prompt, resume, policy, model }) {
-    pinnedModel = model
-
     return {
       command: "opencode",
       args: [
@@ -75,7 +70,7 @@ export const opencode: AgentAdapter = {
     }
   },
 
-  parse(line) {
+  parse(line, run) {
     const text = line.replace(/\r$/, "")
     if (!text.trim()) return []
 
@@ -134,7 +129,7 @@ export const opencode: AgentAdapter = {
           tokens,
           // One step, not one turn — a run is several, and they sum.
           turns: 1,
-          model: pinnedModel ?? configuredModel(),
+          model: run?.model ?? configuredModel(),
           usage: { input, output, cacheRead, cacheWrite },
         })
         break

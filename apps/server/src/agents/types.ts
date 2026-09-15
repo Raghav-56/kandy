@@ -61,6 +61,20 @@ export type LiveInput = {
   encode(text: string): string | null
 }
 
+/**
+ * What `parse()` needs to know about the run whose output it is reading.
+ *
+ * Adapters are singletons — `ADAPTERS` hands the same object to every run —
+ * so anything a run-specific answer depends on has to travel with the line
+ * rather than be stashed on the adapter by `spawn()`. Two runs of the same
+ * agent on different models were otherwise crossing wires, and the usage event
+ * attributed whichever model started last.
+ */
+export type RunContext = {
+  /** Model this run was spawned with, or undefined for the agent's own default. */
+  model?: string | undefined
+}
+
 export type SpawnSpec = {
   command: string
   args: string[]
@@ -101,8 +115,8 @@ export type AgentAdapter = {
     authed?: boolean
   } | null
   spawn(opts: SpawnOptions): SpawnSpec
-  /** One line of stdout → zero or more events. */
-  parse(line: string): AgentEvent[]
+  /** One line of stdout → zero or more events, in the context of one run. */
+  parse(line: string, run?: RunContext): AgentEvent[]
   /** Present only on agents that accept mid-run steering. */
   live?: LiveInput
   /**

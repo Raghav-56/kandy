@@ -387,6 +387,11 @@ export class Runner {
         ? openAskChannel(q.runId, asking.port, asking.token)
         : undefined
 
+    // Note pin wins over the board default; neither means the agent's own.
+    // Held here rather than on the adapter: `ADAPTERS` is a singleton, so a
+    // model stashed by one run's spawn() was read by the next run's parse().
+    const model = note.model ?? view.board.models?.[agentId]
+
     const spec = a.spawn({
       cwd: worktree.path,
       prompt:
@@ -396,10 +401,7 @@ export class Runner {
           )) + describeAttachments(attached),
       policy,
       ...(ask ? { ask } : {}),
-      // Note pin wins over the board default; neither means the agent's own.
-      ...(note.model ?? view.board.models?.[agentId]
-        ? { model: note.model ?? view.board.models?.[agentId] }
-        : {}),
+      ...(model ? { model } : {}),
       ...(prior ? { resume: prior } : {}),
     })
 
@@ -466,7 +468,7 @@ export class Runner {
     if (!a.live) child.stdin?.end()
 
     this.syncColumn(q.boardId, q.noteId)
-    this.consume(q.runId, child, (line) => a.parse(line))
+    this.consume(q.runId, child, (line) => a.parse(line, model ? { model } : {}))
 
     child.on("error", (err) => {
       this.say(q.runId, "error", err.message)

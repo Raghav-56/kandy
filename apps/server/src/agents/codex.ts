@@ -27,9 +27,6 @@ import type { AgentAdapter, AgentEvent } from "./types.js"
  * Codex reports tokens but not money, so cost stays null rather than being
  * invented from a price list that would be wrong the week it changed.
  */
-/** Set by spawn(), read by parse() — the model this process was told to use. */
-let pinnedModel: string | undefined
-
 export const codex: AgentAdapter = {
   id: "codex",
   bin: "codex",
@@ -38,7 +35,6 @@ export const codex: AgentAdapter = {
 
   spawn({ cwd, prompt, resume, policy, model }) {
     const full = policy === "full"
-    pinnedModel = model
 
     // `exec` and `exec resume` do NOT take the same flags: resume accepts
     // neither -s nor -C, and passing them fails the run outright with
@@ -79,9 +75,11 @@ export const codex: AgentAdapter = {
     }
   },
 
-  parse(line) {
-    // `spawn` records what it was told to run so `turn.completed` can price
-    // against the model that actually ran rather than the configured default.
+  parse(line, run) {
+    // The run carries the model it was spawned with, so `turn.completed` can
+    // price against the model that actually ran rather than the configured
+    // default — and two concurrent Codex runs on different models do not
+    // answer for each other, which a pin stored on this shared adapter did.
     if (!line.trim()) return []
     let msg: Record<string, any>
     try {
@@ -123,7 +121,7 @@ export const codex: AgentAdapter = {
           costUsd: null,
           tokens,
           turns: 1,
-          model: pinnedModel ?? activeModel(),
+          model: run?.model ?? activeModel(),
           usage: { input, output, cacheRead, cacheWrite },
         })
         out.push({ kind: "turn_end" })

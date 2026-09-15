@@ -163,7 +163,6 @@ test("result reports usage with cache counted on top, not backed out", () => {
 test("the display name Cursor reports is never used to price a run", () => {
   // "Cursor Grok 4.6 High Fast" is not a model id. Pricing against it would
   // either miss or prefix-match something unrelated.
-  cursor.spawn(POLICY)
   cursor.parse(line({ type: "system", subtype: "init", model: "Cursor Grok 4.6 High Fast" }))
   const out = cursor.parse(line({ type: "result", usage: { inputTokens: 1, outputTokens: 1 } }))
   const usage = out.find((e) => e.kind === "usage")
@@ -172,11 +171,26 @@ test("the display name Cursor reports is never used to price a run", () => {
 })
 
 test("a pinned model is what prices the run", () => {
-  cursor.spawn({ ...POLICY, model: "claude-opus-5" })
-  const out = cursor.parse(line({ type: "result", usage: { inputTokens: 1, outputTokens: 1 } }))
+  const out = cursor.parse(line({ type: "result", usage: { inputTokens: 1, outputTokens: 1 } }), {
+    model: "claude-opus-5",
+  })
   const usage = out.find((e) => e.kind === "usage")
   assert.ok(usage && usage.kind === "usage")
   assert.equal(usage.model, "claude-opus-5")
+})
+
+test("two runs on different models do not cross wires", () => {
+  // The adapter is a singleton: every run shares this object. A model stashed
+  // on it by spawn() meant whichever run started last priced both of them.
+  const result = line({ type: "result", usage: { inputTokens: 1, outputTokens: 1 } })
+  cursor.spawn({ ...POLICY, model: "claude-opus-5" })
+  cursor.spawn({ ...POLICY, model: "gpt-5.3" })
+
+  const first = cursor.parse(result, { model: "claude-opus-5" }).find((e) => e.kind === "usage")
+  const second = cursor.parse(result, { model: "gpt-5.3" }).find((e) => e.kind === "usage")
+  assert.ok(first?.kind === "usage" && second?.kind === "usage")
+  assert.equal(first.model, "claude-opus-5")
+  assert.equal(second.model, "gpt-5.3")
 })
 
 test("thinking deltas and our own echoed prompt stay out of the transcript", () => {
