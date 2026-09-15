@@ -143,7 +143,7 @@ export function Sidebar({
                   tooltip={current ? `${current.name} — switch repo` : "Choose a repo"}
                   className="data-[state=open]:bg-sidebar-accent"
                 >
-                  <Logo size={22} className="shrink-0" />
+                  <Logo size={28} className="size-7 shrink-0" />
                   <div className="grid flex-1 text-left leading-tight">
                     <span className="truncate text-[13.5px] font-semibold tracking-[-0.02em]">
                       {current?.name ?? "kandy"}
@@ -307,7 +307,7 @@ export function Sidebar({
                   .filter((a) => a.installed)
                   .map((a) => (
                     <div key={a.id} className="flex items-center gap-2 px-2 py-1.5 text-[12.5px]">
-                      <AgentMark agent={a.id} size={13} />
+                      <AgentMark agent={a.id} size={16} className="size-4" />
                       <span className="min-w-0 flex-1 truncate">{agentLabel(a.id)}</span>
                       <span
                         className={cn(
