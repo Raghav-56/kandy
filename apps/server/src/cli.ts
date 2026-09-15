@@ -115,10 +115,60 @@ function usage(): void {
   w(`\n  ${faint("docs")}  ${dim("https://github.com/hiteshbandhu/kandy")}\n\n`)
 }
 
-function serve(args: string[]): void {
+/**
+ * Who already has the port, if anyone.
+ *
+ * Asked before anything is constructed, because starting a second daemon is
+ * not merely noisy — `reconcile` below marks every run it finds in flight as
+ * interrupted, and the two daemons share one database. The crash was the
+ * harmless half of what used to happen.
+ */
+async function portOwner(
+  port: number,
+): Promise<{ kandy: true; pid: number } | { kandy: false } | null> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/health`, {
+      signal: AbortSignal.timeout(1500),
+    })
+    const body = (await res.json()) as { pid?: number }
+    return typeof body.pid === "number" ? { kandy: true, pid: body.pid } : { kandy: false }
+  } catch (err) {
+    // Refused means nobody is listening. Anything else — a socket that accepts
+    // and says something we cannot read — is somebody else's server.
+    const cause = (err as { cause?: { code?: string } }).cause
+    if (cause?.code === "ECONNREFUSED") return null
+    if (err instanceof DOMException && err.name === "TimeoutError") return { kandy: false }
+    return cause?.code ? { kandy: false } : null
+  }
+}
+
+async function serve(args: string[]): Promise<void> {
   const port = intFlag(args, "--port", DEFAULT_PORT)
   const slots = intFlag(args, "--slots", DEFAULT_SLOTS)
   const json = args.includes("--json")
+
+  const owner = await portOwner(port)
+  if (owner?.kandy) {
+    const url = `http://127.0.0.1:${port}`
+    if (json) {
+      process.stdout.write(JSON.stringify({ url, port, pid: owner.pid, alreadyRunning: true }) + "\n")
+    } else {
+      process.stdout.write(
+        `\n  ${mint("kandy is already running")}\n` +
+          `  ${faint("at")}     ${dim(url)}\n` +
+          `  ${faint("pid")}    ${dim(String(owner.pid))}\n\n` +
+          `  ${faint("open it with")} ${dim("kandy open")}${faint(", or stop that one first.")}\n\n`,
+      )
+    }
+    return
+  }
+  if (owner && !owner.kandy) {
+    process.stderr.write(
+      `\n  ${lemon("port " + port + " is taken")} ${dim("by something that is not kandy")}\n` +
+        `  ${faint("try")}  ${dim("kandy serve --port " + (port + 1))}\n\n`,
+    )
+    process.exit(1)
+  }
 
   const token = loadToken(TOKEN_PATH)
   const engine = new Engine()
@@ -144,13 +194,6 @@ function serve(args: string[]): void {
     { permissions, port, token },
   )
 
-  // A daemon that died mid-run leaves notes claiming to be running. They
-  // aren't. Fail them loudly rather than showing a board that lies.
-  for (const b of engine.projections.boards()) {
-    const view = engine.view(b.id)
-    if (view) runner.reconcile(view)
-  }
-
   prs.start()
   // Fetched once a day and cached; failing is silent, since pricing a turn
   // must never be able to stop an agent from running.
@@ -161,7 +204,34 @@ function serve(args: string[]): void {
   // connection under us and the agent would be told kandy was unreachable —
   // a lie, and one that reads like a bug in the board rather than a timeout.
   server.requestTimeout = ASK_TIMEOUT_MS + 60_000
+  // Losing the race for the port must cost nothing. The preflight above catches
+  // the ordinary case; this catches the milliseconds between asking and binding.
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    const why =
+      err.code === "EADDRINUSE"
+        ? `port ${port} was taken while starting`
+        : err.code === "EACCES"
+          ? `port ${port} needs privileges kandy does not have`
+          : `the daemon could not listen on ${port}`
+    process.stderr.write(`\n  ${lemon(why)}\n  ${faint(err.message)}\n\n`)
+    engine.close()
+    process.exit(1)
+  })
+
   server.listen(port, "127.0.0.1", () => {
+    /*
+     * A daemon that died mid-run leaves notes claiming to be running. They
+     * aren't — fail them loudly rather than show a board that lies.
+     *
+     * Deliberately after the socket is ours: this writes to a database a live
+     * daemon may be using, so it must not run until we know we are the only
+     * one.
+     */
+    for (const b of engine.projections.boards()) {
+      const view = engine.view(b.id)
+      if (view) runner.reconcile(view)
+    }
+
     // One line of JSON on start, for a supervisor or a script that needs to
     // know where the daemon landed without scraping a banner. The token is
     // deliberately not in it: it is in a 0600 file, and printing it to stdout
