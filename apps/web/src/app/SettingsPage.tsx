@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import type { KandyClient } from "@kandy/client"
 import type { AgentId, AgentInfo, BoardView, Policy } from "@kandy/core"
 import { Button, Confirm, Input, Separator, Switch } from "@/ui"
@@ -48,7 +48,7 @@ export function SettingsPage({
   const attribution = view?.board.attribution ?? { commit: false, pr: false }
 
   if (!view) {
-    return <p className="text-muted-foreground px-6 py-12 text-center text-[12.5px]">No repo selected.</p>
+    return <p className="text-muted-foreground px-6 py-12 text-center text-aux">No repo selected.</p>
   }
 
   async function save(what: string, fn: () => Promise<unknown>) {
@@ -73,8 +73,8 @@ export function SettingsPage({
 
   return (
     <div className="mx-auto w-full max-w-[720px] px-6 py-8">
-      <h1 className="text-[20px] font-semibold tracking-[-0.02em]">Settings</h1>
-      <p className="text-muted-foreground mt-1 text-[12.5px]">{view.board.name}</p>
+      <h1 className="text-display font-semibold tracking-[-0.02em]">Settings</h1>
+      <p className="text-muted-foreground mt-1 text-aux">{view.board.name}</p>
 
       <Section title="Appearance" body="kandy follows your system unless you say otherwise.">
         <div className="flex gap-2">
@@ -101,7 +101,7 @@ export function SettingsPage({
             .filter((a) => a.installed)
             .map((a) => (
               <div key={a.id} className="flex items-center gap-3">
-                <span className="flex w-[130px] shrink-0 items-center gap-2 text-[12.5px]">
+                <span className="flex w-[130px] shrink-0 items-center gap-2 text-aux">
                   <AgentMark agent={a.id} size={13} />
                   {agentLabel(a.id)}
                 </span>
@@ -161,7 +161,7 @@ export function SettingsPage({
             Full access
           </Button>
         </div>
-        <p className="text-muted-foreground/70 mt-2.5 max-w-[58ch] text-[11px] leading-relaxed">
+        <p className="text-muted-foreground/70 mt-2.5 max-w-[58ch] text-meta leading-relaxed">
           {defaultPolicy === "full" ? (
             <>
               New notes here can run any shell command. That is what lets them build and test what
@@ -187,7 +187,7 @@ export function SettingsPage({
             value={setup}
             onChange={(e) => setSetup(e.target.value)}
             placeholder="pnpm install --prefer-offline"
-            className="mt-1.5 font-mono text-[12px]"
+            className="mt-1.5 font-mono text-aux"
           />
         </label>
         <label className="mt-3 block">
@@ -196,9 +196,9 @@ export function SettingsPage({
             value={carry}
             onChange={(e) => setCarry(e.target.value)}
             placeholder=".env, .turbo"
-            className="mt-1.5 font-mono text-[12px]"
+            className="mt-1.5 font-mono text-aux"
           />
-          <span className="text-muted-foreground/70 mt-1.5 block text-[11px]">
+          <span className="text-muted-foreground/70 mt-1.5 block text-meta">
             Gitignored paths copied into each worktree by reference — secrets and caches git
             deliberately doesn't track.
           </span>
@@ -251,11 +251,11 @@ export function SettingsPage({
       </Section>
 
       <Section title="Repository" body="Where this board's work happens.">
-        <p className="bg-muted rounded-lg px-3 py-2 font-mono text-[12px]">{view.board.repoPath}</p>
+        <p className="bg-muted rounded-lg px-3 py-2 font-mono text-aux">{view.board.repoPath}</p>
 
         <div className="border-berry/25 mt-5 rounded-xl border p-4">
-          <p className="text-[12.5px] font-medium">Remove this repo from kandy</p>
-          <p className="text-muted-foreground mt-1 max-w-[52ch] text-[12px] leading-relaxed">
+          <p className="text-aux font-medium">Remove this repo from kandy</p>
+          <p className="text-muted-foreground mt-1 max-w-[52ch] text-aux leading-relaxed">
             Forgets the board, its notes and any leftover worktrees. The repository itself, and
             anything you already merged, is untouched.
           </p>
@@ -343,18 +343,28 @@ function Toggle({
   onChange: (v: boolean) => void
   className?: string
 }) {
+  const id = useId()
   return (
+    /*
+     * The whole row toggles, not just the switch.
+     *
+     * The control is 32×18 — well under any comfortable target — and the words
+     * beside it, which are the part you actually read and aim at, did nothing
+     * when clicked. Labelling them fixes both at once.
+     */
     <div className={cn("flex items-start gap-3", className)}>
       <Switch
+        id={id}
         checked={checked}
         disabled={disabled}
         onCheckedChange={onChange}
-        aria-label={label}
         className="mt-0.5 shrink-0"
       />
       <div className="min-w-0">
-        <p className="text-[12.5px] font-medium">{label}</p>
-        <p className="text-muted-foreground mt-1 max-w-[52ch] text-[12px] leading-relaxed">
+        <label htmlFor={id} className="text-aux font-medium">
+          {label}
+        </label>
+        <p className="text-muted-foreground mt-1 max-w-[52ch] text-aux leading-relaxed">
           {note}
         </p>
       </div>
@@ -377,9 +387,9 @@ function Section({
     <>
       <Separator className="my-7" />
       <section className={cn(className)}>
-        <h2 className="text-[13.5px] font-semibold">{title}</h2>
+        <h2 className="text-title font-semibold">{title}</h2>
         {body && (
-          <p className="text-muted-foreground mt-1 max-w-[58ch] text-[12.5px] leading-relaxed">
+          <p className="text-muted-foreground mt-1 max-w-[58ch] text-aux leading-relaxed">
             {body}
           </p>
         )}

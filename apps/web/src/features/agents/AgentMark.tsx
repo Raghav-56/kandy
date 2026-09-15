@@ -135,7 +135,7 @@ export function AgentChip({ agent, onDark }: { agent: AgentId; onDark?: boolean 
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full py-0.5 pl-1 pr-2 text-[11px] font-medium",
+        "inline-flex items-center gap-1.5 rounded-full py-0.5 pl-1 pr-2 text-meta font-medium",
         onDark ? "bg-raised text-dim" : "bg-black/[0.06] text-[#57534a]",
       )}
     >

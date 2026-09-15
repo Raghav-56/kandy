@@ -8,7 +8,7 @@ export function Hint({ text, children }: { text: string; children: ReactNode }) 
       <TooltipTrigger asChild>
         <span className="inline-flex">{children}</span>
       </TooltipTrigger>
-      <TooltipContent className="max-w-[280px] text-[12px] leading-relaxed">{text}</TooltipContent>
+      <TooltipContent className="max-w-[280px] text-aux leading-relaxed">{text}</TooltipContent>
     </Tooltip>
   )
 }

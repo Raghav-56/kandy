@@ -43,7 +43,7 @@ import { cn, money } from "@/lib/utils"
    in one place so the nav, the footer and anything added later cannot drift.
    With the 4px `SidebarMenu` gap that makes a 40px rhythm — the nav reads as
    four separate things rather than one block, which is what it is. */
-const ROW = "h-9 text-[13px]"
+const ROW = "h-9 text-ui"
 
 /** kandy has no accounts. The name is whoever owns this machine. */
 function initials(name: string): string {
@@ -147,12 +147,12 @@ export function Sidebar({
                 >
                   <Logo size={28} className="size-7 shrink-0" />
                   <div className="grid flex-1 text-left leading-tight">
-                    <span className="truncate text-[13.5px] font-semibold tracking-[-0.02em]">
+                    <span className="truncate text-title font-semibold tracking-[-0.02em]">
                       {current?.name ?? "kandy"}
                     </span>
                     <span
                       className={cn(
-                        "truncate text-[11px]",
+                        "truncate text-meta",
                         stale.length > 0 ? "text-lemon" : "text-muted-foreground",
                       )}
                     >
@@ -182,7 +182,14 @@ export function Sidebar({
                     <FolderGit2 className="size-4 shrink-0 opacity-70" />
                     <span className="min-w-0 flex-1 truncate">{b.name}</span>
                     {b.id === boardId && <Check className="text-mint size-4 shrink-0" />}
-                    <CopyLink path={`/b/${b.id}`} label={`Copy link to ${b.name}`} size="icon-xs" />
+                    <CopyLink
+                      path={`/b/${b.id}`}
+                      label={`Copy link to ${b.name}`}
+                      size="icon-xs"
+                      // Keeps its 24px target without setting the row's height:
+                      // these two rows were 36px against 31.5px for the one below.
+                      className="-my-1"
+                    />
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
@@ -226,7 +233,7 @@ export function Sidebar({
                     <StatusPill
                       tone={badge.tone}
                       pulse={badge.pulse}
-                      className="px-1.5 py-0 text-[10px]"
+                      className="px-1.5 py-0 text-micro"
                     >
                       {badge.count}
                     </StatusPill>
@@ -277,12 +284,12 @@ export function Sidebar({
                   tooltip="You and this machine"
                   className="data-[state=open]:bg-sidebar-accent"
                 >
-                  <span className="bg-grape/15 text-grape grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold">
+                  <span className="bg-grape/15 text-grape grid size-7 shrink-0 place-items-center rounded-full text-meta font-semibold">
                     {initials(user)}
                   </span>
                   <div className="grid flex-1 text-left leading-tight">
-                    <span className="truncate text-[12.5px] font-medium">{user}</span>
-                    <span className="text-muted-foreground truncate text-[11px]">
+                    <span className="truncate text-aux font-medium">{user}</span>
+                    <span className="text-muted-foreground truncate text-meta">
                       {stale.length > 0
                         ? `${stale.length} sign-in${stale.length === 1 ? "" : "s"} need${stale.length === 1 ? "s" : ""} attention`
                         : ready.length > 0
@@ -313,13 +320,13 @@ export function Sidebar({
                       // here. It still wears the item's exact gutter, or the
                       // marks would sit in a different column from the icons
                       // two rows below.
-                      className="flex items-center gap-2 px-2 py-1.5 text-[13px]"
+                      className="flex items-center gap-2 px-2 py-1.5 text-ui"
                     >
                       <AgentMark agent={a.id} size={16} />
                       <span className="min-w-0 flex-1 truncate">{agentLabel(a.id)}</span>
                       <span
                         className={cn(
-                          "shrink-0 text-[11px]",
+                          "shrink-0 text-meta",
                           authState(a).tone === "ready"
                             ? "text-mint"
                             : authState(a).tone === "warn"
@@ -342,7 +349,7 @@ export function Sidebar({
                   <Gauge className="size-4" />
                   Usage
                   {spend > 0 && (
-                    <span className="text-muted-foreground ml-auto text-[11px] tabular-nums">
+                    <span className="text-muted-foreground ml-auto text-meta tabular-nums">
                       {money(spend)}
                     </span>
                   )}

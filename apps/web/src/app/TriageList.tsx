@@ -91,7 +91,7 @@ export function TriageList({
           loop, and nothing else on the board outranks that. */}
       {view.prompts.length > 0 && (
         <section className="mb-5">
-          <h2 className="mb-2 px-3 text-[12px] font-semibold tracking-[-0.005em] text-lemon">
+          <h2 className="mb-2 px-3 text-aux font-semibold tracking-[-0.005em] text-lemon">
             Waiting for your answer
           </h2>
           <div className="space-y-1.5">
@@ -108,7 +108,7 @@ export function TriageList({
       )}
 
       {open > 0 && (
-        <p className="text-muted-foreground/60 mb-3 px-3 text-[11.5px]">
+        <p className="text-muted-foreground/60 mb-3 px-3 text-meta">
           {open} open · {view.notes.length - open} done
         </p>
       )}
@@ -130,8 +130,8 @@ export function TriageList({
             <ChevronRight
               className={cn("size-3 transition-transform", open && "rotate-90")}
             />
-            <h2 className="text-[12px] font-semibold tracking-[-0.005em]">{g.title}</h2>
-            <span className="text-muted-foreground/60 text-[11px] tabular-nums">
+            <h2 className="text-aux font-semibold tracking-[-0.005em]">{g.title}</h2>
+            <span className="text-muted-foreground/60 text-meta tabular-nums">
               {g.notes.length}
             </span>
           </button>
@@ -206,14 +206,14 @@ function Waiting({
       <span className="mt-1.5 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-lemon" />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
-          <span className="truncate text-[13px] text-ink">{title}</span>
-          <span className="shrink-0 text-[11px] text-lemon">{prompt.tool}</span>
+          <span className="truncate text-ui text-ink">{title}</span>
+          <span className="shrink-0 text-meta text-lemon">{prompt.tool}</span>
         </span>
-        <span className="mt-1 block truncate font-mono text-[11.5px] text-[#b9a06a]" title={prompt.command}>
+        <span className="mt-1 block truncate font-mono text-meta text-[#b9a06a]" title={prompt.command}>
           {prompt.command}
         </span>
       </span>
-      <span className="shrink-0 self-center text-[11.5px] text-lemon">Answer</span>
+      <span className="shrink-0 self-center text-meta text-lemon">Answer</span>
     </button>
   )
 }

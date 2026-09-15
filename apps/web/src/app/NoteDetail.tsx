@@ -251,14 +251,14 @@ export function NoteDetail(p: NoteDetailProps) {
                 {look.label}
               </StatusPill>
               {p.note.agent && (
-                <span className="flex items-center gap-1.5 text-[11.5px] text-dim">
+                <span className="flex items-center gap-1.5 text-meta text-dim">
                   <AgentMark agent={p.note.agent} size={12} />
                   {agentLabel(p.note.agent)}
                 </span>
               )}
             </div>
 
-            <h2 className="mt-2.5 text-[16px] font-medium leading-snug tracking-[-0.015em]">
+            <h2 className="mt-2.5 text-lede font-medium leading-snug tracking-[-0.015em]">
               <InlineEdit
                 key={p.note.id}
                 value={p.note.title}
@@ -298,14 +298,14 @@ export function NoteDetail(p: NoteDetailProps) {
         </div>
 
         {run && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-dim">
+          <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-meta text-dim">
             <span className={cn("tabular-nums", live && "text-lemon")}>
               {duration(run.startedAt, run.endedAt)}
             </span>
             {run.model && (
               <>
                 <Sep />
-                <span className="font-mono text-[11px]">{run.model}</span>
+                <span className="font-mono text-meta">{run.model}</span>
               </>
             )}
             {run.turns !== null && <><Sep /><span className="tabular-nums">{run.turns} turns</span></>}
@@ -336,12 +336,12 @@ export function NoteDetail(p: NoteDetailProps) {
 
         {p.note.branch && (
           <div className="mt-2.5 flex items-center gap-2.5">
-            <span className="min-w-0 truncate font-mono text-[11px] text-faint" title={p.note.branch}>
+            <span className="min-w-0 truncate font-mono text-meta text-faint" title={p.note.branch}>
               {p.note.branch}
             </span>
             {p.note.pr && <PrBadge pr={p.note.pr} onDark />}
             {p.note.stat && (
-              <span className="ml-auto shrink-0 text-[11px] tabular-nums">
+              <span className="ml-auto shrink-0 text-meta tabular-nums">
                 <span className="text-mint">+{p.note.stat.insertions}</span>{" "}
                 <span className="text-berry">−{p.note.stat.deletions}</span>
               </span>
@@ -418,7 +418,7 @@ export function NoteDetail(p: NoteDetailProps) {
 
       {interrupted && (
         <div className="border-hairline bg-lemon-bg/40 border-y px-4 py-2.5">
-          <p className="text-[12.5px] leading-relaxed">
+          <p className="text-aux leading-relaxed">
             <span className="text-lemon font-medium">Interrupted</span>
             <span className="text-muted-foreground">
               {" — "}kandy restarted while this was running. Nothing was lost: the worktree is
@@ -449,19 +449,19 @@ export function NoteDetail(p: NoteDetailProps) {
               key={t}
               onClick={() => setTab(t)}
               className={cn(
-                "rounded-lg px-2.5 py-1.5 text-[12.5px] capitalize transition-colors",
+                "rounded-lg px-2.5 py-1.5 text-aux capitalize transition-colors",
                 tab === t ? "bg-raised text-ink" : "text-dim hover:text-ink",
               )}
             >
               {t}
               {t === "diff" && p.note.stat && p.note.stat.files > 0 && (
-                <span className="ml-1.5 text-[11px] tabular-nums text-faint">{p.note.stat.files}</span>
+                <span className="ml-1.5 text-meta tabular-nums text-faint">{p.note.stat.files}</span>
               )}
             </button>
           ))}
           <button
             onClick={() => setAsk("delete")}
-            className="ml-auto rounded-lg px-2.5 py-1.5 text-[11.5px] text-faint transition-colors hover:bg-[#241419] hover:text-berry"
+            className="ml-auto rounded-lg px-2.5 py-1.5 text-meta text-faint transition-colors hover:bg-[#241419] hover:text-berry"
           >
             Delete
           </button>
@@ -470,14 +470,14 @@ export function NoteDetail(p: NoteDetailProps) {
 
       {staged.length > 0 && (
         <div className="border-t border-hairline px-4 py-2.5">
-          <p className="text-faint mb-1.5 text-[11px]">
+          <p className="text-faint mb-1.5 text-meta">
             Waiting for a workspace — handed to the agent when this note runs.
           </p>
           <div className="flex flex-wrap gap-1.5">
             {staged.map((f) => (
               <span
                 key={f.name}
-                className="bg-muted flex items-center gap-1.5 rounded-md py-1 pr-1 pl-2 text-[11.5px]"
+                className="bg-muted flex items-center gap-1.5 rounded-md py-1 pr-1 pl-2 text-meta"
               >
                 <Paperclip className="size-3 opacity-60" />
                 <span className="max-w-[160px] truncate">{f.name}</span>
@@ -522,10 +522,10 @@ export function NoteDetail(p: NoteDetailProps) {
       {live && p.activity && (
         <div className="border-t border-hairline bg-[#1c180f] px-4 py-2.5">
           <div className="flex items-baseline gap-2.5">
-            <span className="shrink-0 text-[11px] font-medium uppercase tracking-[0.06em] text-lemon">
+            <span className="shrink-0 text-meta font-medium uppercase tracking-[0.06em] text-lemon">
               {p.activity.tool}
             </span>
-            <span className="truncate font-mono text-[11.5px] text-[#b9a06a]" title={p.activity.detail}>
+            <span className="truncate font-mono text-meta text-[#b9a06a]" title={p.activity.detail}>
               {p.activity.detail}
             </span>
           </div>
@@ -565,7 +565,7 @@ export function NoteDetail(p: NoteDetailProps) {
         <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-[620px]">
           <DialogTitle>Open a pull request</DialogTitle>
           <DialogDescription asChild>
-            <div className="text-muted-foreground mt-1.5 text-[12.5px] leading-relaxed">
+            <div className="text-muted-foreground mt-1.5 text-aux leading-relaxed">
               Pushes this branch to <b>{p.forge?.repo ?? "the remote"}</b> and opens a PR against{" "}
               <b>{p.forge?.defaultBranch ?? base}</b>. This is the first thing kandy does that
               leaves your machine. The note lands here automatically once the PR is merged.
@@ -580,7 +580,7 @@ export function NoteDetail(p: NoteDetailProps) {
                 value={pr.title}
                 onChange={(e) => setPr({ ...pr, title: e.target.value })}
                 aria-label="Pull request title"
-                className="border-line bg-bg focus-visible:border-grape/45 w-full rounded-lg border px-3 py-2 text-[13.5px] font-medium outline-none"
+                className="border-line bg-bg focus-visible:border-grape/45 w-full rounded-lg border px-3 py-2 text-title font-medium outline-none"
               />
 
               {/* Write and Preview, because the body is markdown and GitHub is
@@ -588,10 +588,10 @@ export function NoteDetail(p: NoteDetailProps) {
                   notice a heading that never closed or a list that is one line. */}
               <Tabs value={prTab} onValueChange={(v) => setPrTab(v as "write" | "preview")}>
                 <TabsList className="h-8">
-                  <TabsTrigger value="write" className="text-[12.5px]">
+                  <TabsTrigger value="write" className="text-aux">
                     Write
                   </TabsTrigger>
-                  <TabsTrigger value="preview" className="text-[12.5px]">
+                  <TabsTrigger value="preview" className="text-aux">
                     Preview
                   </TabsTrigger>
                 </TabsList>
@@ -602,7 +602,7 @@ export function NoteDetail(p: NoteDetailProps) {
                     onChange={(e) => setPr({ ...pr, body: e.target.value })}
                     aria-label="Pull request description"
                     rows={13}
-                    className="bg-bg h-[42vh] resize-none font-mono text-[12px] leading-[1.6]"
+                    className="bg-bg h-[42vh] resize-none font-mono text-aux leading-[1.6]"
                   />
                 </TabsContent>
 
@@ -611,7 +611,7 @@ export function NoteDetail(p: NoteDetailProps) {
                     {pr.body.trim() ? (
                       <Markdown>{pr.body}</Markdown>
                     ) : (
-                      <p className="text-muted-foreground/60 text-[12.5px]">Nothing to preview.</p>
+                      <p className="text-muted-foreground/60 text-aux">Nothing to preview.</p>
                     )}
                   </div>
                 </TabsContent>
@@ -737,7 +737,7 @@ function Refused({
 
   return (
     <div className="border-y border-[#3d2621] bg-[#1a1211] px-4 py-3">
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-berry">
+      <div className="flex items-center gap-1.5 text-micro font-medium uppercase tracking-[0.08em] text-berry">
         <span className="h-1.5 w-1.5 rounded-full bg-berry" />
         Refused — repo only
       </div>
@@ -746,7 +746,7 @@ function Refused({
         {shown.map((f) => (
           <li
             key={`${f.runId}-${f.seq}`}
-            className="truncate font-mono text-[11.5px] leading-[1.6] text-[#e8b3a8]"
+            className="truncate font-mono text-meta leading-[1.6] text-[#e8b3a8]"
             title={f.text}
           >
             {f.text}
@@ -754,7 +754,7 @@ function Refused({
         ))}
       </ul>
       {more > 0 && (
-        <p className="mt-1 text-[11px] text-faint">
+        <p className="mt-1 text-meta text-faint">
           and {more} more — the full list is in the stream
         </p>
       )}
@@ -762,7 +762,7 @@ function Refused({
       {/* Codex decides alone and tells us afterwards — there was never a
           moment at which anyone could have been asked. Saying so beats
           leaving the reader to wonder why nothing asked them. */}
-      <p className="mt-2 text-[11px] text-faint">
+      <p className="mt-2 text-meta text-faint">
         {askable
           ? "These were refused before the question could reach you."
           : "This agent runs non-interactively — it cannot ask, so anything outside the repo is refused outright."}

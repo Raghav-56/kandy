@@ -43,7 +43,7 @@ export function Wordmark({ className }: { className?: string }) {
   return (
     <span className={cn("flex items-center gap-2", className)}>
       <Logo size={19} />
-      <span className="text-[14.5px] font-semibold tracking-[-0.03em]">kandy</span>
+      <span className="text-prose font-semibold tracking-[-0.03em]">kandy</span>
     </span>
   )
 }

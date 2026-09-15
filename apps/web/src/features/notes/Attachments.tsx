@@ -94,7 +94,7 @@ export function Attachments({
           {files.map((f, i) => (
             <span
               key={f.name + i}
-              className="bg-muted flex items-center gap-1.5 rounded-md py-1 pr-1 pl-2 text-[11.5px]"
+              className="bg-muted flex items-center gap-1.5 rounded-md py-1 pr-1 pl-2 text-meta"
             >
               {thumbnail(f) ? (
                 <img
@@ -133,7 +133,7 @@ export function Attachments({
       })}
 
       {refused.map((reason) => (
-        <p key={reason} className="text-berry mt-1.5 text-[11px]">
+        <p key={reason} className="text-berry mt-1.5 text-meta">
           {reason}
         </p>
       ))}

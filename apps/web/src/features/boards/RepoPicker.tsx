@@ -87,7 +87,7 @@ export function RepoPicker({
           onChange={(e) => onQuery(e.target.value)}
           placeholder="Search your repos, or paste a path"
           className={cn(
-            "w-full bg-transparent py-2 text-[13px] outline-none placeholder:text-faint",
+            "w-full bg-transparent py-2 text-ui outline-none placeholder:text-faint",
             isPath && "font-mono",
           )}
           onKeyDown={(e) => {
@@ -138,11 +138,11 @@ export function RepoPicker({
                 )}
               >
                 <FolderGit2 className="size-3.5 shrink-0 text-faint" />
-                <span className="text-[12.5px] text-ink">{r.name}</span>
-                {taken.has(r.path) && <span className="text-[10.5px] text-faint">on a board</span>}
+                <span className="text-aux text-ink">{r.name}</span>
+                {taken.has(r.path) && <span className="text-micro text-faint">on a board</span>}
                 {/* The parent, not the path: the name is already the row's
                     subject, and repeating it makes the line read twice. */}
-                <span className="min-w-0 flex-1 truncate text-right font-mono text-[10.5px] text-faint">
+                <span className="min-w-0 flex-1 truncate text-right font-mono text-micro text-faint">
                   {tailPath(r.path.replace(/^\/Users\/[^/]+/, "~").replace(/\/[^/]+$/, ""), 30)}
                 </span>
               </button>

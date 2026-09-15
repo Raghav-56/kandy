@@ -16,8 +16,8 @@ const badge = cva(
         grape: "bg-[#1e1a32] text-grape",
       },
       size: {
-        sm: "px-2 py-0.5 text-[11px]",
-        md: "px-2.5 py-1 text-[11.5px]",
+        sm: "px-2 py-0.5 text-meta",
+        md: "px-2.5 py-1 text-meta",
       },
     },
     defaultVariants: { tone: "neutral", size: "sm" },

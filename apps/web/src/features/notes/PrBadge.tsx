@@ -34,7 +34,9 @@ export function PrBadge({
       title={`${pr.title} — ${pr.state}${pr.draft ? " (draft)" : ""}`}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md transition-colors",
-        size === "md" ? "px-2 py-1 text-[12px]" : "px-1.5 py-0.5 text-[11px]",
+        // min-h rather than more padding: this is a link people click, and 21px
+        // was below any comfortable target without looking small enough to excuse it.
+        size === "md" ? "min-h-6 px-2 py-1 text-aux" : "min-h-6 px-2 py-0.5 text-meta",
         onDark ? "bg-raised hover:bg-[#1e1e25]" : "bg-black/[0.06] hover:bg-black/[0.1]",
         tone,
       )}

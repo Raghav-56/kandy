@@ -28,13 +28,13 @@ export function DiffView({
   const [open, setOpen] = useState<string | null>(files[0]?.path ?? null)
 
   if (files.length === 0) {
-    return <p className="flex-1 px-4 py-6 text-center text-[12px] text-faint">No changes yet.</p>
+    return <p className="flex-1 px-4 py-6 text-center text-aux text-faint">No changes yet.</p>
   }
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4">
       {capturedAt != null && (
-        <p className="mb-2.5 px-1 text-[11px] text-faint">
+        <p className="mb-2.5 px-1 text-meta text-faint">
           Snapshot from review on {new Date(capturedAt).toLocaleString()} — the worktree is gone.
         </p>
       )}
@@ -59,17 +59,17 @@ export function DiffView({
                     isOpen && "rotate-90",
                   )}
                 />
-                <span className="truncate font-mono text-[12px] leading-none" title={f.path}>
+                <span className="truncate font-mono text-aux leading-none" title={f.path}>
                   {f.path}
                 </span>
-                <span className="ml-auto shrink-0 text-[11px] leading-none tabular-nums">
+                <span className="ml-auto shrink-0 text-meta leading-none tabular-nums">
                   <span className="text-mint">+{f.added}</span>{" "}
                   <span className="text-berry">−{f.removed}</span>
                 </span>
               </button>
 
               {isOpen && (
-                <pre className="overflow-x-auto border-t border-hairline bg-[#0c0c0e] py-2 font-mono text-[11.5px] leading-[1.6]">
+                <pre className="overflow-x-auto border-t border-hairline bg-[#0c0c0e] py-2 font-mono text-meta leading-[1.6]">
                   {f.lines.map((l, i) => (
                     <div
                       key={i}

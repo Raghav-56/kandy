@@ -127,7 +127,7 @@ export function NewBoardDialog({
         </div>
 
         {error && (
-          <p className="mt-4 rounded-lg border border-[#3d2621] bg-[#1d1312] px-3 py-2 text-[12px] text-[#e8b3a8]">
+          <p className="mt-4 rounded-lg border border-[#3d2621] bg-[#1d1312] px-3 py-2 text-aux text-[#e8b3a8]">
             {error}
           </p>
         )}
@@ -165,14 +165,14 @@ function RepoStatus({
   taken: Set<string>
 }) {
   if (!query) return null
-  if (!check) return <p className="text-[11.5px] text-faint">Checking…</p>
+  if (!check) return <p className="text-meta text-faint">Checking…</p>
 
   if (!check.isRepo) {
-    return <p className="text-[11.5px] text-berry">{check.error ?? "Not a git repository."}</p>
+    return <p className="text-meta text-berry">{check.error ?? "Not a git repository."}</p>
   }
 
   return (
-    <div className="space-y-1 text-[11.5px]">
+    <div className="space-y-1 text-meta">
       <div className="flex items-center gap-1.5">
         <span className="h-1.5 w-1.5 rounded-full bg-mint" />
         {/* The path only when it isn't already the thing you typed — repeating

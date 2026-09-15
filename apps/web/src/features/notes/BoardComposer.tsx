@@ -109,13 +109,13 @@ export function BoardComposer({
                   value={agent || null}
                   agents={agents}
                   onChange={setAgent}
-                  className="h-7 w-[132px] border-0 bg-transparent text-[12px]"
+                  className="h-7 w-[132px] border-0 bg-transparent text-aux"
                 />
                 <ModelSelect
                   agent={agent || null}
                   value={model}
                   onChange={setModel}
-                  className="h-7 w-[150px] border-0 bg-transparent text-[12px]"
+                  className="h-7 w-[150px] border-0 bg-transparent text-aux"
                 />
                 <Hint text="Write it with detail">
                   <button

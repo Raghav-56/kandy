@@ -111,7 +111,7 @@ export function Composer({
                     if (!e.defaultPrevented) pasteIntoTitle(e)
                   }}
                   placeholder="What should the agent do?"
-                  className="placeholder:text-muted-foreground/40 w-full bg-transparent py-1.5 text-[17px] font-medium tracking-[-0.015em] outline-none placeholder:font-normal"
+                  className="placeholder:text-muted-foreground/40 w-full bg-transparent py-1.5 text-lede font-medium tracking-[-0.015em] outline-none placeholder:font-normal"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) {
                       e.preventDefault()
@@ -140,7 +140,7 @@ export function Composer({
                   // only files are intercepted.
                   onPaste={onPaste}
                   placeholder="Constraints, how to verify — optional"
-                  className="placeholder:text-muted-foreground/40 min-h-[72px] resize-none border-0 bg-transparent p-0 py-1 text-[13.5px] leading-[1.6] shadow-none focus-visible:ring-0 dark:bg-transparent"
+                  className="placeholder:text-muted-foreground/40 min-h-[72px] resize-none border-0 bg-transparent p-0 py-1 text-title leading-[1.6] shadow-none focus-visible:ring-0 dark:bg-transparent"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(!e.shiftKey)
                     e.stopPropagation()
@@ -176,7 +176,7 @@ export function Composer({
           </div>
         </div>
 
-        <div className="text-muted-foreground/60 flex items-center gap-3 border-t px-4 py-2 text-[11px]">
+        <div className="text-muted-foreground/60 flex items-center gap-3 border-t px-4 py-2 text-meta">
           <span className="flex items-center gap-1">
             <Kbd>⌘↵</Kbd> save &amp; run
           </span>

@@ -135,7 +135,7 @@ export function CommandPalette({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search notes, repos, actions…"
-          className="w-full border-b border-hairline bg-transparent px-4 py-3 text-[14px] text-ink placeholder:text-faint focus:outline-none"
+          className="w-full border-b border-hairline bg-transparent px-4 py-3 text-title text-ink placeholder:text-faint focus:outline-none"
           onKeyDown={(e) => {
             if (e.key === "Escape") onClose()
             if (e.key === "ArrowDown") {
@@ -155,7 +155,7 @@ export function CommandPalette({
 
         <div className="max-h-[46vh] overflow-y-auto py-1.5">
           {results.length === 0 && (
-            <p className="px-4 py-6 text-center text-[12.5px] text-faint">Nothing matches.</p>
+            <p className="px-4 py-6 text-center text-aux text-faint">Nothing matches.</p>
           )}
           {results.map((c, i) => {
             const header = c.group !== lastGroup ? c.group : null
@@ -172,15 +172,15 @@ export function CommandPalette({
                   )}
                 >
                   {c.icon ?? <span className="w-[13px]" />}
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{c.label}</span>
-                  {c.hint && <span className="shrink-0 text-[11px] text-faint">{c.hint}</span>}
+                  <span className="min-w-0 flex-1 truncate text-ui text-ink">{c.label}</span>
+                  {c.hint && <span className="shrink-0 text-meta text-faint">{c.hint}</span>}
                 </button>
               </div>
             )
           })}
         </div>
 
-        <footer className="flex items-center gap-3 border-t border-hairline px-4 py-2 text-[11px] text-faint">
+        <footer className="flex items-center gap-3 border-t border-hairline px-4 py-2 text-meta text-faint">
           <span className="flex items-center gap-1"><Kbd>↑↓</Kbd> move</span>
           <span className="flex items-center gap-1"><Kbd>↵</Kbd> open</span>
           <span className="flex items-center gap-1"><Kbd>esc</Kbd> close</span>

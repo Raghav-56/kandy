@@ -52,16 +52,16 @@ export function Ask({
 
   return (
     <div className="border-y border-[#4a3a20] bg-[#1c180f] px-4 py-3">
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-lemon">
+      <div className="flex items-center gap-1.5 text-micro font-medium uppercase tracking-[0.08em] text-lemon">
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-lemon" />
         Waiting on you
       </div>
 
-      <p className="mt-2 text-[12px] text-dim">
+      <p className="mt-2 text-aux text-dim">
         The agent has stopped and is asking to use <b className="text-ink">{prompt.tool}</b>.
       </p>
 
-      <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-black/30 px-2.5 py-2 font-mono text-[11.5px] leading-[1.6] text-[#d9c894]">
+      <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-black/30 px-2.5 py-2 font-mono text-meta leading-[1.6] text-[#d9c894]">
         {prompt.command}
       </pre>
 
@@ -80,7 +80,7 @@ export function Ask({
             onClick={() => void answer({ decision: "allow", scope: "note" })}
             title={`Adds ${ruleLabel(prompt.rule)} to this note only`}
           >
-            Always allow <span className="ml-1 font-mono text-[11px] opacity-80">{ruleLabel(prompt.rule)}</span>
+            Always allow <span className="ml-1 font-mono text-meta opacity-80">{ruleLabel(prompt.rule)}</span>
           </Button>
         )}
 
@@ -119,7 +119,7 @@ export function Ask({
             >
               {note.trim() ? "Deny and tell it this" : "Deny"}
             </Button>
-            <span className="text-[11px] text-faint">
+            <span className="text-meta text-faint">
               Sent to the agent as the reason. Without one it is only told no.
             </span>
           </div>
@@ -127,7 +127,7 @@ export function Ask({
       )}
 
       {prompt.rule === null && (
-        <p className="mt-2 text-[11px] text-faint">
+        <p className="mt-2 text-meta text-faint">
           No "always allow" for this one — it chains several commands, and a rule
           made from it would cover more than you just read.
         </p>

@@ -37,7 +37,7 @@ export function LoadingBlock({ label, className }: { label?: string; className?:
   return (
     <div className={cn("flex flex-col items-center justify-center gap-3 py-12", className)}>
       <Loading size={22} />
-      {label && <p className="text-muted-foreground text-[12px]">{label}</p>}
+      {label && <p className="text-muted-foreground text-aux">{label}</p>}
     </div>
   )
 }

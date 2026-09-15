@@ -33,10 +33,10 @@ export function AgentSelect({
               <AgentMark agent={a.id} size={13} />
               {agentLabel(a.id)}
               {!a.installed && (
-                <span className="text-muted-foreground text-[11px]">not installed</span>
+                <span className="text-muted-foreground text-meta">not installed</span>
               )}
               {a.installed && !a.authed && (
-                <span className="text-muted-foreground text-[11px]">signed out</span>
+                <span className="text-muted-foreground text-meta">signed out</span>
               )}
             </span>
           </SelectItem>

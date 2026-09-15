@@ -87,7 +87,7 @@ export function ModelSelect({
         </SelectItem>
         {options.map((m) => (
           <SelectItem key={m} value={m}>
-            <span className="font-mono text-[12px]">{m}</span>
+            <span className="font-mono text-aux">{m}</span>
           </SelectItem>
         ))}
       </SelectContent>

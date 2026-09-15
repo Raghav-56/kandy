@@ -42,13 +42,13 @@ export function Confirm({
       <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-[480px]">
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription asChild>
-          <div className="text-muted-foreground mt-1.5 text-[12.5px] leading-relaxed">{body}</div>
+          <div className="text-muted-foreground mt-1.5 text-aux leading-relaxed">{body}</div>
         </DialogDescription>
 
         {facts && facts.length > 0 && (
           <dl className="bg-muted/60 mt-4 space-y-1.5 rounded-xl p-3">
             {facts.map((f) => (
-              <div key={f.label} className="flex min-w-0 items-baseline gap-3 text-[12px]">
+              <div key={f.label} className="flex min-w-0 items-baseline gap-3 text-aux">
                 <dt className="text-muted-foreground w-[74px] shrink-0">{f.label}</dt>
                 <dd className="min-w-0 flex-1 truncate font-mono" title={String(f.value ?? "")}>
                   {f.value}

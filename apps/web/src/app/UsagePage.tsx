@@ -96,8 +96,8 @@ export function UsagePage({
 
   return (
     <div className="mx-auto w-full max-w-[860px] px-6 py-8">
-      <h1 className="text-[20px] font-semibold tracking-[-0.02em]">Usage</h1>
-      <p className="text-muted-foreground mt-1 text-[12.5px]">{view.board.name}</p>
+      <h1 className="text-display font-semibold tracking-[-0.02em]">Usage</h1>
+      <p className="text-muted-foreground mt-1 text-aux">{view.board.name}</p>
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <CountMetric
@@ -119,7 +119,7 @@ export function UsagePage({
         Claude reports dollars for a turn and Codex reports only tokens, which
         kandy prices from a rate table, and neither is a bill.
       */}
-      <p className="text-muted-foreground/70 mt-3 text-[11.5px] leading-relaxed">
+      <p className="text-muted-foreground/70 mt-3 text-meta leading-relaxed">
         Every figure here is an estimate. These agents run on subscriptions, so nothing below is
         billed per token — it is what the same work would cost at API rates, which is useful for
         comparing notes against each other and not for predicting an invoice.
@@ -128,15 +128,15 @@ export function UsagePage({
       {/* Disk is the cost this page was missing. Every finished note keeps a
           whole checkout until it is reclaimed, and nothing anywhere said so. */}
       {held > 0 && (
-        <p className="text-muted-foreground/70 mt-3 text-[11.5px] leading-relaxed">
+        <p className="text-muted-foreground/70 mt-3 text-meta leading-relaxed">
           {held} finished {held === 1 ? "note is" : "notes are"} still holding a worktree — a whole
           checkout each. <Kbd>kandy gc</Kbd> gives the disk back and leaves every branch where it is.
         </p>
       )}
 
       <section className="mt-9">
-        <h2 className="text-[13px] font-semibold">Split between agents</h2>
-        <p className="text-muted-foreground mt-1 text-[12px]">
+        <h2 className="text-ui font-semibold">Split between agents</h2>
+        <p className="text-muted-foreground mt-1 text-aux">
           Of {money(totalCost) ?? "$0.00"} estimated, and who ran it up.
         </p>
         <SplitBar
@@ -163,14 +163,14 @@ export function UsagePage({
               className="odd:bg-muted/40 flex items-center gap-3 rounded-lg px-3 py-2"
             >
               <AgentMark agent={agent as never} size={14} />
-              <span className="flex-1 text-[12.5px]">{agentLabel(agent as never)}</span>
-              <span className="text-muted-foreground w-20 text-right text-[12px] tabular-nums">
+              <span className="flex-1 text-aux">{agentLabel(agent as never)}</span>
+              <span className="text-muted-foreground w-20 text-right text-aux tabular-nums">
                 {v.runs} runs
               </span>
-              <span className="text-muted-foreground w-24 text-right text-[12px] tabular-nums">
+              <span className="text-muted-foreground w-24 text-right text-aux tabular-nums">
                 {compact(v.tokens)} tok
               </span>
-              <span className="w-20 text-right text-[12.5px] tabular-nums">
+              <span className="w-20 text-right text-aux tabular-nums">
                 {v.cost > 0 ? cost(v.cost, v.estimated ? "estimated" : "reported") : "—"}
               </span>
             </li>
@@ -184,8 +184,8 @@ export function UsagePage({
 
           <div className="grid gap-9 sm:grid-cols-2">
             <section>
-              <h2 className="text-[13px] font-semibold">Where work goes</h2>
-              <p className="text-muted-foreground mt-1 text-[12px]">
+              <h2 className="text-ui font-semibold">Where work goes</h2>
+              <p className="text-muted-foreground mt-1 text-aux">
                 And where it stops. {stats.firstTry.landed} of {stats.firstTry.of} landed on the
                 first run.
               </p>
@@ -201,8 +201,8 @@ export function UsagePage({
             </section>
 
             <section>
-              <h2 className="text-[13px] font-semibold">When you run them</h2>
-              <p className="text-muted-foreground mt-1 text-[12px]">
+              <h2 className="text-ui font-semibold">When you run them</h2>
+              <p className="text-muted-foreground mt-1 text-aux">
                 Runs started in each hour, across the whole board.
               </p>
               <Hours className="mt-4" hours={stats.hours} />
@@ -212,8 +212,8 @@ export function UsagePage({
           <Separator className="my-9" />
 
           <section>
-            <h2 className="text-[13px] font-semibold">Twelve weeks</h2>
-            <p className="text-muted-foreground mt-1 text-[12px]">
+            <h2 className="text-ui font-semibold">Twelve weeks</h2>
+            <p className="text-muted-foreground mt-1 text-aux">
               Runs per day, empty days included — a gap says the board sat still.
             </p>
             <Activity className="mt-4" daily={stats.daily} />
@@ -223,8 +223,8 @@ export function UsagePage({
             <>
               <Separator className="my-9" />
               <section>
-                <h2 className="text-[13px] font-semibold">What the agents reached for</h2>
-                <p className="text-muted-foreground mt-1 text-[12px]">
+                <h2 className="text-ui font-semibold">What the agents reached for</h2>
+                <p className="text-muted-foreground mt-1 text-aux">
                   Tool calls across every run.
                 </p>
                 <RankedBars
@@ -246,8 +246,8 @@ export function UsagePage({
       <Separator className="my-9" />
 
       <section>
-        <h2 className="text-[13px] font-semibold">Where it went</h2>
-        <p className="text-muted-foreground mt-1 text-[12px]">
+        <h2 className="text-ui font-semibold">Where it went</h2>
+        <p className="text-muted-foreground mt-1 text-aux">
           Every note that has run, dearest first. Bar length is cost against the
           most expensive one.
         </p>
@@ -273,8 +273,8 @@ function Metric({ label, value, note }: { label: string; value: string; note?: s
   return (
     <div className="bg-card rounded-xl border px-4 py-3">
       <p className="label">{label}</p>
-      <p className="mt-1.5 text-[19px] font-medium tracking-[-0.02em] tabular-nums">{value}</p>
-      {note && <p className="text-muted-foreground/70 mt-0.5 text-[11px]">{note}</p>}
+      <p className="mt-1.5 text-display font-medium tracking-[-0.02em] tabular-nums">{value}</p>
+      {note && <p className="text-muted-foreground/70 mt-0.5 text-meta">{note}</p>}
     </div>
   )
 }

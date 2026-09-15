@@ -199,7 +199,7 @@ export function PromptBox({
               }}
               onPaste={onPaste}
               placeholder={placeholder}
-              className="placeholder:text-muted-foreground/45 min-h-0 w-full flex-1 resize-none self-end overflow-y-auto bg-transparent py-1.5 text-[14px] leading-[1.55] outline-none"
+              className="placeholder:text-muted-foreground/45 min-h-0 w-full flex-1 resize-none self-end overflow-y-auto bg-transparent py-1.5 text-title leading-[1.55] outline-none"
               onSelect={(e) => setCursor(e.currentTarget.selectionStart)}
               onClick={(e) => setCursor(e.currentTarget.selectionStart)}
               onKeyUp={(e) => setCursor(e.currentTarget.selectionStart)}
@@ -292,11 +292,11 @@ export function PromptBox({
                 ) : (
                   <FileText className="text-muted-foreground/50 size-3 shrink-0" />
                 )}
-                <span className="truncate font-mono text-[12px]">
+                <span className="truncate font-mono text-aux">
                   {name}
                   {hit.dir && <span className="text-muted-foreground/60">/</span>}
                 </span>
-                <span className="text-muted-foreground/60 min-w-0 flex-1 truncate text-right font-mono text-[10.5px]">
+                <span className="text-muted-foreground/60 min-w-0 flex-1 truncate text-right font-mono text-micro">
                   {parent}
                 </span>
               </button>
@@ -307,7 +307,7 @@ export function PromptBox({
 
       <div className="border-hairline flex flex-wrap items-center gap-1.5 border-t px-2.5 py-1.5">
         {controls}
-        <span className="text-muted-foreground/60 ml-auto pr-1 text-[11px] whitespace-nowrap">
+        <span className="text-muted-foreground/60 ml-auto pr-1 text-meta whitespace-nowrap">
           {hint ?? "⌘↵ to send"}
         </span>
       </div>

@@ -36,13 +36,13 @@ export function RankedBars({
         const pct = Math.max((r.value / max) * 100, r.value > 0 ? 1.5 : 0)
         return (
           <li key={r.key} className="group/bar grid grid-cols-[1fr_auto] items-baseline gap-x-3">
-            <span className="min-w-0 truncate text-[12.5px]" title={r.label}>
+            <span className="min-w-0 truncate text-aux" title={r.label}>
               {r.label}
             </span>
-            <span className="text-[12px] tabular-nums">
+            <span className="text-aux tabular-nums">
               {r.display}
               {r.meta && (
-                <span className="text-muted-foreground/60 ml-2 text-[11px]">{r.meta}</span>
+                <span className="text-muted-foreground/60 ml-2 text-meta">{r.meta}</span>
               )}
             </span>
             <span className="col-span-2 mt-1 block h-1.5 w-full rounded-full bg-[var(--color-hairline)]">
@@ -93,7 +93,7 @@ export function SplitBar({
 
       <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
         {shown.map((p) => (
-          <li key={p.key} className="flex items-baseline gap-2 text-[12px]">
+          <li key={p.key} className="flex items-baseline gap-2 text-aux">
             <span
               aria-hidden="true"
               style={{ background: p.mark }}
@@ -140,11 +140,11 @@ export function Funnel({
         return (
           <li key={st.key}>
             <div className="flex items-baseline justify-between gap-3">
-              <span className="text-[12.5px]">{st.label}</span>
-              <span className="text-[12.5px] tabular-nums">
+              <span className="text-aux">{st.label}</span>
+              <span className="text-aux tabular-nums">
                 {st.value}
                 {lost > 0 && (
-                  <span className="text-muted-foreground/70 ml-2 text-[11px]">−{lost}</span>
+                  <span className="text-muted-foreground/70 ml-2 text-meta">−{lost}</span>
                 )}
               </span>
             </div>
@@ -193,14 +193,14 @@ export function Hours({ hours, className }: { hours: number[]; className?: strin
           </div>
         ))}
       </div>
-      <div className="text-muted-foreground/60 mt-1.5 flex justify-between text-[10px] tabular-nums">
+      <div className="text-muted-foreground/60 mt-1.5 flex justify-between text-micro tabular-nums">
         <span>00</span>
         <span>06</span>
         <span>12</span>
         <span>18</span>
         <span>23</span>
       </div>
-      <p className="text-muted-foreground mt-2 text-[12px]">
+      <p className="text-muted-foreground mt-2 text-aux">
         Busiest at {String(peak).padStart(2, "0")}:00 — {max} run{max === 1 ? "" : "s"}.
       </p>
     </div>
@@ -261,7 +261,7 @@ export function Activity({
           </div>
         ))}
       </div>
-      <div className="text-muted-foreground/60 mt-2.5 flex items-center gap-1.5 text-[10.5px]">
+      <div className="text-muted-foreground/60 mt-2.5 flex items-center gap-1.5 text-micro">
         <span>Less</span>
         <span className="size-[9px] rounded-[2px] bg-[var(--color-hairline)]" />
         <span className="size-[9px] rounded-[2px] bg-[var(--color-mark-solo)]/40" />

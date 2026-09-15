@@ -34,10 +34,10 @@ export function FirstRun({
     <div className="mx-auto w-full max-w-[560px] px-6 pt-[12vh] pb-16">
       <div className="flex flex-col items-center text-center">
         <Logo size={44} />
-        <h1 className="mt-4 text-[19px] font-semibold tracking-[-0.03em]">
+        <h1 className="mt-4 text-display font-semibold tracking-[-0.03em]">
           Run coding agents on your repos
         </h1>
-        <p className="text-muted-foreground mt-2 max-w-[44ch] text-[13px] leading-relaxed">
+        <p className="text-muted-foreground mt-2 max-w-[44ch] text-ui leading-relaxed">
           A note is one job. It runs in its own git worktree, on its own branch, so several can
           work at once without colliding — and comes back as a diff you review here.
         </p>
@@ -72,7 +72,7 @@ export function FirstRun({
           <ArrowRight className="size-3.5 opacity-70" />
         </Button>
         {!ready && (
-          <p className="text-muted-foreground/70 mt-2 text-[11.5px]">
+          <p className="text-muted-foreground/70 mt-2 text-meta">
             You can do this first — notes will wait until an agent is available.
           </p>
         )}
@@ -99,15 +99,15 @@ function Step({
       <div className="flex items-center gap-2.5">
         <span
           className={cn(
-            "grid size-5 shrink-0 place-items-center rounded-full text-[11px] font-medium tabular-nums",
+            "grid size-5 shrink-0 place-items-center rounded-full text-meta font-medium tabular-nums",
             done ? "bg-mint/15 text-mint" : "bg-muted text-muted-foreground",
           )}
         >
           {done ? <Check className="size-3" /> : n}
         </span>
-        <h2 className="text-[13.5px] font-medium">{title}</h2>
+        <h2 className="text-title font-medium">{title}</h2>
       </div>
-      <p className="text-muted-foreground mt-1.5 pl-[30px] text-[12px] leading-relaxed">{note}</p>
+      <p className="text-muted-foreground mt-1.5 pl-[30px] text-aux leading-relaxed">{note}</p>
       <div className="pl-[30px]">{children}</div>
     </section>
   )
@@ -126,15 +126,15 @@ function AgentRow({ agent: a }: { agent: AgentInfo }) {
   return (
     <div className="flex items-center gap-2.5">
       <AgentMark agent={a.id} size={14} />
-      <span className={cn("text-[12.5px]", a.installed ? "" : "text-muted-foreground/50")}>
+      <span className={cn("text-aux", a.installed ? "" : "text-muted-foreground/50")}>
         {agentLabel(a.id)}
       </span>
       {a.version && (
-        <span className="text-muted-foreground/50 truncate font-mono text-[10.5px]">
+        <span className="text-muted-foreground/50 truncate font-mono text-micro">
           {a.version}
         </span>
       )}
-      <span className={cn("ml-auto shrink-0 text-[11.5px]", tone)}>{state.label}</span>
+      <span className={cn("ml-auto shrink-0 text-meta", tone)}>{state.label}</span>
     </div>
   )
 }

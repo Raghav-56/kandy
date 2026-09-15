@@ -5,7 +5,7 @@ export function Kbd({ children, className }: { children: string; className?: str
   return (
     <kbd
       className={cn(
-        "rounded border border-line bg-raised px-1 py-px font-sans text-[10px] font-medium text-faint",
+        "rounded border border-line bg-raised px-1 py-px font-sans text-micro font-medium text-faint",
         className,
       )}
     >

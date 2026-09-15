@@ -78,11 +78,11 @@ export const NoteRow = memo(function NoteRow({
 
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
-          <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">{note.title}</span>
+          <span className="min-w-0 flex-1 truncate text-title font-medium">{note.title}</span>
           {run && (
             <span
               className={cn(
-                "shrink-0 text-[11px] tabular-nums transition-opacity",
+                "shrink-0 text-meta tabular-nums transition-opacity",
                 /* Steps aside on hover rather than being covered up — the
                    delete button sits in this corner. */
                 "group-hover/row:opacity-0",
@@ -98,8 +98,8 @@ export const NoteRow = memo(function NoteRow({
           /* What it is doing, not what it will have done. */
           <span className="mt-1.5 block">
             <span className="flex items-baseline gap-1.5">
-              <span className="text-lemon shrink-0 text-[11px] font-medium">{activity.tool}</span>
-              <span className="text-muted-foreground/70 truncate font-mono text-[10.5px]">
+              <span className="text-lemon shrink-0 text-meta font-medium">{activity.tool}</span>
+              <span className="text-muted-foreground/70 truncate font-mono text-micro">
                 {activity.detail}
               </span>
             </span>
@@ -115,7 +115,7 @@ export const NoteRow = memo(function NoteRow({
 
             {note.stat && note.stat.files > 0 && (
               <Hint text={`${note.stat.files} file${note.stat.files > 1 ? "s" : ""} changed`}>
-                <span className="text-[11px] tabular-nums">
+                <span className="text-meta tabular-nums">
                   <span className="text-mint">+{note.stat.insertions}</span>{" "}
                   <span className="text-berry">−{note.stat.deletions}</span>
                 </span>
@@ -127,14 +127,14 @@ export const NoteRow = memo(function NoteRow({
             {/* Which model actually did the work — the harnesses tell us, and
                 it is the first thing you want when a result looks off. */}
             {run?.model && (
-              <span className="text-muted-foreground/50 truncate font-mono text-[10.5px]">
+              <span className="text-muted-foreground/50 truncate font-mono text-micro">
                 {run.model}
               </span>
             )}
 
             {/* Only worth saying once it is worth saying. */}
             {run?.costUsd != null && run.costUsd >= 0.01 && (
-              <span className="text-muted-foreground/60 text-[11px] tabular-nums">
+              <span className="text-muted-foreground/60 text-meta tabular-nums">
                 {cost(run.costUsd, run.costSource)}
               </span>
             )}
