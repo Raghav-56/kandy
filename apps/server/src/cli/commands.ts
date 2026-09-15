@@ -309,9 +309,26 @@ export async function cmdGc(opts: {
     return 0
   }
 
+  /*
+   * Notes naming a checkout that is not there.
+   *
+   * Removing a worktree used to leave the note still pointing at it, so the
+   * board reported disk nobody was using — twenty-one of them on the repo that
+   * found this. Nothing to free; it is the record that is wrong, and gc is
+   * where disk housekeeping already lives.
+   */
+  const stale = here.view.notes.filter((n) => n.worktree && !existsSync(n.worktree))
+  for (const n of stale) {
+    await client(opts.port).noteReclaimed(n.id).catch(() => {})
+  }
+  if (stale.length > 0) {
+    out()
+    out(dim(`  corrected ${stale.length} note${stale.length === 1 ? "" : "s"} still naming a checkout that was already gone`))
+  }
+
   const found = await findReclaimable(here.board.repoPath, here.view.notes)
   if (found.length === 0) {
-    out(dim("  nothing to reclaim — no worktrees left by finished notes"))
+    if (stale.length === 0) out(dim("  nothing to reclaim — no worktrees left by finished notes"))
     return 0
   }
 
@@ -348,6 +365,10 @@ export async function cmdGc(opts: {
     try {
       await reclaim(here.board.repoPath, item, opts.force)
       freed += item.bytes
+      // Tell the daemon, or the note goes on naming a checkout that is gone.
+      // Best effort: the disk is already back, and a stale field is not worth
+      // reporting a failed reclaim over.
+      await client(opts.port).noteReclaimed(item.noteId).catch(() => {})
       row("freed", mint, item, how(item))
     } catch (err) {
       held++

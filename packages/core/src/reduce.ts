@@ -138,6 +138,11 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
     case "note.status":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, status: e.data.status }))
 
+    case "note.reclaimed":
+      // The branch survives, so `branch` is untouched — only the working copy
+      // has gone.
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, worktree: null }))
+
     case "note.deleted": {
       if (!view.notes.some((n) => n.id === e.data.noteId)) return view
       const gone = { ...view, notes: view.notes.filter((n) => n.id !== e.data.noteId) }

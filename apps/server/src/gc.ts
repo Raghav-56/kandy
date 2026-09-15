@@ -73,20 +73,32 @@ export async function findReclaimable(repoPath: string, notes: Note[]): Promise<
   const candidates = (await listWorktrees(repoPath))
     .filter((w) => path.dirname(w.path) === root)
     .map((w) => ({ ...w, note: byId.get(path.basename(w.path)) }))
-    // A note we've never heard of is not ours to judge — it may belong to
-    // another board on the same repo, or to a note this board hasn't loaded.
-    .filter((w) => w.note?.status === "done")
+    /*
+     * A finished note's checkout, or one whose note is gone entirely.
+     *
+     * The second case used to be excluded on the grounds that an unknown note
+     * is not ours to judge. It is the one that strands disk: delete a note and
+     * its worktree becomes invisible to every reclaim path at once, because
+     * the only thing that could identify it no longer exists. 376MB sat under
+     * `.kandy/worktrees` with nothing in kandy able to see it.
+     *
+     * Safe because of where we are standing. These are only ever directories
+     * directly under this repo's own worktree root, named for a note id, which
+     * nothing but kandy creates. An orphan there is ours and is finished with —
+     * and the branch survives regardless, so the work does not depend on it.
+     */
+    .filter((w) => w.note === undefined || w.note.status === "done")
 
   return Promise.all(
     candidates.map(async (w) => {
-      const note = w.note!
-      const branch = w.branch ?? note.branch
+      const note = w.note
+      const branch = w.branch ?? note?.branch ?? null
       return {
-        noteId: note.id,
-        title: note.title,
+        noteId: note?.id ?? path.basename(w.path),
+        title: note?.title ?? "a deleted note",
         path: w.path,
         branch,
-        outcome: note.outcome,
+        outcome: note?.outcome ?? null,
         bytes: await sizeOf(w.path),
         unmerged: branch ? await aheadOfHead(repoPath, branch) : 0,
         dirty: await isDirty(w.path),

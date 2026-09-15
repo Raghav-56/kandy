@@ -64,6 +64,16 @@ export type KandyEventMap = {
   "note.policy": { noteId: NoteId; policy: Policy }
   "note.status": { noteId: NoteId; status: NoteStatus }
   "note.deleted": { noteId: NoteId }
+  /**
+   * The note's checkout is gone; the branch is not.
+   *
+   * Emitted wherever a worktree is actually removed, so `note.worktree` stops
+   * pointing at a directory that no longer exists. Without it the field rotted
+   * silently: twenty-one finished notes on this repo still named a checkout
+   * that had been deleted, and anything reading them reported disk nobody was
+   * using.
+   */
+  "note.reclaimed": { noteId: NoteId }
 
   "run.requested": { runId: RunId; noteId: NoteId; agent: AgentId }
   "run.started": {
@@ -171,6 +181,7 @@ export const EVENT_TYPES = [
   "note.policy",
   "note.status",
   "note.deleted",
+  "note.reclaimed",
   "note.permission",
   "note.pr",
   "run.requested",

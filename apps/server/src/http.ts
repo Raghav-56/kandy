@@ -138,6 +138,16 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     return send(res, 200, { agents })
   }
 
+  // POST /notes/:id/reclaimed — gc removed this note's checkout
+  if (req.method === "POST" && parts[0] === "notes" && parts[2] === "reclaimed" && parts[1]) {
+    const view = deps.engine.boardOf(parts[1]!)
+    if (!view) return fail(res, 404, "note_not_found", "no such note")
+    // gc runs in the CLI and removes directories itself, so it has to tell the
+    // daemon — otherwise the note keeps naming a checkout that is gone.
+    const e = emit(deps, event("note.reclaimed", { noteId: parts[1]! }))
+    return send(res, 200, { ok: true, seq: e.seq })
+  }
+
   // GET /notes/:id/pr — what opening a PR would say, before it says it
   if (req.method === "GET" && parts[0] === "notes" && parts[2] === "pr" && parts[1]) {
     const view = deps.engine.boardOf(parts[1]!)
@@ -667,6 +677,30 @@ async function noteAction(
 
     case "delete": {
       clearStaged(noteId)
+
+      /*
+       * Take the worktree with it.
+       *
+       * Deleting a note used to leave its checkout on disk — a whole copy of
+       * the repo, 376MB in the case that found this — and nothing could ever
+       * reclaim it: gc matches a directory to a note by name and skips any it
+       * cannot identify, which a deleted note is by definition. The space was
+       * unreachable from every direction.
+       *
+       * The branch is kept. A worktree is a working copy and reproducible; a
+       * branch is the work. Deleting a note should not be able to destroy the
+       * only record of what an agent did.
+       */
+      const wt = deps.runner.worktreeOf(noteId)
+      if (wt) {
+        await removeWorktree(view.board.repoPath, wt.path, true).catch(() => {})
+        deps.runner.forget(noteId)
+      } else if (note.worktree) {
+        // Known only from the note itself — the runner forgets a worktree once
+        // its run ends, so a finished note's checkout is nobody's but ours.
+        await removeWorktree(view.board.repoPath, note.worktree, true).catch(() => {})
+      }
+
       const e = emit(deps, event("note.deleted", { noteId }))
       return send(res, 200, { ok: true, seq: e.seq })
     }
@@ -768,6 +802,7 @@ async function noteAction(
         await removeWorktree(view.board.repoPath, wt.path, true).catch(() => {})
         await deleteBranch(view.board.repoPath, wt.branch)
         deps.runner.forget(noteId)
+        emit(deps, event("note.reclaimed", { noteId }))
       }
 
       // Merged or discarded, the note is finished with; anything still staged

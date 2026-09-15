@@ -148,6 +148,10 @@ export class KandyClient {
   stats(boardId: string) {
     return this.req<Stats>("GET", `/boards/${boardId}/stats`)
   }
+  /** Tell the daemon this note's checkout has been removed from disk. */
+  noteReclaimed(noteId: string) {
+    return this.req<{ seq: number }>("POST", `/notes/${noteId}/reclaimed`)
+  }
   /** Tracked paths in the board's repo, for the composer's `@` picker. */
   files(boardId: string) {
     return this.req<{ files: string[] }>("GET", `/boards/${boardId}/files`)
