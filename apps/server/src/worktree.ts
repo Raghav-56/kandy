@@ -373,17 +373,34 @@ export async function isDirty(repoPath: string): Promise<boolean> {
 }
 
 /**
- * Every file git is tracking, for the composer's `@` picker.
+ * What `@` can point at: every tracked file, and every folder holding one.
  *
- * `ls-files` rather than a directory walk: it already knows what is tracked
- * and what is ignored, so node_modules and build output never appear without
- * anyone maintaining a list of things to skip.
+ * `ls-files` rather than a directory walk, because it already knows what is
+ * tracked and what is ignored — node_modules and build output never appear and
+ * nobody maintains a list of things to skip.
+ *
+ * Folders are derived from the same output rather than read separately. git
+ * does not track directories, so the only honest definition of "a folder in
+ * this repo" is one that contains a tracked file, and deriving it here means
+ * the two lists cannot disagree about what exists.
  *
  * Capped, because a monorepo can track tens of thousands of paths and this
  * crosses the wire to fill a menu that shows eight of them.
  */
-export async function trackedFiles(repoPath: string, cap = 20000): Promise<string[]> {
+export async function trackedPaths(
+  repoPath: string,
+  cap = 20000,
+): Promise<{ files: string[]; dirs: string[] }> {
   const out = await git(repoPath, "ls-files", "-z")
-  const all = out.split("\0").filter(Boolean)
-  return all.slice(0, cap)
+  const files = out.split("\0").filter(Boolean).slice(0, cap)
+
+  const dirs = new Set<string>()
+  for (const f of files) {
+    let i = f.indexOf("/")
+    while (i !== -1) {
+      dirs.add(f.slice(0, i))
+      i = f.indexOf("/", i + 1)
+    }
+  }
+  return { files, dirs: [...dirs].sort() }
 }

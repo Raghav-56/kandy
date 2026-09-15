@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { ArrowUp, Paperclip } from "lucide-react"
+import { ArrowUp, FileText, Folder, Paperclip } from "lucide-react"
 import { Attachments, type Attached } from "@/features/notes/Attachments"
 import { cn } from "@/lib/utils"
 
@@ -30,7 +30,7 @@ export function PromptBox({
   autoFocus,
   rows = 2,
   maxRows = 12,
-  paths = [],
+  paths,
   className,
 }: {
   value: string
@@ -49,7 +49,7 @@ export function PromptBox({
   rows?: number
   maxRows?: number
   /** Repo paths offered after an `@`. Empty means the affordance is off. */
-  paths?: string[]
+  paths?: { files: string[]; dirs: string[] }
   className?: string
 }) {
   const box = useRef<HTMLTextAreaElement>(null)
@@ -63,8 +63,17 @@ export function PromptBox({
    * a token boundary means here, and avoids needing an explicit dismiss.
    */
   const [cursor, setCursor] = useState(0)
+
+  const entries = useMemo(
+    () => [
+      ...(paths?.dirs ?? []).map((path) => ({ path, dir: true })),
+      ...(paths?.files ?? []).map((path) => ({ path, dir: false })),
+    ],
+    [paths],
+  )
+
   const mention = useMemo(() => {
-    if (paths.length === 0) return null
+    if (entries.length === 0) return null
     const upto = value.slice(0, cursor)
     const at = upto.lastIndexOf("@")
     if (at === -1) return null
@@ -74,27 +83,46 @@ export function PromptBox({
     const before = at === 0 ? "" : upto[at - 1]!
     if (before && !/\s/.test(before)) return null
     return { at, q }
-  }, [value, cursor, paths.length])
+  }, [value, cursor, entries.length])
 
   const hits = useMemo(() => {
     if (!mention) return []
     const q = mention.q.toLowerCase()
-    const scored = paths
-      .filter((p) => p.toLowerCase().includes(q))
-      // A match on the filename beats one buried in a directory name.
+    return entries
+      .filter((e) => e.path.toLowerCase().includes(q))
       .sort((a, b) => {
-        const an = a.slice(a.lastIndexOf("/") + 1).toLowerCase().startsWith(q) ? 0 : 1
-        const bn = b.slice(b.lastIndexOf("/") + 1).toLowerCase().startsWith(q) ? 0 : 1
-        return an - bn || a.length - b.length
+        /*
+         * Tool and editor config last.
+         *
+         * `.claude/` and `.agents/` are tracked files and genuinely in the
+         * repo, so hiding them would make them unreachable — but nobody points
+         * an agent at them, and unranked they crowded out the source. Typing
+         * the dot still surfaces them immediately.
+         */
+        const ad = a.path.startsWith(".") ? 1 : 0
+        const bd = b.path.startsWith(".") ? 1 : 0
+        if (ad !== bd) return ad - bd
+
+        // A match on the name itself beats one buried in a parent directory.
+        const an = a.path.slice(a.path.lastIndexOf("/") + 1).toLowerCase().startsWith(q) ? 0 : 1
+        const bn = b.path.slice(b.path.lastIndexOf("/") + 1).toLowerCase().startsWith(q) ? 0 : 1
+        if (an !== bn) return an - bn
+
+        // Then folders: naming one names everything under it.
+        if (a.dir !== b.dir) return a.dir ? -1 : 1
+        return a.path.length - b.path.length
       })
-    return scored.slice(0, 8)
-  }, [mention, paths])
+      .slice(0, 8)
+  }, [mention, entries])
 
   const [pick, setPick] = useState(0)
   useEffect(() => setPick(0), [mention?.q])
 
-  const insert = (path: string) => {
+  const insert = (hit: { path: string; dir: boolean }) => {
     if (!mention) return
+    // A trailing slash says "everything in here", so the agent does not have to
+    // guess which of the two you meant.
+    const path = hit.dir ? `${hit.path}/` : hit.path
     const next = value.slice(0, mention.at) + "@" + path + " " + value.slice(cursor)
     onChange(next)
     queueMicrotask(() => {
@@ -239,31 +267,41 @@ export function PromptBox({
 
       {hits.length > 0 && (
         <div className="border-line bg-surface absolute bottom-[calc(100%+6px)] left-0 z-30 w-full overflow-hidden rounded-2xl border shadow-xl shadow-black/20">
-          <p className="label border-hairline border-b px-3 py-1.5">Files in this repo</p>
-          {hits.map((path, i) => (
-            <button
-              key={path}
-              type="button"
-              // mousedown, not click: click fires after blur, by which point
-              // the textarea has lost the selection this inserts against.
-              onMouseDown={(e) => {
-                e.preventDefault()
-                insert(path)
-              }}
-              onMouseEnter={() => setPick(i)}
-              className={cn(
-                "flex w-full items-baseline gap-2 px-3 py-1.5 text-left",
-                i === pick ? "bg-accent" : "hover:bg-accent/60",
-              )}
-            >
-              <span className="truncate font-mono text-[12px]">
-                {path.slice(path.lastIndexOf("/") + 1)}
-              </span>
-              <span className="text-muted-foreground/60 min-w-0 flex-1 truncate text-right font-mono text-[10.5px]">
-                {path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ""}
-              </span>
-            </button>
-          ))}
+          <p className="label border-hairline border-b px-3 py-1.5">In this repo</p>
+          {hits.map((hit, i) => {
+            const name = hit.path.slice(hit.path.lastIndexOf("/") + 1)
+            const parent = hit.path.includes("/") ? hit.path.slice(0, hit.path.lastIndexOf("/")) : ""
+            return (
+              <button
+                key={hit.path}
+                type="button"
+                // mousedown, not click: click fires after blur, by which point
+                // the textarea has lost the selection this inserts against.
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  insert(hit)
+                }}
+                onMouseEnter={() => setPick(i)}
+                className={cn(
+                  "flex w-full items-center gap-2 px-3 py-1.5 text-left",
+                  i === pick ? "bg-accent" : "hover:bg-accent/60",
+                )}
+              >
+                {hit.dir ? (
+                  <Folder className="text-muted-foreground/70 size-3 shrink-0" />
+                ) : (
+                  <FileText className="text-muted-foreground/50 size-3 shrink-0" />
+                )}
+                <span className="truncate font-mono text-[12px]">
+                  {name}
+                  {hit.dir && <span className="text-muted-foreground/60">/</span>}
+                </span>
+                <span className="text-muted-foreground/60 min-w-0 flex-1 truncate text-right font-mono text-[10.5px]">
+                  {parent}
+                </span>
+              </button>
+            )
+          })}
         </div>
       )}
 

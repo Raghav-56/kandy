@@ -4,6 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>kandy</title>
+
+    <!-- The lanes mark. Two files rather than one: a favicon is drawn on the
+         browser's own chrome, which follows the OS theme, so the light-theme
+         accents disappear against a dark tab strip and vice versa. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link
+      rel="icon"
+      href="/favicon-dark.svg"
+      type="image/svg+xml"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link rel="apple-touch-icon" href="/icon-192.svg" />
+    <meta name="theme-color" content="#131219" />
     <!-- Raveo Variable is not distributable; DESIGN.md names Inter 900 as the
          substitute. Self-hosted via @fontsource, imported in main.tsx. -->
   </head>

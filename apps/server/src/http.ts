@@ -39,7 +39,7 @@ import {
   diffStat,
   mergeBranch,
   removeWorktree,
-  trackedFiles,
+  trackedPaths,
 } from "./worktree.js"
 
 import { authorized } from "./auth.js"
@@ -168,11 +168,11 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     const view = deps.engine.view(parts[1]!)
     if (!view) return fail(res, 404, "board_not_found", "no such board")
     try {
-      return send(res, 200, { files: await trackedFiles(view.board.repoPath) })
+      return send(res, 200, await trackedPaths(view.board.repoPath))
     } catch (err) {
       // A repo that cannot be read is not an error worth a banner; the picker
       // simply has nothing to offer.
-      return send(res, 200, { files: [], error: err instanceof Error ? err.message : String(err) })
+      return send(res, 200, { files: [], dirs: [], error: err instanceof Error ? err.message : String(err) })
     }
   }
 

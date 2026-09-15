@@ -31,7 +31,7 @@ export function BoardComposer({
   onCreate: (title: string, agent: AgentId | null, model: string | null, files: Attached[]) => void
   /** Hand the draft to the full composer, rather than throwing it away. */
   onExpand: (draft: string) => void
-  paths: string[]
+  paths: { files: string[]; dirs: string[] }
 }) {
   const [draft, setDraft] = useState("")
   const [agent, setAgent] = useState<AgentId | "">(defaultAgent ?? "")
@@ -66,7 +66,7 @@ export function BoardComposer({
             maxRows={8}
             paths={paths}
             placeholder={
-              paths.length > 0
+              paths.files.length > 0
                 ? "What should the agent do?  @ to point at a file"
                 : "What should the agent do?"
             }

@@ -55,7 +55,7 @@ export type NoteDetailProps = {
   activity: ActivityFrame | undefined
   forge: Forge | null
   /** Tracked repo paths, for `@` in the reply box. */
-  paths: string[]
+  paths: { files: string[]; dirs: string[] }
   /** Questions this note's agent is standing still waiting for. Usually empty. */
   prompts: PermissionPrompt[]
   onClose: () => void

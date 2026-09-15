@@ -65,7 +65,7 @@ export function App() {
   const [forge, setForge] = useState<Forge | null>(null)
   /* Tracked paths for the composer's `@` picker. Fetched once per board —
      it is a few hundred strings and it changes when git does, not live. */
-  const [paths, setPaths] = useState<string[]>([])
+  const [paths, setPaths] = useState<{ files: string[]; dirs: string[] }>({ files: [], dirs: [] })
 
   const [composing, setComposing] = useState(false)
   /* Carried from the quick bar into the modal, so expanding never costs you
@@ -167,12 +167,12 @@ export function App() {
   }, [boardId, client])
 
   useEffect(() => {
-    setPaths([])
+    setPaths({ files: [], dirs: [] })
     if (!boardId) return
     void client
       .files(boardId)
-      .then((r) => setPaths(r.files))
-      .catch(() => setPaths([]))
+      .then((r) => setPaths({ files: r.files, dirs: r.dirs }))
+      .catch(() => setPaths({ files: [], dirs: [] }))
   }, [boardId, client])
 
   const note = view?.notes.find((n) => n.id === selected) ?? null
