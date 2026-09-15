@@ -16,7 +16,7 @@ function SelectGroup({
   return (
     <SelectPrimitive.Group
       data-slot="select-group"
-      className={cn("scroll-my-1 p-1.5", className)}
+      className={cn("scroll-my-1", className)}
       {...props}
     />
   )
@@ -57,7 +57,17 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
-  position = "item-aligned",
+  /*
+   * Popper, not item-aligned.
+   *
+   * Item-aligned opens the list *over* its trigger, with the chosen row on top
+   * of the button. Half of kandy's selects live in the composer at the very
+   * bottom of the window, where that leaves almost no height and the list
+   * turns into a five-row scroller with the last agent cut off. Popper puts
+   * the list beside the trigger and flips it above when there is no room
+   * below, which is what every one of these has room for.
+   */
+  position = "popper",
   align = "center",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
@@ -75,7 +85,10 @@ function SelectContent({
         <SelectPrimitive.Viewport
           data-position={position}
           className={cn(
-            "data-[position=popper]:h-(--radix-select-trigger-height) data-[position=popper]:w-full data-[position=popper]:min-w-(--radix-select-trigger-width)",
+            // The rows live in here, not in SelectContent — so this is the one
+            // place the list's inset can come from. Without it every row runs
+            // to the panel's own border and the highlight has nothing to sit in.
+            "p-1.5 data-[position=popper]:h-(--radix-select-trigger-height) data-[position=popper]:w-full data-[position=popper]:min-w-(--radix-select-trigger-width)",
             position === "popper" && ""
           )}
         >

@@ -167,6 +167,19 @@ body {
   border-radius: 8px;
 }
 
+/*
+ * …but not on a menu row.
+ *
+ * An outline is painted outside the box, so on a row that already spans the
+ * full width of its panel the ring lands on — and past — the panel's own
+ * border. These rows say "focused" with their background instead, which is
+ * what the highlight is for.
+ */
+[data-slot="select-item"]:focus-visible,
+[data-slot="dropdown-menu-item"]:focus-visible {
+  outline: none;
+}
+
 /* Tailwind v4 no longer gives buttons a pointer cursor, and shadcn does not add
    one — so every control in the app felt inert on hover. */
 :where(a[href], button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], summary, label[for]):not(:disabled) {
