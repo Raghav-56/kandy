@@ -125,7 +125,7 @@ export function RepoPicker({
       </div>
 
       {hits.length > 0 && (
-        <ul className="mt-2 overflow-hidden rounded-lg border border-hairline">
+        <ul className="mt-2 overflow-hidden rounded-lg border border-hairline p-1.5">
           {hits.map((r, i) => (
             <li key={r.path}>
               <button
@@ -133,7 +133,7 @@ export function RepoPicker({
                 onMouseEnter={() => setPick(i)}
                 onClick={() => onPick(r.path)}
                 className={cn(
-                  "flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors",
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
                   i === pick ? "bg-raised" : "hover:bg-raised/60",
                 )}
               >

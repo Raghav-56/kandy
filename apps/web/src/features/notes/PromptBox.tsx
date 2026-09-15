@@ -266,8 +266,8 @@ export function PromptBox({
       </Attachments>
 
       {hits.length > 0 && (
-        <div className="border-line bg-surface absolute bottom-[calc(100%+6px)] left-0 z-30 w-full overflow-hidden rounded-2xl border shadow-xl shadow-black/20">
-          <p className="label border-hairline border-b px-3 py-1.5">In this repo</p>
+        <div className="border-line bg-surface absolute bottom-[calc(100%+6px)] left-0 z-30 w-full overflow-hidden rounded-2xl border p-1.5 shadow-xl shadow-black/20">
+          <p className="label px-2 py-1.5">In this repo</p>
           {hits.map((hit, i) => {
             const name = hit.path.slice(hit.path.lastIndexOf("/") + 1)
             const parent = hit.path.includes("/") ? hit.path.slice(0, hit.path.lastIndexOf("/")) : ""
@@ -283,7 +283,7 @@ export function PromptBox({
                 }}
                 onMouseEnter={() => setPick(i)}
                 className={cn(
-                  "flex w-full items-center gap-2 px-3 py-1.5 text-left",
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left",
                   i === pick ? "bg-accent" : "hover:bg-accent/60",
                 )}
               >

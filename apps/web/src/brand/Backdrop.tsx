@@ -56,6 +56,18 @@ float fbm(vec2 p) {
   return 0.55 * noise(p) + 0.30 * noise(p * 2.03) + 0.15 * noise(p * 4.11);
 }
 
+/*
+ * An interleaved-gradient threshold — the dither.
+ *
+ * Its error spectrum sits high enough that the eye reads it as texture rather
+ * than as a pattern, which is what a blue-noise texture buys without shipping
+ * one. Deliberately not fed uTime: a threshold that moves every frame makes
+ * the whole field crawl, and this is meant to sit still behind text.
+ */
+float dither(vec2 f) {
+  return fract(52.9829189 * fract(dot(f, vec2(0.06711056, 0.00583715))));
+}
+
 void main() {
   vec2 p = gl_FragCoord.xy / uRes;
   p.x *= uRes.x / uRes.y;
@@ -81,12 +93,27 @@ void main() {
   // Heaviest in the lower corners, gone where the toolbar and its text live.
   float edge = smoothstep(0.95, 0.05, p.y) * (0.55 + 0.45 * abs(p.x / (uRes.x / uRes.y) - 0.5) * 2.0);
 
-  // A little grain, so a wide flat gradient does not band on an 8-bit display.
-  float grain = (hash(gl_FragCoord.xy * 0.7 + uTime) - 0.5) * 0.012;
+  // Grain still, but a third of what it was: the dither below does most of
+  // what this was there for, and the two together read as dirt.
+  float grain = (hash(gl_FragCoord.xy * 0.7 + uTime) - 0.5) * 0.006;
 
-  // Multiply needs more signal than screen to be visible at all.
-  float strength = mix(0.115, 0.30, uLight);
-  gl_FragColor = vec4(col + grain, 1.0) * strength * edge;
+  // Multiply needs more signal than screen to be visible at all. Named lit
+  // rather than c because a float c already exists above, and a redefinition
+  // is a shader that never compiles — silently, since only the link is checked.
+  vec3 lit = (col + grain) * mix(0.315, 0.30, uLight) * edge;
+
+  /*
+   * Dither, then quantise — in that order, and never the other way.
+   *
+   * Eighteen steps over a field this faint is about five visible levels, so
+   * this is a posterised look rather than a band fix: the haze reads as a few
+   * flat plateaus with a fine stipple along every boundary, instead of a
+   * smooth wash. The threshold is offset to ±half a step so it pushes a value
+   * across the nearest boundary rather than brightening everything.
+   */
+  const float STEPS = 18.0;
+  float th = (dither(gl_FragCoord.xy) - 0.5) / STEPS;
+  gl_FragColor = vec4(max(floor((lit + th) * STEPS + 0.5) / STEPS, 0.0), 1.0);
 }`
 
 const VERT = `
@@ -130,9 +157,17 @@ export function Backdrop() {
     const uLight = gl.getUniformLocation(program, "uLight")
 
     const resize = () => {
-      // Two-thirds of device resolution. The field has real structure now, so
-      // half-res showed as visible chunk edges on the warp.
-      const dpr = Math.min(window.devicePixelRatio || 1, 2) * 0.66
+      /*
+       * One shader pixel per CSS pixel, exactly.
+       *
+       * This used to render at two-thirds of device resolution and let the
+       * browser scale it up, which is free for a smooth gradient and fatal for
+       * a dither: the pattern is a pixel-level thing, and resampling it turns
+       * a clean stipple into moiré. At dpr 1 the backing store matches the
+       * element, nothing is resampled, and on a retina display each shader
+       * pixel lands on a tidy 2×2 — which is the grain size this was tuned at.
+       */
+      const dpr = 1
       canvas.width = Math.max(1, Math.floor(canvas.clientWidth * dpr))
       canvas.height = Math.max(1, Math.floor(canvas.clientHeight * dpr))
       gl.viewport(0, 0, canvas.width, canvas.height)
