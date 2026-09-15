@@ -11,7 +11,7 @@ import type {
   StagedFile,
   TranscriptFrame,
 } from "@kandy/core"
-import { canAsk } from "@kandy/core"
+import { canAsk, wasInterrupted } from "@kandy/core"
 import { Maximize2, Minimize2, Paperclip, X } from "lucide-react"
 import {
   ActivityLine,
@@ -115,6 +115,17 @@ export function NoteDetail(p: NoteDetailProps) {
   const [busy, setBusy] = useState(false)
 
   const run = p.view.runs.find((r) => r.id === p.note.runId)
+
+  /*
+   * The daemon stopped this, not the agent.
+   *
+   * Restarting kandy marks everything in flight failed, which is honest about
+   * the board but blames the wrong party — and the recovery is better than the
+   * word suggests: the worktree is untouched and the agent's session id was
+   * recorded, so running it again continues the same conversation rather than
+   * starting over.
+   */
+  const interrupted = wasInterrupted(run)
   const live = p.note.status === "running" || p.note.status === "blocked"
   const policy = p.note.policy ?? "repo"
 
@@ -362,7 +373,7 @@ export function NoteDetail(p: NoteDetailProps) {
 
           {!live && !reviewable && (
             <Button variant="default" onClick={() => p.onRun()} disabled={!p.note.agent}>
-              {p.note.status === "failed" ? "Retry" : "Run"}
+              {interrupted ? "Resume" : p.note.status === "failed" ? "Retry" : "Run"}
             </Button>
           )}
           {live && run && (
@@ -404,6 +415,18 @@ export function NoteDetail(p: NoteDetailProps) {
           )}
         </div>
       </header>
+
+      {interrupted && (
+        <div className="border-hairline bg-lemon-bg/40 border-y px-4 py-2.5">
+          <p className="text-[12.5px] leading-relaxed">
+            <span className="text-lemon font-medium">Interrupted</span>
+            <span className="text-muted-foreground">
+              {" — "}kandy restarted while this was running. Nothing was lost: the worktree is
+              untouched and the agent's session was saved, so Resume continues where it stopped.
+            </span>
+          </p>
+        </div>
+      )}
 
       {/* Above everything, including the refusals: a question with someone
           waiting behind it outranks a list of things already refused. */}

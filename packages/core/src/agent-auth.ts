@@ -38,3 +38,21 @@ export function isAuthFailure(text: string | null | undefined): boolean {
   if (!text) return false
   return SIGNALS.some((re) => re.test(text))
 }
+
+/**
+ * A run the daemon killed, rather than one the agent lost.
+ *
+ * Restarting the daemon marks everything in flight failed, which keeps the
+ * board honest — a card claiming work is running when nothing is would be
+ * worse. But "failed" reads as the agent's doing, and it is not: the worktree
+ * is untouched and the agent's session id was recorded before the process
+ * died, so the work resumes exactly where it stopped.
+ *
+ * The string is shared rather than matched in two places, because a message
+ * that drifts on one side turns this back into an ordinary failure.
+ */
+export const INTERRUPTED = "daemon restarted while this run was in flight"
+
+export function wasInterrupted(run: { error: string | null } | null | undefined): boolean {
+  return run?.error === INTERRUPTED
+}

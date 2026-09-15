@@ -4,6 +4,7 @@ import {
   between,
   event,
   id,
+  INTERRUPTED,
   isAuthFailure,
   laneColumn,
   notesIn,
@@ -780,7 +781,7 @@ export class Runner {
             noteId: run.noteId,
             status: "failed",
             exitCode: null,
-            error: "daemon restarted while this run was in flight",
+            error: INTERRUPTED,
           }),
         )
       }
