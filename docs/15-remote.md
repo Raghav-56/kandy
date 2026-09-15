@@ -1,62 +1,80 @@
-# Remote access and sharing
+# Remote, and the hub/runner split
 
-The decision, and the order to build it in. Companion to
-[`07-sync.md`](07-sync.md) (who is authoritative), [`11-going-multiplayer.md`](11-going-multiplayer.md)
-(why sharing is the bet) and [`12-spike-git-share.md`](12-spike-git-share.md) (the transport,
-already built).
+The decision, and the order to build it in. Companion to [`07-sync.md`](07-sync.md) (who is
+authoritative), [`11-going-multiplayer.md`](11-going-multiplayer.md) (why sharing is the bet),
+[`12-spike-git-share.md`](12-spike-git-share.md) (a transport, already built) and
+[`16-threads.md`](16-threads.md) (what actually moves between people).
 
-## Two problems, one word
+**Revised September 2026.** An earlier draft of this document centred on guest links into the
+author's own daemon — a teammate opening a URL and steering an agent on *my* laptop. That was
+wrong, and the reason is worth keeping: it means renting out my machine and paying for someone
+else's tokens. The rule is now explicit.
 
-**Remote control** is you, on your phone, watching your own daemon. One identity. Connectivity,
-not replication — the transcript still lives on one machine and dies with it. 11 is right that
-this is t3code's feature and not the moat; build it anyway, it is cheap and genuinely useful.
+> **Everyone works on their own machine, with their own resources and their own agent logins.**
+> Nothing in kandy may be built in a way that makes one person's laptop another person's
+> compute.
 
-**Handoff** is a teammate continuing a note on *their* machine with *their* agent logins. That
-is replication, and it is the thing nobody else can do. Keep the honest framing 11 settled on:
-**hand off the thread, not resume the session.**
+## The constraint that forces the architecture
 
-They share exactly one thing — the daemon has to stop being open — and nothing else. Designing
-them as one feature is how both get worse.
+If a company installs today's `kandy serve` on a server, that server is the thing that spawns
+agents. It would run everyone's work under pooled credentials, which violates the rule above
+outright. So the daemon has to come apart, and this is not a refinement — it is the whole design:
 
-## Decision: Tailscale, local executor
+**Hub.** The event log, boards, identity, relay. Installable by a company on a VPS, runnable on
+localhost for one person, hostable by us for people who want to run nothing. It **never spawns
+an agent, never holds a provider key, and never needs the repository.** Events and transcripts,
+nothing else.
 
-The user's laptop stays the executor. Tailscale Serve for the owner's own devices, Tailscale
-Funnel for guest links, the git orphan branch for true handoff.
+**Runner.** On each person's laptop. Dials *out* to the hub — no inbound ports, no tunnel, no
+firewall exception — claims the notes assigned to it, runs agents under that person's own
+logins, and streams frames back.
 
-**Not cloud sandboxes**, which is where Cursor and Codex went. It inverts the economics: we
-would clone the repo into a VM we pay for and hold provider keys, when today agents run on the
-developer's laptop under their own Max and ChatGPT subscriptions and kandy never runs inference.
-It also forfeits the local transcript — both of those products hand off through a branch or a
-patch, having lost the conversation. Claude Code's own Remote Control independently chose the
-shape 07 already committed to: local executor, outbound only, a relay that routes messages and
-never becomes the source of truth.
+This is the shape CI runners already have (GitHub self-hosted runners, Buildkite agents), and
+kandy is most of the way there: `Engine` plus the event log is the hub, `Runner` is the runner,
+and they already communicate through events rather than function calls. What is missing is a
+network between them and the idea that a note belongs to a particular runner.
 
-Fallback for someone who will not run Tailscale: Cloudflare Tunnel + Access one-time PIN (needs
-a domain; Cloudflare sees plaintext; their quick tunnels do not support SSE at all). Escape
-hatch: a ~300-line WebSocket relay on Fly, about $2/month, which is also the signalling server
-if WebRTC ever matters.
+### The bonus: a hub gives a total order
 
-### What Tailscale actually gives, and does not
+[`12-spike-git-share.md`](12-spike-git-share.md) hit a wall it is blunt about — no total order
+across devices, so two laptops that renamed the same note ended up permanently showing each
+other's titles. *Stable disagreement*, not eventual consistency. Its own recommendation was to
+choose between enforcing sequential-only handoff and adding a Lamport clock.
 
-- **No Node embedding.** `tsnet` is Go-only and there is no Node binding. kandy shells out to
-  the `tailscale` CLI the user already has — t3code's conclusion verbatim: *"an endpoint
-  provider and transport, not a distinct runtime concept."* Parse `tailscale status --json`;
-  never surface stderr, which can contain `tskey-…` auth keys.
-- **Serve carries identity, Funnel does not.** Serve injects `Tailscale-User-Login` into the
-  proxied request, so owner auth is free. Funnel traffic is anonymous by design, so a guest link
-  must carry a grant kandy mints and checks itself.
-- **Funnel is limited to ports 443, 8443 and 10000**, and a port cannot be both. Serve takes
-  443, Funnel takes 8443 — which conveniently means the daemon can tell an owner request from a
-  guest request by the socket it arrived on, without trusting a header.
-- **Bandwidth is undisclosed** — "it's a funnel, not a hose". Fine for text and diffs. Measure
-  before promising anything larger.
-- TLS terminates on the device, so the relay cannot read the traffic. Personal plan covers six
-  users and unlimited devices at $0, and Funnel is on every plan.
+A hub is a single writer. It stamps the sequence, and the whole problem evaporates: no Lamport
+clock, no CRDT, no Yjs, and `docs/07`'s sync analysis becomes moot rather than wrong. **The hub
+design is strictly easier to make correct than the peer-to-peer one already in the repo.**
+
+The git orphan branch does not die, though. It remains the right transport for the async case —
+a teammate who was offline for a month, or two people with no shared hub — and it is already
+built. Two transports, one log.
+
+## Transport between runner and hub
+
+Because the runner dials out, most of the transport question dissolves: a WebSocket to a hub the
+company already exposes needs no NAT traversal and no tunnel. Tailscale stays relevant for two
+narrower jobs — reaching your *own* daemon from your *own* phone, and letting a small team run a
+hub on a tailnet without exposing it to the internet at all.
+
+Verified, September 2026, against primary docs:
+
+- **Tailscale cannot be embedded in a Node daemon.** `tsnet` is Go-only with no Node binding, so
+  kandy shells out to the `tailscale` CLI the user already has — t3code's conclusion verbatim:
+  *"an endpoint provider and transport, not a distinct runtime concept."* Parse
+  `tailscale status --json`; never surface stderr, which can contain `tskey-…` auth keys.
+- **Serve carries identity, Funnel does not.** Serve injects `Tailscale-User-Login`; Funnel
+  traffic is anonymous by design. Funnel is limited to ports 443, 8443 and 10000, and a port
+  cannot be both — so Serve on 443 and Funnel on 8443 lets the daemon tell an owner request from
+  an anonymous one by the socket it arrived on, without trusting a header.
+- Fallback for a hub that must be public without a tailnet: Cloudflare Tunnel + Access one-time
+  PIN. Needs a domain; Cloudflare sees plaintext; their quick tunnels do not support SSE at all.
+- Dead ends: ngrok free (20k requests a month, interstitial page), any embedded-Tailscale route
+  from Node, WebRTC as a primary transport (it needs a relay anyway).
 
 ## Phase 0 — close the daemon
 
-Required by every option, and worth doing on its own. Measured against the running daemon rather
-than read off the source:
+Required whichever way the rest goes, and worth doing alone. Measured against the running
+process rather than read off the source:
 
 | Request, no `Authorization` | Result |
 | --- | --- |
@@ -68,87 +86,77 @@ than read off the source:
 
 Writes check the bearer. **Reads check nothing.** What stands between an unauthenticated caller
 and every transcript is that the socket is on loopback and the Host header must say `localhost`
-— and that same allowlist would 403 our own tunnel. Both change together:
+— and that same allowlist would 403 our own hub connection. Both change together:
 
 1. Reads require a credential once the request did not arrive on loopback.
-2. A `grants` table — scope, role, expiry, revoked-at, last-used — beside the existing
-   `shared` table.
+2. A `grants` table — scope, role, expiry, revoked-at, last-used — beside the existing `shared`.
 3. The Host allowlist becomes configuration rather than a constant.
 4. One enforcement point, default deny.
 
-## The grant model
+## What a hub may never do
 
-Live Share is the closest published precedent, because their risk is ours — a guest who reaches
-a terminal runs commands on the host's machine. Copy their posture: *"Only hosts can start
-shared terminals"*, auto-shared terminals default to **read-only**, the host is notified the
-instant a guest joins with a Remove button in the notification, and a repo can declare files a
-guest may never open.
+Even a hub the company runs is a machine other people administer, so the boundary is worth
+stating as a rule rather than an implementation detail.
 
-| Grant | Reads | Writes | Never |
-| --- | --- | --- | --- |
-| `watch` (default) | `/boards/:id/view`, `/runs/:id/transcript`, `/notes/:id/diff` | — | everything else |
-| `steer` (explicit) | + `/runs/:id/output` | `/notes/:id/message`, `/runs/:id/cancel` | `/runs/:id/permission` |
-| `owner` (Serve) | all | all | — |
+| Never on the hub | Why |
+| --- | --- |
+| Spawn an agent | Violates the rule at the top; pools credentials |
+| Hold a provider key | kandy has never held one and the economics depend on it |
+| Clone the repository | Code stays in git, where permissions already exist |
+| Approve a shell command | `POST /runs/:id/permission` is how an agent gets to run something. It belongs to the machine that will run it, always |
 
-Never shareable under any grant: `/repo/browse` and `/repo/check`, which enumerate the
-filesystem; board create and remove; `/boards/:id/policy`; and approving an agent's shell
-command.
+That last row is the one that turns a coordination server into a remote execution service if it
+is ever relaxed. It is also why the guest-link model was wrong: it moved that decision onto a
+link.
 
-**`POST /runs/:id/permission` is the line.** It is how an agent's request to run a command gets
-approved, so a guest holding it has a shell on your laptop laundered through an agent. Even
-`steer` does not get it: a guest can ask the agent to do something, and the host still approves
-what it runs. That one rule is the difference between a share button and a remote code execution
-feature.
+## Identity and permissions
+
+Cheapest correct answer first: **inherit git**. If a board is tied to a repository and the log
+rides alongside it, whoever can read the repo can read the board — no second access-control
+system to administer, which is a better enterprise story than shipping one. A self-hosted hub
+can start with exactly this and nothing else.
+
+Build real RBAC when a named buyer asks for it in a live deal, not speculatively. `docs/11` is
+right that building it on guesses shapes the schema around a year of imagined requirements.
 
 ## What opencode got wrong, and what it costs us to avoid
 
-`/share` uploads the whole session — every message and tool call, including whatever `read` and
-`bash` returned — with no confirmation in the code path. The read URL carries no secret; their
-docs say shared conversations are publicly accessible to anyone with the link. The write secret
-lives only in local sqlite and is cascade-deleted with the session, which produced the obvious
-bug report: a user shared by accident, `unshare` failed, they deleted the session, and the share
-stayed online with no way to remove it.
+Their `/share` uploads the whole session — every message and tool call, including whatever
+`read` and `bash` returned — with no confirmation in the code path. The read URL carries no
+secret; their own docs say shared conversations are publicly accessible to anyone with the link.
+The write secret that lets you take it down lives only in local sqlite and is cascade-deleted
+with the session, which produced the predictable report: a user shared by accident, `unshare`
+failed, they deleted the session, and the share stayed online with no way to remove it.
 
-So: a share is an explicit act with a confirmation naming what becomes visible; the secret is in
-the read path; and revocation lives with the grant, not the note, so deleting a note locally
-cannot strand a live link.
+So, as rules: a share is an explicit act with a confirmation naming what becomes visible; the
+secret is in the read path; revocation lives with the grant rather than the note, so deleting a
+note locally cannot strand a live link.
 
-Related, already ours to decide (12): a note's prompt goes onto the shared branch in plaintext
-and stays there. `note.deleted` removes it from the board while `note.created` keeps the body on
-the branch forever. **"Delete" will not mean what a user assumes it means.**
+Ours already, from [`12`](12-spike-git-share.md): a note's prompt goes onto the shared branch in
+plaintext and stays there. `note.deleted` removes it from the board while `note.created` keeps
+the body on the branch forever. **"Delete" will not mean what a user assumes it means.**
 
 ## Order
 
-0. **Close the daemon.** Ships alone.
-1. **Your phone.** `kandy remote on` → `tailscale serve`, a URL and a QR. Surface *"laptop
-   asleep"* honestly — a closed lid stops the agents too, and no tunnel fixes that.
-2. **A link for one note.** Funnel on 8443, grant scoped to one note, read-only, expiring, with
-   the watcher visible on the note and a Revoke beside them. A guest view that is its own
-   surface, not the full UI with buttons hidden.
-3. **Steering with a leash.** Upgrade a live grant; guest messages attributed in the transcript;
-   host can drop to read-only mid-run; permission approval stays local.
-4. **True handoff.** `share.ts` exists. The blocking work is 12's own list, in its order — push
-   the note's branch with the log so the reviewer can see the diff, chunk by month, refuse a
-   backwards fetch, replace the root-commit board key, and settle sequential-only or add a
-   Lamport clock.
+1. **The translation layer**, single-player — [`16-threads.md`](16-threads.md). Continue a note
+   with a different agent on one machine. The hard part, testable today, useful alone.
+2. **Close the daemon** — phase 0 above. Ships by itself.
+3. **Split hub from runner.** The runner dials out and claims notes; the hub stops spawning
+   anything. Localhost first, so the split is proven before a network is added.
+4. **Hand a note to another person's runner.** The thread from step 1 crossing the boundary from
+   step 3, with the branch pushed alongside so the receiver can see the diff — the one step
+   [`12`](12-spike-git-share.md) found does not survive the trip.
+5. **Remote control of your own daemon** from your own phone. Deliberately last: it is a
+   convenience, not the product, and `docs/11` is right that it is the feature t3code already
+   has.
 
 ## Not doing
 
-- **Teams, RBAC, SSO.** If the log rides on the private repo, whoever can read the repo can read
-  its board. Inheriting GitHub's permissions removes an admin surface instead of adding one.
-  Build RBAC when a named buyer asks in a live deal.
-- **A central server for v1.** The relay stays an escape hatch. If one is ever hosted it stores
-  an encrypted log it cannot read, which is still not a "copy" in 07's sense. Going
-  cloud-authoritative later is a rewrite.
-- **A mobile app.** A second UI at parity forever. The web UI on a phone is all of Phase 1.
-- **Yjs.** It solves concurrent editing; handoff is sequential.
-
-## Open
-
-- **Does the transcript cross the wire?** 11 promises "same context, same transcript", and 12's
-  size analysis deliberately excluded transcripts, which are orders of magnitude larger than
-  domain events. Those numbers describe the version that does not deliver the pitch. Size the
-  real one before costing Phase 4.
-- **Funnel's ceiling**, which is undisclosed.
-- **Whether Funnel marks its own requests** with a header. Unverified, so tell owner from guest
-  by which port the request arrived on until it is.
+- **Cloud sandboxes.** Cursor and Codex both went this way: clone the repo into a VM they pay
+  for, and hand off through a branch or a patch, having lost the conversation. It inverts our
+  economics — agents run on the developer's laptop under their own subscriptions, so kandy never
+  runs inference and never holds a provider key.
+- **A mobile app.** A second UI at parity forever. The web UI on a phone is the whole of step 5.
+- **Yjs.** It solves concurrent editing. With a hub stamping the order there is nothing left for
+  it to solve.
+- **Teams, RBAC, SSO** before a buyer asks. See above.
