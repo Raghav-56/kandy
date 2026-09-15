@@ -238,7 +238,7 @@ export function PromptBox({
       </Attachments>
 
       {hits.length > 0 && (
-        <div className="border-line bg-surface absolute bottom-[calc(100%+6px)] left-0 z-30 w-full overflow-hidden rounded-xl border shadow-xl shadow-black/20">
+        <div className="border-line bg-surface absolute bottom-[calc(100%+6px)] left-0 z-30 w-full overflow-hidden rounded-2xl border shadow-xl shadow-black/20">
           <p className="label border-hairline border-b px-3 py-1.5">Files in this repo</p>
           {hits.map((path, i) => (
             <button

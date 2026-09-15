@@ -58,7 +58,12 @@ export const NoteRow = memo(function NoteRow({
       data-note={note.id}
       aria-current={selected}
       className={cn(
-        "group flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
+        "group flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left",
+        /* Press gives, so a row feels like an object rather than a link. 0.96
+           is the value that reads as tactile without looking exaggerated.
+           `scale`, not `transform`: Tailwind v4 compiles scale-* to the
+           standalone property, which a transform transition never sees. */
+        "transition-[background-color,scale] duration-150 ease-[var(--ease-out)] active:scale-[0.96]",
         selected ? "bg-accent" : "hover:bg-accent/50",
         settled && !selected && "opacity-65 hover:opacity-100",
       )}

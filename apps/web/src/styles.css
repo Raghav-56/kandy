@@ -64,6 +64,24 @@
   --radius-lg: 10px;
   --radius-xl: 14px;
   --radius-2xl: 18px;
+
+  /*
+   * Motion curves, in one place.
+   *
+   * These were referenced before they existed: Charts.tsx asked for
+   * --ease-rise and got the browser default, and lib/motion.ts documented
+   * itself as mirroring tokens that were not here. Defined now, and the JS
+   * copies in motion.ts mirror these exact numbers.
+   *
+   * Stronger than the built-in easings on purpose — `ease-out` is too weak to
+   * read as deliberate. `ease-in` appears nowhere: it delays the first frame,
+   * which is the moment being watched most closely, so it feels slower than
+   * the same duration with ease-out.
+   */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-rise: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
 /*
@@ -189,7 +207,7 @@ body {
 .breathe { animation: breathe 2s ease-in-out infinite; }
 
 @keyframes rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
-.rise { animation: rise 170ms cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+.rise { animation: rise 170ms var(--ease-rise) both; }
 
 @media (prefers-reduced-motion: reduce) {
   .shimmer::after, .breathe, .rise, .kandy-tick { animation: none; }

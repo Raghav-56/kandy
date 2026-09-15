@@ -120,7 +120,16 @@ export function CommandPalette({
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-6 pt-[14vh] backdrop-blur-[2px]"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="rise w-[min(620px,100%)] overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl shadow-black/60">
+      {/*
+        No entrance animation, deliberately.
+
+        ⌘K is pressed dozens of times a day, and an animation on something at
+        that frequency is not delight, it is latency you added on purpose — the
+        palette appears to lag behind the key. Raycast opens instantly for the
+        same reason. The scrim still fades, because that is the part that would
+        look broken snapping in.
+      */}
+      <div className="w-[min(620px,100%)] overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl shadow-black/60">
         <input
           autoFocus
           value={q}
