@@ -66,7 +66,17 @@ async function sizeOf(dir: string): Promise<number> {
  * its checkout: the whole point of the worktree is that it is there when you
  * open the diff.
  */
-export async function findReclaimable(repoPath: string, notes: Note[]): Promise<Reclaimable[]> {
+export async function findReclaimable(
+  repoPath: string,
+  notes: Note[],
+  /**
+   * Every note id any board knows about, across the whole daemon.
+   *
+   * Only with this can an unclaimed directory be called an orphan rather than
+   * another board's business. Omit it and nothing unidentified is touched.
+   */
+  known?: ReadonlySet<string>,
+): Promise<Reclaimable[]> {
   const root = worktreeRoot(repoPath)
   const byId = new Map(notes.map((n) => [n.id, n]))
 
@@ -74,20 +84,24 @@ export async function findReclaimable(repoPath: string, notes: Note[]): Promise<
     .filter((w) => path.dirname(w.path) === root)
     .map((w) => ({ ...w, note: byId.get(path.basename(w.path)) }))
     /*
-     * A finished note's checkout, or one whose note is gone entirely.
+     * A finished note's checkout, or an orphan nobody claims.
      *
-     * The second case used to be excluded on the grounds that an unknown note
-     * is not ours to judge. It is the one that strands disk: delete a note and
-     * its worktree becomes invisible to every reclaim path at once, because
-     * the only thing that could identify it no longer exists. 376MB sat under
-     * `.kandy/worktrees` with nothing in kandy able to see it.
+     * The second case is the one that strands disk: delete a note and its
+     * worktree becomes invisible to every reclaim path, because the only thing
+     * that could identify it is gone.
      *
-     * Safe because of where we are standing. These are only ever directories
-     * directly under this repo's own worktree root, named for a note id, which
-     * nothing but kandy creates. An orphan there is ours and is finished with —
-     * and the branch survives regardless, so the work does not depend on it.
+     * But "this board has never heard of it" is not the same as "nobody has".
+     * Two boards can point at one repo, and a worktree belonging to the other
+     * board's running note looks identical from here. Reclaiming on that
+     * evidence would delete someone else's work in progress — so an orphan has
+     * to be unknown to *every* board, which only the caller can say. Without
+     * `known`, this stays conservative and skips anything it cannot identify.
      */
-    .filter((w) => w.note === undefined || w.note.status === "done")
+    .filter((w) => {
+      if (w.note) return w.note.status === "done"
+      const claimed = known?.has(path.basename(w.path)) ?? true
+      return !claimed
+    })
 
   return Promise.all(
     candidates.map(async (w) => {

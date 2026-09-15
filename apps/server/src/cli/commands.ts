@@ -326,7 +326,23 @@ export async function cmdGc(opts: {
     out(dim(`  corrected ${stale.length} note${stale.length === 1 ? "" : "s"} still naming a checkout that was already gone`))
   }
 
-  const found = await findReclaimable(here.board.repoPath, here.view.notes)
+  /*
+   * Every note id the daemon knows, not just this board's.
+   *
+   * A directory under this repo's worktree root whose note no board claims is
+   * an orphan and ours to reclaim. One whose note belongs to *another* board on
+   * the same repo is that board's business and may well be running right now —
+   * which is the distinction the whole check turns on.
+   */
+  const boards = await client(opts.port).boards().catch(() => ({ boards: [] as typeof here.board[] }))
+  const known = new Set<string>()
+  for (const b of boards.boards) {
+    if (b.repoPath !== here.board.repoPath) continue
+    const view = await client(opts.port).view(b.id).catch(() => null)
+    for (const n of view?.notes ?? []) known.add(n.id)
+  }
+
+  const found = await findReclaimable(here.board.repoPath, here.view.notes, known)
   if (found.length === 0) {
     if (stale.length === 0) out(dim("  nothing to reclaim — no worktrees left by finished notes"))
     return 0

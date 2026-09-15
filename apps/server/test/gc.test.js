@@ -65,6 +65,35 @@ test("a note kandy has never heard of is left alone", async () => {
   assert.deepEqual(await findReclaimable(dir, [note("note_other")]), [])
 })
 
+test("an orphan is reclaimed only once no board claims it", async () => {
+  // The distinction the whole check turns on. A worktree whose note this board
+  // has never heard of may belong to another board on the same repo — possibly
+  // running right now — so "unknown here" is not evidence. "Unknown to every
+  // board" is, and only the caller can say that.
+  const dir = repo()
+  const wt = await createWorktree(dir, "note_orphan", "deleted note's work")
+
+  // No `known` set: nothing unidentified is touched, which is the old
+  // behaviour and the safe default.
+  assert.deepEqual(await findReclaimable(dir, [note("note_other")]), [])
+
+  // Another board still claims it — hands off.
+  const claimed = await findReclaimable(dir, [note("note_other")], new Set(["note_orphan"]))
+  assert.deepEqual(claimed, [])
+
+  // Nobody claims it: ours, and finished with.
+  const [item] = await findReclaimable(dir, [note("note_other")], new Set(["note_other"]))
+  assert.ok(item, "an unclaimed orphan is reclaimable")
+  assert.equal(item.noteId, "note_orphan")
+  assert.ok(item.bytes > 0)
+
+  await reclaim(dir, item, true)
+  assert.equal(existsSync(wt.path), false)
+  // The branch is the work and outlives the checkout, same as every other path.
+  const branches = execFileSync("git", ["branch", "--list", wt.branch], { cwd: dir }).toString()
+  assert.ok(branches.includes(wt.branch))
+})
+
 test("a merged worktree is reclaimed and its branch survives", async () => {
   const dir = repo()
   const wt = await createWorktree(dir, "note_m", "landed work")
