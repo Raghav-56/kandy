@@ -71,10 +71,23 @@ export function BoardComposer({
   }, [])
 
   return (
-    // Absolutely positioned over the list, and painting nothing behind itself:
-    // the box has its own surface, and the desk belongs to the backdrop.
+    // Absolutely positioned over the list, on a frosted shelf of its own.
     <div ref={bar} className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
-      <div className="px-4 pb-4">
+      {/*
+       * The shelf. It blurs what is behind it rather than painting over it, so
+       * the rows sliding under the bar go soft and the haze stays — separation
+       * without a band of flat colour across the desk.
+       *
+       * The mask ramps the blur in from nothing at the top: a blur that starts
+       * at full strength draws a hard horizontal line of its own, which is the
+       * thing this is here to avoid. It reaches above this element because the
+       * ramp needs somewhere to happen before the box begins.
+       */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 -top-10 bottom-0 backdrop-blur-[14px] [mask-image:linear-gradient(to_bottom,transparent,#000_58%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent,#000_58%)]"
+      />
+      <div className="relative px-4 pb-4">
         <div className="pointer-events-auto mx-auto w-full max-w-[820px]">
           <PromptBox
             value={draft}

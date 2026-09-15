@@ -146,9 +146,15 @@ body {
  * with the text in it and a fixed guess leaves a row half-visible.
  */
 .fade-under-composer {
-  --fade: calc(var(--composer-h, 116px) + 12px);
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent calc(100% - 16px));
-  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent calc(100% - 16px));
+  /*
+   * A short fade, not a long one. The composer's shelf blurs everything behind
+   * it, and a row wants to go soft *first* and disappear only at the very
+   * bottom — fading it out across the whole bar means the blur has nothing
+   * left to act on and the separation reads as emptiness instead of glass.
+   */
+  --fade: calc(var(--composer-h, 116px) * 0.55);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent calc(100% - 10px));
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent calc(100% - 10px));
 }
 
 /* Focus is a soft ring in the palette, and only on things you can actually tab
