@@ -39,9 +39,11 @@ import { authState } from "@/features/agents/authState"
 import type { Theme } from "@/hooks/useTheme"
 import { cn, money } from "@/lib/utils"
 
-/* kandy's row: 13px and 34px tall, against shadcn's 14px and 32px. Applied in
-   one place so the nav, the footer and anything added later cannot drift. */
-const ROW = "h-[34px] text-[13px]"
+/* kandy's row: 13px type in a 36px row, against shadcn's 14px in 32px. Applied
+   in one place so the nav, the footer and anything added later cannot drift.
+   With the 4px `SidebarMenu` gap that makes a 40px rhythm — the nav reads as
+   four separate things rather than one block, which is what it is. */
+const ROW = "h-9 text-[13px]"
 
 /** kandy has no accounts. The name is whoever owns this machine. */
 function initials(name: string): string {
@@ -133,7 +135,7 @@ export function Sidebar({
 
   return (
     <SidebarRoot collapsible="icon">
-      <SidebarHeader className="border-sidebar-border border-b p-2">
+      <SidebarHeader className="border-sidebar-border border-b p-2.5">
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
@@ -177,15 +179,15 @@ export function Sidebar({
                     }}
                     className="gap-2"
                   >
-                    <FolderGit2 className="size-3.5 shrink-0 opacity-70" />
+                    <FolderGit2 className="size-4 shrink-0 opacity-70" />
                     <span className="min-w-0 flex-1 truncate">{b.name}</span>
-                    {b.id === boardId && <Check className="text-mint size-3.5 shrink-0" />}
+                    {b.id === boardId && <Check className="text-mint size-4 shrink-0" />}
                     <CopyLink path={`/b/${b.id}`} label={`Copy link to ${b.name}`} size="icon-xs" />
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={onNewBoard} className="gap-2">
-                  <Plus className="size-3.5 shrink-0" />
+                  <Plus className="size-4 shrink-0" />
                   Add a repo
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -195,7 +197,7 @@ export function Sidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
+        <SidebarGroup className="p-2.5">
           <SidebarGroupContent>
             <SidebarMenu>
               {/* Writing a note leads, because it is what you came to do. */}
@@ -263,10 +265,9 @@ export function Sidebar({
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
       </SidebarContent>
 
-      <SidebarFooter className="border-sidebar-border border-t p-2">
+      <SidebarFooter className="border-sidebar-border border-t p-2.5">
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
@@ -306,8 +307,15 @@ export function Sidebar({
                 {agents
                   .filter((a) => a.installed)
                   .map((a) => (
-                    <div key={a.id} className="flex items-center gap-2 px-2 py-1.5 text-[12.5px]">
-                      <AgentMark agent={a.id} size={16} className="size-4" />
+                    <div
+                      key={a.id}
+                      // Not a DropdownMenuItem: there is nothing to choose
+                      // here. It still wears the item's exact gutter, or the
+                      // marks would sit in a different column from the icons
+                      // two rows below.
+                      className="flex items-center gap-2 px-2 py-1.5 text-[13px]"
+                    >
+                      <AgentMark agent={a.id} size={16} />
                       <span className="min-w-0 flex-1 truncate">{agentLabel(a.id)}</span>
                       <span
                         className={cn(
@@ -327,15 +335,15 @@ export function Sidebar({
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem onSelect={() => onPage("settings")} className="gap-2">
-                  <Settings2 className="size-3.5" />
+                  <Settings2 className="size-4" />
                   Settings
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => onPage("usage")} className="gap-2">
-                  <Gauge className="size-3.5" />
+                  <Gauge className="size-4" />
                   Usage
                   {spend > 0 && (
                     <span className="text-muted-foreground ml-auto text-[11px] tabular-nums">
-                        {money(spend)}
+                      {money(spend)}
                     </span>
                   )}
                 </DropdownMenuItem>
@@ -343,7 +351,7 @@ export function Sidebar({
                   onSelect={() => onTheme(theme === "dark" ? "light" : "dark")}
                   className="gap-2"
                 >
-                  {theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+                  {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
                   {theme === "dark" ? "Light appearance" : "Dark appearance"}
                 </DropdownMenuItem>
               </DropdownMenuContent>
