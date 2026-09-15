@@ -8,7 +8,6 @@ import {
   isAuthFailure,
   laneColumn,
   notesIn,
-  promptFor,
   type AgentId,
   type BoardView,
   type CostSource,
@@ -16,6 +15,7 @@ import {
   type DiffStat,
 } from "@kandy/core"
 import type { Engine } from "./engine.js"
+import { promptForRun } from "./handoff.js"
 import type { AskChannel } from "./agents/types.js"
 import { closeAskChannel, openAskChannel, type Permissions } from "./permission.js"
 import { adapter } from "./agents/index.js"
@@ -350,12 +350,22 @@ export class Runner {
       this.say(q.runId, "system", `workspace ready in ${secs}s`)
     }
 
-    // Resume the agent's session only when continuing in an existing worktree.
-    // A fresh worktree means a fresh filesystem, and an agent whose memory
-    // disagrees with what's on disk wastes a turn rediscovering that.
-    const prior = q.worktree
-      ? view.runs.filter((r) => r.noteId === q.noteId && r.agentSessionId).at(-1)?.agentSessionId
-      : undefined
+    /*
+     * Resume the agent's session only when continuing in an existing worktree.
+     * A fresh worktree means a fresh filesystem, and an agent whose memory
+     * disagrees with what's on disk wastes a turn rediscovering that.
+     *
+     * The same reasoning, one step further: a session id belongs to the tool
+     * that issued it. Claude cannot resume Codex's thread and neither can read
+     * the other's, so a change of agent is a fresh session by definition — and
+     * the previous work has to arrive as a briefing instead.
+     */
+    const past = view.runs.filter((r) => r.noteId === q.noteId)
+    const handedOver = past.length > 0 && past.at(-1)!.agent !== q.agent
+    const prior =
+      q.worktree && !handedOver
+        ? past.filter((r) => r.agentSessionId).at(-1)?.agentSessionId
+        : undefined
 
     // Anything attached while the note was being written has been waiting in
     // the state dir for a workspace to exist. It exists now, so the files move
@@ -379,7 +389,11 @@ export class Runner {
 
     const spec = a.spawn({
       cwd: worktree.path,
-      prompt: (q.prompt ?? promptFor(note)) + describeAttachments(attached),
+      prompt:
+        (q.prompt ??
+          promptForRun(note, past, q.agent, (runId) =>
+            this.engine.store.transcriptSince(runId, 0, 5000),
+          )) + describeAttachments(attached),
       policy,
       ...(ask ? { ask } : {}),
       // Note pin wins over the board default; neither means the agent's own.
