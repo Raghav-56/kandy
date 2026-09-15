@@ -134,6 +134,23 @@ body {
    palette does not contain. */
 ::selection { background: var(--color-grape-bg); color: var(--color-ink); }
 
+/*
+ * Rows dissolve under the floating composer.
+ *
+ * A mask rather than a scrim painted in the page colour: the scrim hid the
+ * rows and the backdrop with them, so the haze stopped dead at the composer
+ * and the strip below the input box was flat. A mask takes the rows to
+ * transparent and leaves whatever is behind them alone.
+ *
+ * `--composer-h` is published by the composer itself, because the bar grows
+ * with the text in it and a fixed guess leaves a row half-visible.
+ */
+.fade-under-composer {
+  --fade: calc(var(--composer-h, 116px) + 12px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent calc(100% - 16px));
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent calc(100% - 16px));
+}
+
 /* Focus is a soft ring in the palette, and only on things you can actually tab
    to — the old rule painted a blue outline on anything with a tabindex.
    Inputs are excluded: shadcn already rings them, and both together drew a

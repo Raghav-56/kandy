@@ -309,7 +309,13 @@ export function App() {
           </button>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto",
+            // Only the board has a composer over it to fade against.
+            page === "board" && "fade-under-composer",
+          )}
+        >
           {page === "usage" ? (
             <UsagePage view={view} client={client} />
           ) : page === "settings" ? (

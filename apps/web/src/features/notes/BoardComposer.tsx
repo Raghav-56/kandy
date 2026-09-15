@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Maximize2 } from "lucide-react"
 import type { AgentId, AgentInfo } from "@kandy/core"
 import { Hint } from "@/ui"
@@ -37,6 +37,7 @@ export function BoardComposer({
   const [agent, setAgent] = useState<AgentId | "">(defaultAgent ?? "")
   const [model, setModel] = useState<string | null>(null)
   const [files, setFiles] = useState<Attached[]>([])
+  const bar = useRef<HTMLDivElement>(null)
 
   const submit = () => {
     const title = draft.trim()
@@ -46,15 +47,34 @@ export function BoardComposer({
     setFiles([])
   }
 
+  /*
+   * How tall this is, published for the list to fade against.
+   *
+   * The list used to be hidden under an opaque band and a gradient scrim
+   * painted in the page colour. That did dissolve the rows — and it also
+   * painted over the backdrop, so the haze stopped dead at the composer and
+   * everything below the input box was flat. The list now masks itself
+   * instead, which needs to know where this bar starts.
+   */
+  useEffect(() => {
+    const el = bar.current
+    if (!el) return
+    const publish = () =>
+      document.documentElement.style.setProperty("--composer-h", `${el.offsetHeight}px`)
+    publish()
+    const ro = new ResizeObserver(publish)
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      document.documentElement.style.removeProperty("--composer-h")
+    }
+  }, [])
+
   return (
-    /*
-     * Absolutely positioned over the list, with the fade above it so rows
-     * dissolve rather than being cut in half at the bar's edge. The list
-     * carries bottom padding to match, or the last note hides under this.
-     */
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
-      <div className="from-bg h-12 bg-gradient-to-t to-transparent" />
-      <div className="bg-bg px-4 pb-4">
+    // Absolutely positioned over the list, and painting nothing behind itself:
+    // the box has its own surface, and the desk belongs to the backdrop.
+    <div ref={bar} className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
+      <div className="px-4 pb-4">
         <div className="pointer-events-auto mx-auto w-full max-w-[820px]">
           <PromptBox
             value={draft}
