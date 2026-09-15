@@ -169,9 +169,6 @@ test("the run's model is what prices it, and runs do not cross wires", () => {
     sessionID: "ses_abc",
     part: { type: "step-finish", cost: 0.01, tokens: { input: 10, output: 2, cache: {} } },
   })
-  opencode.spawn({ ...POLICY, model: "anthropic/claude-opus-5" })
-  opencode.spawn({ ...POLICY, model: "openai/gpt-5.3" })
-
   const first = opencode
     .parse(step, { model: "anthropic/claude-opus-5" })
     .find((e) => e.kind === "usage")
@@ -194,4 +191,18 @@ test("a run with no pinned model falls back to opencode's own configured one", (
     assert.ok(usage?.kind === "usage")
     assert.equal(usage.model, configuredModel())
   }
+})
+
+test("spawn does not pin a model onto later parses", () => {
+  const step = line({
+    type: "step_finish",
+    sessionID: "ses_abc",
+    part: { type: "step-finish", cost: 0.01, tokens: { input: 10, output: 2, cache: {} } },
+  })
+  const before = opencode.parse(step).find((e) => e.kind === "usage")
+  opencode.spawn({ ...POLICY, model: "definitely-not-the-default" })
+  const after = opencode.parse(step).find((e) => e.kind === "usage")
+  assert.ok(before?.kind === "usage" && after?.kind === "usage")
+  assert.equal(after.model, before.model)
+  assert.notEqual(after.model, "definitely-not-the-default")
 })

@@ -147,9 +147,6 @@ test("the run's model is what prices it, and runs do not cross wires", () => {
   // The adapter is a singleton shared by every run, so a model stashed on it
   // by spawn() meant whichever run started last priced both of them.
   const turn = line({ type: "turn.completed", usage: { input_tokens: 10, output_tokens: 2 } })
-  codex.spawn({ cwd: "/wt", prompt: "go", policy: "repo", model: "gpt-5.3-codex" })
-  codex.spawn({ cwd: "/wt", prompt: "go", policy: "repo", model: "o4-mini" })
-
   const first = codex.parse(turn, { model: "gpt-5.3-codex" }).find((e) => e.kind === "usage")
   const second = codex.parse(turn, { model: "o4-mini" }).find((e) => e.kind === "usage")
   assert.ok(first?.kind === "usage" && second?.kind === "usage")
@@ -166,6 +163,16 @@ test("a run with no pinned model falls back to Codex's own configured one", () =
     assert.ok(usage?.kind === "usage")
     assert.equal(usage.model, configuredModel())
   }
+})
+
+test("spawn does not pin a model onto later parses", () => {
+  const turn = line({ type: "turn.completed", usage: { input_tokens: 10, output_tokens: 2 } })
+  const before = codex.parse(turn).find((e) => e.kind === "usage")
+  codex.spawn({ cwd: "/wt", prompt: "go", policy: "repo", model: "definitely-not-the-default" })
+  const after = codex.parse(turn).find((e) => e.kind === "usage")
+  assert.ok(before?.kind === "usage" && after?.kind === "usage")
+  assert.equal(after.model, before.model)
+  assert.notEqual(after.model, "definitely-not-the-default")
 })
 
 test("codex never gets an open stdin", () => {
