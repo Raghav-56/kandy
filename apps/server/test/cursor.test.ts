@@ -140,6 +140,32 @@ test("output mentioning permissions does not block a command that succeeded", ()
   assert.equal(out[0]?.kind === "tool" && out[0].status, "completed")
 })
 
+test("a result carries no turn count, so kandy reports none", () => {
+  /*
+   * The frame shape is a real one, captured from cursor-agent 2026.09.15:
+   * duration_ms, duration_api_ms, request_id, session_id, subtype, usage.
+   * There is no turn field anywhere in it.
+   *
+   * This used to be 1, and since the reducer sums turns across usage events
+   * and Cursor emits exactly one, every Cursor run read "1 turn" no matter how
+   * long it worked.
+   */
+  const out = cursor.parse(
+    line({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      duration_ms: 9102,
+      request_id: "3d41eae1-c42c-4253-ae06-924ee77a9020",
+      usage: { inputTokens: 27306, outputTokens: 99, cacheReadTokens: 4224, cacheWriteTokens: 0 },
+    }),
+  )
+  const usage = out.find((e) => e.kind === "usage")
+  assert.ok(usage && usage.kind === "usage")
+  assert.equal(usage.turns, null)
+  assert.equal(usage.tokens, 31629, "input + output + both cache buckets")
+})
+
 test("result reports usage with cache counted on top, not backed out", () => {
   // Cursor's inputTokens excludes the cache buckets — the captured run shows
   // 23,853 input beside 24,448 cache reads, which cannot both describe one

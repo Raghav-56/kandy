@@ -125,7 +125,20 @@ export const cursor: AgentAdapter = {
           // Cursor bills a subscription and reports no money.
           costUsd: null,
           tokens,
-          turns: 1,
+          /*
+           * Cursor reports no turn count, so kandy does not invent one.
+           *
+           * Its `result` frame carries `duration_ms`, `request_id` and
+           * `usage` and nothing else — verified against a captured run of
+           * 2026.09.15. This used to say 1, and because the reducer sums
+           * turns across usage events and Cursor emits exactly one, every
+           * Cursor run read "1 turn" however long it worked. A run of 108
+           * tool calls said the same as a run of none.
+           *
+           * Null is absent rather than wrong: the UI hides the figure instead
+           * of printing a number nobody should trust.
+           */
+          turns: null,
           /*
            * Only the model this run was spawned with — it travels on the run
            * rather than on this adapter, which every run shares. The `system`

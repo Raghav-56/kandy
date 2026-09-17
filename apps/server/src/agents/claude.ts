@@ -152,7 +152,24 @@ export const claude: AgentAdapter = {
         const cost = msg["total_cost_usd"]
         const usage = msg["usage"]
         if (typeof cost === "number") {
-          const tokens = (usage?.input_tokens ?? 0) + (usage?.output_tokens ?? 0)
+          /*
+           * Every token the turn processed, cache included.
+           *
+           * Claude reports `input_tokens` net of cache and puts the cached
+           * halves in their own fields, so adding only input and output
+           * counted a fraction of the work: the same job that Cursor reported
+           * as 2.5M read as 11.8k here, because Cursor's figure includes the
+           * context resent on every turn and this one did not.
+           *
+           * Both are defensible in isolation and together they are nonsense —
+           * the usage page was summing four adapters that each meant something
+           * different by "tokens". They all mean this now.
+           */
+          const tokens =
+            (usage?.input_tokens ?? 0) +
+            (usage?.output_tokens ?? 0) +
+            (usage?.cache_creation_input_tokens ?? 0) +
+            (usage?.cache_read_input_tokens ?? 0)
           out.push({
             kind: "usage",
             text: `${msg["num_turns"] ?? 1} turn(s) · ${tokens} tokens · $${cost.toFixed(4)}`,

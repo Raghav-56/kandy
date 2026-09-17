@@ -121,3 +121,32 @@ test("claude accepts mid-run steering", () => {
   const encoded = claude.live!.encode("also fix the tests")
   assert.equal(JSON.parse(encoded!).message.content[0].text, "also fix the tests")
 })
+
+test("tokens count the cached halves too, so agents can be compared", () => {
+  /*
+   * Claude reports `input_tokens` net of cache and puts the cached halves in
+   * their own fields. Counting only input and output measured a fraction of
+   * the work: the same job Cursor reported as 2.5M read as 11.8k here, because
+   * Cursor's figure includes the context resent every turn and this one did
+   * not. Four adapters each meaning something different by "tokens" made the
+   * usage page a sum of incomparable numbers.
+   */
+  const out = claude.parse(
+    line({
+      type: "result",
+      total_cost_usd: 0.42,
+      num_turns: 7,
+      usage: {
+        input_tokens: 1000,
+        output_tokens: 200,
+        cache_creation_input_tokens: 5000,
+        cache_read_input_tokens: 90000,
+      },
+    }),
+  )
+  const usage = out.find((e) => e.kind === "usage")
+  assert.ok(usage && usage.kind === "usage")
+  assert.equal(usage.tokens, 96200)
+  assert.equal(usage.turns, 7, "Claude does report turns, and they are kept")
+  assert.equal(usage.costUsd, 0.42)
+})

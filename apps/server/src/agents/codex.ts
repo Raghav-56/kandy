@@ -112,6 +112,10 @@ export const codex: AgentAdapter = {
         // each is billed at its own rate rather than twice.
         const input = Math.max(0, (u["input_tokens"] ?? 0) - cacheRead - cacheWrite)
         const output = u["output_tokens"] ?? 0
+        // Every token the turn processed, cache included — the same meaning
+        // the other three adapters use. Codex's `input_tokens` is already
+        // inclusive, which is why the cached halves are subtracted above to
+        // get `input` for pricing but added back here.
         const tokens = (u["input_tokens"] ?? 0) + output
 
         out.push({
