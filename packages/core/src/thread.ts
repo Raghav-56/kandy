@@ -56,6 +56,16 @@ export type Thread = {
   arc: Beat[]
   /** The last thing the agent said, when a run ended without resolving it. */
   open: string | null
+  /**
+   * Whether the work reads as finished.
+   *
+   * The briefing has to say "continue this" or "check this", and getting it
+   * wrong is not cosmetic. Handed a completed note under a heading that said
+   * *Where it stopped … Continue from there*, Cursor went looking for the bug
+   * the briefing had just told it was fixed — it grepped for a symbol the
+   * previous agent had deleted. It did what it was told.
+   */
+  settled: boolean
 }
 
 /** Frames belonging to one run, so a beat can be attributed to its agent. */
@@ -151,6 +161,10 @@ export function buildThread(note: Note, history: readonly RunFrames[]): Thread {
     // A note that finished cleanly has nothing open; the last thing said was a
     // report, not a loose end.
     open: note.status === "done" ? null : open,
+    settled:
+      history.length > 0 &&
+      history.at(-1)!.run.status === "succeeded" &&
+      (note.status === "review" || note.status === "done"),
   }
 }
 
@@ -234,7 +248,13 @@ export function renderBriefing(thread: Thread, to: AgentId): string {
   }
 
   if (thread.open) {
-    out.push(`## Where it stopped\n\n${demote(thread.open)}\n\nContinue from there.`)
+    out.push(
+      thread.settled
+        ? `## What they finished\n\n${demote(thread.open)}\n\n` +
+            `This is already applied on the branch. Check it rather than repeat it — ` +
+            `read the diff first, and only change what you find wrong with it.`
+        : `## Where it stopped\n\n${demote(thread.open)}\n\nContinue from there.`,
+    )
   }
 
   return out.join("\n\n")

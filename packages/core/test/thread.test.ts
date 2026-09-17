@@ -188,8 +188,9 @@ test("the briefing tells the new agent it did not write this code", () => {
   assert.match(brief, /11 files changed, \+1174 −22/)
   assert.match(brief, /What already failed/)
   assert.match(brief, /opencode is not installed/)
-  assert.match(brief, /Where it stopped/)
-  assert.match(brief, /Continue from there\./)
+  // The note is in review off a succeeded run, so this reads as finished work
+  // to be checked rather than a loose end to continue.
+  assert.match(brief, /What they finished/)
 })
 
 test("handing a note back to the same agent does not lecture it about itself", () => {
@@ -198,11 +199,39 @@ test("handing a note back to the same agent does not lecture it about itself", (
   ])
   const brief = renderBriefing(thread, "claude" as never)
   assert.equal(/Before you/.test(brief), false)
-  assert.match(brief, /Where it stopped/)
+  assert.match(brief, /What they finished/)
 })
 
 test("a note nobody has run yet briefs as just the task", () => {
   const brief = renderBriefing(buildThread(note, []), "claude" as never)
   assert.match(brief, /# Add opencode and cursor adapters/)
   assert.equal(/Before you|What they established|Where it stopped/.test(brief), false)
+})
+
+test("finished work is handed over to be checked, not continued", () => {
+  /*
+   * The live handoff that exposed this: Claude finished the job, the briefing
+   * said "Where it stopped … Continue from there", and Cursor opened by
+   * grepping for the symbol the briefing had just said was deleted. It was
+   * doing as it was told.
+   */
+  const thread = buildThread(note, [
+    { run: run("claude", 32), frames: [f(1, "assistant", "Done. The model travels with the run now.")] },
+  ])
+  assert.equal(thread.settled, true)
+
+  const brief = renderBriefing(thread, "cursor" as never)
+  assert.match(brief, /## What they finished/)
+  assert.match(brief, /already applied on the branch/)
+  assert.match(brief, /Check it rather than repeat it/)
+  assert.equal(/Continue from there/.test(brief), false)
+})
+
+test("unfinished work still says continue", () => {
+  const stopped = { ...(run("claude", 3) as object), status: "failed" } as never
+  const thread = buildThread(note, [
+    { run: stopped, frames: [f(1, "assistant", "Got as far as the cursor adapter.")] },
+  ])
+  assert.equal(thread.settled, false)
+  assert.match(renderBriefing(thread, "codex" as never), /Continue from there/)
 })
