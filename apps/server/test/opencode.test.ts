@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { opencode } from "../dist/agents/opencode.js"
+import { opencode, configuredModel } from "../dist/agents/opencode.js"
 
 /**
  * Shapes taken from opencode's own `run` command — the `emit()` helper in
@@ -159,4 +159,50 @@ test("opencode does not claim it can be asked", () => {
   // to route one back to us. Keep in step with ASK_CAPABLE in @kandy/core.
   assert.ok(!opencode.asks)
   assert.equal(opencode.live, undefined)
+})
+
+test("the run's model is what prices it, and runs do not cross wires", () => {
+  // The adapter is a singleton shared by every run, so a model stashed on it
+  // by spawn() meant whichever run started last priced both of them.
+  const step = line({
+    type: "step_finish",
+    sessionID: "ses_abc",
+    part: { type: "step-finish", cost: 0.01, tokens: { input: 10, output: 2, cache: {} } },
+  })
+  const first = opencode
+    .parse(step, { model: "anthropic/claude-opus-5" })
+    .find((e) => e.kind === "usage")
+  const second = opencode.parse(step, { model: "openai/gpt-5.3" }).find((e) => e.kind === "usage")
+  assert.ok(first?.kind === "usage" && second?.kind === "usage")
+  assert.equal(first.model, "anthropic/claude-opus-5")
+  assert.equal(second.model, "openai/gpt-5.3")
+})
+
+test("a run with no pinned model falls back to opencode's own configured one", () => {
+  const step = line({
+    type: "step_finish",
+    sessionID: "ses_abc",
+    part: { type: "step-finish", cost: 0.01, tokens: { input: 10, output: 2, cache: {} } },
+  })
+  for (const usage of [
+    opencode.parse(step).find((e) => e.kind === "usage"),
+    opencode.parse(step, {}).find((e) => e.kind === "usage"),
+  ]) {
+    assert.ok(usage?.kind === "usage")
+    assert.equal(usage.model, configuredModel())
+  }
+})
+
+test("spawn does not pin a model onto later parses", () => {
+  const step = line({
+    type: "step_finish",
+    sessionID: "ses_abc",
+    part: { type: "step-finish", cost: 0.01, tokens: { input: 10, output: 2, cache: {} } },
+  })
+  const before = opencode.parse(step).find((e) => e.kind === "usage")
+  opencode.spawn({ ...POLICY, model: "definitely-not-the-default" })
+  const after = opencode.parse(step).find((e) => e.kind === "usage")
+  assert.ok(before?.kind === "usage" && after?.kind === "usage")
+  assert.equal(after.model, before.model)
+  assert.notEqual(after.model, "definitely-not-the-default")
 })

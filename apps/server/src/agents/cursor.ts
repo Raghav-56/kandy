@@ -35,9 +35,6 @@ import type { AgentAdapter, AgentEvent } from "./types.js"
  * subscription, not per call — so cost stays null and kandy prices the tokens.
  */
 
-/** Set by spawn(), read by parse() — the model this process was told to use. */
-let pinnedModel: string | undefined
-
 export const cursor: AgentAdapter = {
   id: "cursor",
   bin: "cursor-agent",
@@ -48,7 +45,6 @@ export const cursor: AgentAdapter = {
 
   spawn({ prompt, resume, policy, model }) {
     const full = policy === "full"
-    pinnedModel = model
 
     return {
       command: "cursor-agent",
@@ -70,7 +66,7 @@ export const cursor: AgentAdapter = {
     }
   },
 
-  parse(line) {
+  parse(line, run) {
     const text = line.replace(/\r$/, "")
     if (!text.trim()) return []
 
@@ -131,13 +127,15 @@ export const cursor: AgentAdapter = {
           tokens,
           turns: 1,
           /*
-           * Only the model we pinned. The `system` init line carries one too,
+           * Only the model this run was spawned with — it travels on the run
+           * rather than on this adapter, which every run shares. The `system`
+           * init line carries one too,
            * but it is a display name — "Cursor Grok 4.6 High Fast" — and
            * feeding that to the price table either misses or, worse, prefix-
            * matches something unrelated. No pin means unpriced, which is the
            * honest answer.
            */
-          model: pinnedModel ?? null,
+          model: run?.model ?? null,
           usage: { input, output, cacheRead, cacheWrite },
         })
 

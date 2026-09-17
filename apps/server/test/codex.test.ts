@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { codex } from "../dist/agents/codex.js"
+import { codex, configuredModel } from "../dist/agents/codex.js"
 
 /** Every line the adapter turns into events, as Codex actually emits them. */
 const line = (o: unknown) => JSON.stringify(o)
@@ -141,6 +141,38 @@ test("a pinned model is passed through", () => {
   const spec = codex.spawn({ cwd: "/wt", prompt: "go", policy: "repo", model: "gpt-5.3-codex" })
   assert.ok(spec.args.includes("-m"))
   assert.ok(spec.args.includes("gpt-5.3-codex"))
+})
+
+test("the run's model is what prices it, and runs do not cross wires", () => {
+  // The adapter is a singleton shared by every run, so a model stashed on it
+  // by spawn() meant whichever run started last priced both of them.
+  const turn = line({ type: "turn.completed", usage: { input_tokens: 10, output_tokens: 2 } })
+  const first = codex.parse(turn, { model: "gpt-5.3-codex" }).find((e) => e.kind === "usage")
+  const second = codex.parse(turn, { model: "o4-mini" }).find((e) => e.kind === "usage")
+  assert.ok(first?.kind === "usage" && second?.kind === "usage")
+  assert.equal(first.model, "gpt-5.3-codex")
+  assert.equal(second.model, "o4-mini")
+})
+
+test("a run with no pinned model falls back to Codex's own configured one", () => {
+  const turn = line({ type: "turn.completed", usage: { input_tokens: 10, output_tokens: 2 } })
+  for (const usage of [
+    codex.parse(turn).find((e) => e.kind === "usage"),
+    codex.parse(turn, {}).find((e) => e.kind === "usage"),
+  ]) {
+    assert.ok(usage?.kind === "usage")
+    assert.equal(usage.model, configuredModel())
+  }
+})
+
+test("spawn does not pin a model onto later parses", () => {
+  const turn = line({ type: "turn.completed", usage: { input_tokens: 10, output_tokens: 2 } })
+  const before = codex.parse(turn).find((e) => e.kind === "usage")
+  codex.spawn({ cwd: "/wt", prompt: "go", policy: "repo", model: "definitely-not-the-default" })
+  const after = codex.parse(turn).find((e) => e.kind === "usage")
+  assert.ok(before?.kind === "usage" && after?.kind === "usage")
+  assert.equal(after.model, before.model)
+  assert.notEqual(after.model, "definitely-not-the-default")
 })
 
 test("codex never gets an open stdin", () => {
