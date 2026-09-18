@@ -116,6 +116,8 @@ export type Queries = {
   "GET /agents": { res: { agents: AgentInfo[] } }
   /** Model ids this agent can plausibly run. */
   "GET /agents/:id/models": { res: { models: string[] } }
+  /** Models you added yourself, for when a CLI lists none and ours is stale. */
+  "POST /agents/:id/models": { req: { models: string[] }; res: { models: string[] } }
   "GET /runs/:id/output": { res: { lines: OutputLine[]; nextAfter: number | null } }
   "GET /runs/:id/transcript": { res: { frames: TranscriptFrame[]; nextAfter: number | null } }
   /**

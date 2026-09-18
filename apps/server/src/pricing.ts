@@ -3,6 +3,8 @@ import { homedir } from "node:os"
 import path from "node:path"
 import { configuredModel as codexModel } from "./agents/codex.js"
 import { catalogued } from "./agents/catalogue.js"
+import { curatedModels } from "./agents/curated.js"
+import { customModels } from "./agents/custom-models.js"
 import { configuredModel as cursorModel } from "./agents/cursor.js"
 import { configuredModel as opencodeModel } from "./agents/opencode.js"
 
@@ -193,20 +195,32 @@ const CONFIGURED: Record<string, () => string | null> = {
   opencode: opencodeModel,
 }
 
-export function modelsFor(agent: string): string[] {
+export function modelsFor(agent: string, version: string | null = null): string[] {
   const menu = MENU[agent]
   if (!menu) return []
 
   /*
-   * An account's own catalogue beats anything derived here.
+   * Three tiers, and only the middle one is written by hand.
    *
-   * `cursor-agent models` knows which ids this plan may run; the price table
-   * has never heard of them. When the CLI has answered, that answer is the
-   * menu — ordered as Cursor returns it, which puts `auto` first and is their
-   * recommendation rather than ours.
+   * 1. What the CLI says. Cursor answers `cursor-agent models`, Codex answers
+   *    `model/list` on its app-server, and either beats anything derived here:
+   *    they know which ids this account and plan may actually run.
+   * 2. A curated list, for Claude Code, which exposes nothing to ask.
+   * 3. Whatever you added yourself, always, so a model that shipped this
+   *    morning never waits on a release of kandy.
+   *
+   * The price table is not in that list any more. It knows what Anthropic
+   * *sells*, which is a different question from what the CLI *takes*, and
+   * using it as a menu meant offering models the agent would refuse by name.
+   * It stays where it belongs: pricing.
    */
+  const mine = customModels(agent)
   const own = catalogued(agent)
-  if (own.length > 0) return own
+  if (own.length > 0) return [...own, ...mine.filter((m) => !own.includes(m))]
+
+  const picked = curatedModels(agent, version)
+  if (picked.length > 0) return [...picked, ...mine.filter((m) => !picked.includes(m))]
+  if (mine.length > 0) return [...mine]
 
   // The configured model is known-good even when the table has never heard of
   // it, so it always belongs on the menu.

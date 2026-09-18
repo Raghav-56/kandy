@@ -1,7 +1,8 @@
 import { daemonToken } from "@/lib/daemon-token"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Check, ChevronDown } from "lucide-react"
-import type { AgentId } from "@kandy/core"
+import type { AgentId, Effort, Family, Variant } from "@kandy/core"
+import { describeFamilies, parseVariant, resolveVariant } from "@kandy/core"
 import { KandyClient } from "@kandy/client"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui"
 import { cn } from "@/lib/utils"
@@ -65,16 +66,20 @@ const PANEL_PX = 340
  * picker uses: a panel, a field, and a list that answers to the field.
  */
 function ModelFilter({
+  agent,
   options,
   value,
   placeholder,
   onChange,
+  onAdded,
   className,
 }: {
+  agent: AgentId
   options: string[]
   value: string | null
   placeholder: string
   onChange: (model: string | null) => void
+  onAdded: (models: string[]) => void
   className?: string
 }) {
   const [open, setOpen] = useState(false)
@@ -102,16 +107,40 @@ function ModelFilter({
     return () => document.removeEventListener("mousedown", away)
   }, [open])
 
+  /*
+   * Models, not ids.
+   *
+   * Cursor's catalogue is 224 ids and 50 models: `claude-opus-5` and its
+   * nineteen effort/thinking/fast spellings are one model with knobs on it.
+   * The list offers the model; the knobs sit above it, which is how everyone
+   * else models this — t3code hands a model `optionDescriptors` and renders a
+   * control per descriptor rather than spelling the settings into the name.
+   */
+  const families = useMemo(() => describeFamilies(options), [options])
+  const current: Variant | null = value ? parseVariant(value) : null
+  const family = current ? families.find((f) => f.family === current.family) : undefined
+
   const hits = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    if (!needle) return options
+    if (!needle) return families
     // Every space-separated word has to appear, so "opus fast" narrows rather
-    // than widening — with 223 ids, one word is rarely enough.
+    // than widening — over fifty models, one word is rarely enough.
     const words = needle.split(/\s+/)
-    return options.filter((m) => words.every((w) => m.toLowerCase().includes(w)))
-  }, [q, options])
+    return families.filter((f) => words.every((w) => f.family.toLowerCase().includes(w)))
+  }, [q, families])
+
+  /** Turning a knob keeps the model; the id is recomposed around it. */
+  const turn = (knob: Partial<Variant>) => {
+    if (!family || !current) return
+    onChange(resolveVariant(family, { ...current, ...knob }))
+  }
 
   useEffect(() => setPick(0), [q])
+
+  // Only offer to keep something that could be an id — a half-typed word is a
+  // search that has not finished, not a model nobody has heard of.
+  const looksLikeId = /^[\w.:\/-]{3,}$/.test(q.trim())
+  const custom = useMemo(() => options.filter((m) => !m.includes(" ")), [options])
 
   const choose = (m: string | null) => {
     onChange(m)
@@ -148,7 +177,7 @@ function ModelFilter({
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={`Filter ${options.length} models`}
+            placeholder={`Filter ${families.length} models`}
             className="placeholder:text-muted-foreground/60 w-full bg-transparent px-2 py-1.5 text-ui outline-none"
             onKeyDown={(e) => {
               if (e.key === "Escape") return setOpen(false)
@@ -162,33 +191,111 @@ function ModelFilter({
                 e.preventDefault()
                 // Index 0 is the agent's own default, which is why it is not
                 // simply hits[pick].
-                choose(pick === 0 ? null : (hits[pick - 1] ?? null))
+                const f = hits[pick - 1]
+                choose(pick === 0 || !f ? null : resolveVariant(f, current ?? {}))
               }
               e.stopPropagation()
             }}
           />
-          <div className="border-hairline mt-1 max-h-[280px] overflow-y-auto border-t pt-1">
+          {family && (family.efforts.length > 0 || family.thinking || family.fast) && (
+            <div className="border-hairline mt-1 flex flex-wrap items-center gap-1 border-t px-1 pt-2 pb-1">
+              {family.efforts.length > 0 && (
+                <>
+                  <span className="label pr-0.5">Reasoning</span>
+                  {family.efforts.map((e: Effort) => (
+                    <Knob key={e} on={current?.effort === e} onPick={() => turn({ effort: e })}>
+                      {e}
+                    </Knob>
+                  ))}
+                  {/* Nothing selected is the model's own default, which is a
+                      real choice and not the absence of one. */}
+                  <Knob on={!current?.effort} onPick={() => turn({ effort: null })}>
+                    default
+                  </Knob>
+                </>
+              )}
+              {family.thinking && (
+                <Knob on={current?.thinking === true} onPick={() => turn({ thinking: !current?.thinking })}>
+                  thinking
+                </Knob>
+              )}
+              {family.fast && (
+                <Knob on={current?.fast === true} onPick={() => turn({ fast: !current?.fast })}>
+                  fast
+                </Knob>
+              )}
+            </div>
+          )}
+
+          <div className="border-hairline mt-1 max-h-[240px] overflow-y-auto border-t pt-1">
             <Row on={pick === 0} chosen={value === null} onPick={() => choose(null)} muted>
               {placeholder}
             </Row>
-            {hits.map((m, i) => (
+            {hits.map((f: Family, i: number) => (
               <Row
-                key={m}
+                key={f.family}
                 on={pick === i + 1}
-                chosen={value === m}
-                onPick={() => choose(m)}
+                chosen={current?.family === f.family}
+                // Keep the knobs you already set where the new model has them.
+                onPick={() => choose(resolveVariant(f, current ?? {}))}
                 onHover={() => setPick(i + 1)}
               >
-                <span className="font-mono text-aux">{m}</span>
+                <span className="font-mono text-aux">{f.family}</span>
               </Row>
             ))}
-            {hits.length === 0 && (
-              <p className="text-muted-foreground px-2 py-1.5 text-aux">Nothing matches.</p>
-            )}
+            {hits.length === 0 &&
+              (looksLikeId ? (
+                /*
+                 * The escape hatch, offered exactly where you discover you need
+                 * it. A model shipped this morning is not in any CLI's list and
+                 * certainly not in ours; typing it here keeps it.
+                 */
+                <Row
+                  on
+                  chosen={false}
+                  onPick={() => {
+                    const id = q.trim()
+                    void new KandyClient({ baseUrl: "/api", token: daemonToken })
+                      .setCustomModels(agent, [...custom, id])
+                      .then(() => {
+                        cache.delete(agent)
+                        onAdded([...options, id])
+                        choose(id)
+                      })
+                  }}
+                >
+                  Use <span className="font-mono text-aux">{q.trim()}</span> anyway
+                </Row>
+              ) : (
+                <p className="text-muted-foreground px-2 py-1.5 text-aux">Nothing matches.</p>
+              ))}
           </div>
         </div>
       )}
     </div>
+  )
+}
+
+function Knob({
+  on,
+  onPick,
+  children,
+}: {
+  on: boolean
+  onPick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className={cn(
+        "rounded-md px-1.5 py-0.5 text-meta transition-colors",
+        on ? "bg-grape/15 text-grape" : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -256,10 +363,12 @@ export function ModelSelect({
   if (options.length > FILTER_ABOVE) {
     return (
       <ModelFilter
+        agent={agent!}
         options={options}
         value={value}
         placeholder={placeholder}
         onChange={onChange}
+        onAdded={setModels}
         {...(className ? { className } : {})}
       />
     )

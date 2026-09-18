@@ -82,6 +82,10 @@ export class KandyClient {
   models(agent: string) {
     return this.req<{ models: string[] }>("GET", `/agents/${agent}/models`)
   }
+  /** Replace the models you added yourself for one agent. */
+  setCustomModels(agent: string, models: string[]) {
+    return this.req<{ models: string[] }>("POST", `/agents/${agent}/models`, { models })
+  }
   boards() {
     return this.req<{ boards: Board[] }>("GET", "/boards")
   }

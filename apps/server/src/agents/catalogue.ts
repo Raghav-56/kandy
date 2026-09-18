@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process"
+import { execFile, spawn } from "node:child_process"
 import { promisify } from "node:util"
 
 // execFile, not exec: no shell, and the args below are constants either way.
@@ -20,6 +20,14 @@ const run_ = promisify(execFile)
  * is waiting on: a failure leaves the old menu in place rather than emptying
  * it.
  *
+ * Codex is asked a different way and answers better: its app-server speaks
+ * JSON-RPC and `model/list` returns real objects — id, display name, a hidden
+ * flag, and the reasoning efforts *that model* supports. The hardcoded menu it
+ * replaces was not merely inelegant, it was wrong: it offered gpt-5.3-codex,
+ * gpt-5.1-codex-mini and gpt-5-codex, none of which this account lists, and
+ * omitted gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna and gpt-5.5, all of which
+ * it has.
+ *
  * Deliberately not stored on the adapter. Adapters are singletons shared by
  * every run, and the last thing removed from them was module state that
  * crossed wires between concurrent runs. This is account-level and identical
@@ -38,25 +46,91 @@ const INFLIGHT = new Map<string, Promise<void>>()
  * a provider-agnostic catalogue no table can predict — and will want the same
  * treatment once it is installed anywhere to test against.
  */
-const ASK: Record<string, { bin: string; args: string[]; parse: (out: string) => string[] }> = {
+type Asker = { ask: () => Promise<string[]> }
+
+/**
+ * Codex's app-server, asked once and shut down.
+ *
+ * JSON-RPC over stdio: initialize, then `model/list`. Hidden models are
+ * dropped — the flag exists because Codex does not want them in a picker
+ * either. stderr is ignored on purpose: a stale token makes it shout about
+ * refresh failures while still answering from cache, and an answer is an
+ * answer.
+ */
+function askCodex(): Promise<string[]> {
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (ids: string[]) => {
+      if (done) return
+      done = true
+      child.kill()
+      resolve(ids)
+    }
+
+    const child = spawn("codex", ["app-server"], { stdio: ["pipe", "pipe", "ignore"] })
+    child.on("error", () => finish([]))
+
+    const send = (o: unknown) => child.stdin.write(JSON.stringify(o) + "\n")
+    let buf = ""
+    child.stdout.on("data", (d: Buffer) => {
+      buf += d.toString()
+      const lines = buf.split("\n")
+      buf = lines.pop() ?? ""
+      for (const line of lines) {
+        if (!line.trim()) continue
+        let msg: { id?: number; result?: { data?: { id?: string; hidden?: boolean }[] } }
+        try {
+          msg = JSON.parse(line)
+        } catch {
+          continue
+        }
+        if (msg.id === 1) send({ jsonrpc: "2.0", id: 2, method: "model/list", params: {} })
+        if (msg.id === 2) {
+          finish(
+            (msg.result?.data ?? [])
+              .filter((m) => m.hidden !== true && typeof m.id === "string")
+              .map((m) => m.id as string),
+          )
+        }
+      }
+    })
+
+    send({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { clientInfo: { name: "kandy", version: "0" } },
+    })
+    setTimeout(() => finish([]), 15_000)
+  })
+}
+
+const ASK: Record<string, Asker> = {
+  codex: { ask: askCodex },
   cursor: {
-    bin: "cursor-agent",
-    args: ["models"],
-    /*
-     * Lines are `id - Display Name`, under an "Available models" header:
-     *
-     *   auto - Auto (default)
-     *   cursor-grok-4.6-high - Cursor Grok 4.6
-     *
-     * The id is what `--model` takes; the display name is what the init frame
-     * reports back and is useless for anything but reading.
-     */
-    parse: (out) =>
-      out
-        .split("\n")
-        .map((l) => /^(\S+) - \S/.exec(l.trim())?.[1])
-        .filter((id): id is string => Boolean(id)),
+    ask: async () => {
+      const { stdout } = await run_("cursor-agent", ["models"], { timeout: 15_000 })
+      return parseCursorModels(stdout)
+    },
   },
+}
+
+/**
+ * Cursor's own format.
+ *
+ * Lines are `id - Display Name`, under an "Available models" header:
+ *
+ *   auto - Auto (default)
+ *   cursor-grok-4.6-high - Cursor Grok 4.6
+ *
+ * The id is what `--model` takes; the display name is what the init frame
+ * reports back and is useless for anything but reading.
+ */
+export function parseCursorModels(out: string): string[] {
+  return out
+    .split("\n")
+    .map((l) => /^(\S+) - \S/.exec(l.trim())?.[1])
+    .filter((id): id is string => Boolean(id))
 }
 
 /** Ask the CLI, at most once an hour, and never twice at the same time. */
@@ -72,8 +146,7 @@ export function warmCatalogue(agent: string): Promise<void> {
 
   const run = (async () => {
     try {
-      const { stdout } = await run_(ask.bin, ask.args, { timeout: 15_000 })
-      const ids = ask.parse(stdout)
+      const ids = await ask.ask()
       // An empty answer is a failed answer. A CLI that is signed out prints a
       // banner and exits zero, and replacing a good menu with nothing is worse
       // than serving one an hour stale.

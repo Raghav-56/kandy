@@ -30,6 +30,7 @@ import { defaultModelFor, modelsFor, warmPrices } from "./pricing.js"
 import { computeStats } from "./stats.js"
 import { list as listDir, nativePick, repos, suggestions } from "./browse.js"
 import { warmCatalogue } from "./agents/catalogue.js"
+import { setCustomModels } from "./agents/custom-models.js"
 import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
 import { coerceAttribution, commitTrailers, prBody } from "./attribution.js"
@@ -120,8 +121,19 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   // GET /agents/:id/models — a menu for the model pickers
   if (req.method === "GET" && parts[0] === "agents" && parts[2] === "models") {
     // Both are cached with their own TTLs, so this is a no-op most of the time.
-    await Promise.all([warmPrices(), warmCatalogue(parts[1]!)])
-    return send(res, 200, { models: modelsFor(parts[1]!) })
+    const agentId = parts[1]!
+    await Promise.all([warmPrices(), warmCatalogue(agentId)])
+    const version = (await detectAll()).find((a) => a.id === agentId)?.version ?? null
+    return send(res, 200, { models: modelsFor(agentId, version) })
+  }
+
+  // POST /agents/:id/models — replace the models you added yourself
+  if (req.method === "POST" && parts[0] === "agents" && parts[2] === "models") {
+    const body = await json<{ models?: unknown }>(req)
+    const ids = Array.isArray(body?.models)
+      ? body.models.filter((m): m is string => typeof m === "string")
+      : []
+    return send(res, 200, { models: setCustomModels(parts[1]!, ids) })
   }
 
   if (req.method === "GET" && routed === "/agents") {

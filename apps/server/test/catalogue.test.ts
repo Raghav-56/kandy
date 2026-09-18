@@ -51,3 +51,24 @@ test("an agent nobody knows how to ask is left alone", async () => {
   await warmCatalogue("aider")
   assert.deepEqual(catalogued("aider"), [])
 })
+
+test("the curated list is gated on what the CLI is old enough to accept", async () => {
+  const { curatedModels } = await import("../dist/agents/curated.js")
+  const old = curatedModels("claude", "1.9.0 (Claude Code)")
+  const now = curatedModels("claude", "2.1.271 (Claude Code)")
+  assert.equal(old.includes("claude-opus-5"), false, "a 1.x CLI does not know it")
+  assert.equal(now.includes("claude-opus-5"), true)
+  // An unreadable version offers everything: a menu that silently shrinks
+  // because --version changed shape is worse than one the agent corrects.
+  assert.deepEqual(curatedModels("claude", null), now)
+})
+
+test("aliases lead, because the first entry is what a new note runs on", async () => {
+  const { curatedModels } = await import("../dist/agents/curated.js")
+  assert.deepEqual(curatedModels("claude", null).slice(0, 4), ["fable", "opus", "sonnet", "haiku"])
+})
+
+test("an agent with no curated list gets nothing rather than everything", async () => {
+  const { curatedModels } = await import("../dist/agents/curated.js")
+  assert.deepEqual(curatedModels("cursor", null), [])
+})
