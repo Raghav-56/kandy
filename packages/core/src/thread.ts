@@ -161,10 +161,19 @@ export function buildThread(note: Note, history: readonly RunFrames[]): Thread {
     // A note that finished cleanly has nothing open; the last thing said was a
     // report, not a loose end.
     open: note.status === "done" ? null : open,
-    settled:
-      history.length > 0 &&
-      history.at(-1)!.run.status === "succeeded" &&
-      (note.status === "review" || note.status === "done"),
+    /*
+     * Someone finished a run, and there is code on the branch to show for it.
+     *
+     * Deliberately not "the last run succeeded and the note is in review". A
+     * later attempt that fails — an expired sign-in, a cancelled run — does not
+     * un-finish the work that is already committed, and the first version of
+     * this rule said "continue from there" about eight files of completed work
+     * because a Codex run had died on a revoked token afterwards.
+     *
+     * `open` is only ever set by a run that reached its own end, so this is
+     * "a run finished *and* left something behind".
+     */
+    settled: open !== null && (note.stat?.files ?? 0) > 0,
   }
 }
 

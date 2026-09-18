@@ -15,7 +15,7 @@ import {
   type DiffStat,
 } from "@kandy/core"
 import type { Engine } from "./engine.js"
-import { promptForRun } from "./handoff.js"
+import { priorRuns, promptForRun } from "./handoff.js"
 import type { AskChannel } from "./agents/types.js"
 import { closeAskChannel, openAskChannel, type Permissions } from "./permission.js"
 import { adapter } from "./agents/index.js"
@@ -360,7 +360,9 @@ export class Runner {
      * the other's, so a change of agent is a fresh session by definition — and
      * the previous work has to arrive as a briefing instead.
      */
-    const past = view.runs.filter((r) => r.noteId === q.noteId)
+    // Everything before this run — `run.requested` fires at queue time, so the
+    // view already holds the run being started. See priorRuns.
+    const past = priorRuns(view.runs, q.noteId, q.runId)
     const handedOver = past.length > 0 && past.at(-1)!.agent !== q.agent
     const prior =
       q.worktree && !handedOver

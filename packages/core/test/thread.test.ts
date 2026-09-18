@@ -159,6 +159,19 @@ test("an agent's own headings nest under the briefing's, rather than competing",
   assert.equal(/\n## What I did/.test(brief), false)
 })
 
+test("a later failure does not un-finish work already on the branch", () => {
+  // Real sequence: Claude finished, Cursor confirmed, then a Codex run died on
+  // a revoked token. Eight files of completed work were still sitting on the
+  // branch, and the briefing was telling the next agent to continue from there.
+  const failedAfter = { ...(run("codex", 0) as object), status: "failed" } as never
+  const thread = buildThread(note, [
+    { run: run("claude", 32), frames: [f(1, "assistant", "Done — the model travels with the run.")] },
+    { run: failedAfter, frames: [] },
+  ])
+  assert.equal(thread.settled, true)
+  assert.match(renderBriefing(thread, "cursor" as never), /already applied on the branch/)
+})
+
 test("a finished note has nothing open", () => {
   const done = { ...(note as object), status: "done" } as never
   const thread = buildThread(done, [
@@ -229,7 +242,8 @@ test("finished work is handed over to be checked, not continued", () => {
 
 test("unfinished work still says continue", () => {
   const stopped = { ...(run("claude", 3) as object), status: "failed" } as never
-  const thread = buildThread(note, [
+  const nothingCommitted = { ...(note as object), stat: null } as never
+  const thread = buildThread(nothingCommitted, [
     { run: stopped, frames: [f(1, "assistant", "Got as far as the cursor adapter.")] },
   ])
   assert.equal(thread.settled, false)

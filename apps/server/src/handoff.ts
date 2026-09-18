@@ -12,6 +12,28 @@ import type { AgentId, Note, Run, TranscriptFrame } from "@kandy/core"
  * `frames` is injected for the same reason: the caller has a store, a test has
  * an array, and this needs neither.
  */
+/**
+ * The runs that came *before* this one.
+ *
+ * Its own line, and tested, because getting it wrong is silent. `run.requested`
+ * is emitted when a run is queued rather than when it starts, so the board's
+ * run list already contains the run being started — and it is the last one.
+ * Ask "did the agent change?" against that list and the answer is always no,
+ * because the last run is the one you are about to start.
+ *
+ * That made both halves of the handoff dead: the session id of whichever agent
+ * went last was passed to a different agent as `--resume`, and the briefing was
+ * never rendered at all. Codex failed outright on it — `no rollout found for
+ * thread id` — because it was handed Cursor's session.
+ */
+export function priorRuns<T extends { id: string; noteId: string }>(
+  runs: readonly T[],
+  noteId: string,
+  currentRunId: string,
+): T[] {
+  return runs.filter((r) => r.noteId === noteId && r.id !== currentRunId)
+}
+
 export function promptForRun(
   note: Note,
   past: readonly Run[],
