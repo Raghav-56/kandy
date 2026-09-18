@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { configuredModel as codexModel } from "./agents/codex.js"
+import { catalogued } from "./agents/catalogue.js"
 import { configuredModel as cursorModel } from "./agents/cursor.js"
 import { configuredModel as opencodeModel } from "./agents/opencode.js"
 
@@ -195,6 +196,17 @@ const CONFIGURED: Record<string, () => string | null> = {
 export function modelsFor(agent: string): string[] {
   const menu = MENU[agent]
   if (!menu) return []
+
+  /*
+   * An account's own catalogue beats anything derived here.
+   *
+   * `cursor-agent models` knows which ids this plan may run; the price table
+   * has never heard of them. When the CLI has answered, that answer is the
+   * menu — ordered as Cursor returns it, which puts `auto` first and is their
+   * recommendation rather than ours.
+   */
+  const own = catalogued(agent)
+  if (own.length > 0) return own
 
   // The configured model is known-good even when the table has never heard of
   // it, so it always belongs on the menu.

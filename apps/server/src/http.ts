@@ -29,6 +29,7 @@ import {
 import { defaultModelFor, modelsFor, warmPrices } from "./pricing.js"
 import { computeStats } from "./stats.js"
 import { list as listDir, nativePick, repos, suggestions } from "./browse.js"
+import { warmCatalogue } from "./agents/catalogue.js"
 import type { Engine } from "./engine.js"
 import { detectAll } from "./agents/index.js"
 import { coerceAttribution, commitTrailers, prBody } from "./attribution.js"
@@ -118,7 +119,8 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
 
   // GET /agents/:id/models — a menu for the model pickers
   if (req.method === "GET" && parts[0] === "agents" && parts[2] === "models") {
-    await warmPrices()
+    // Both are cached with their own TTLs, so this is a no-op most of the time.
+    await Promise.all([warmPrices(), warmCatalogue(parts[1]!)])
     return send(res, 200, { models: modelsFor(parts[1]!) })
   }
 
