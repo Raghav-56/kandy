@@ -1,7 +1,6 @@
 {
   "name": "@kandy/core",
   "version": "0.1.0-alpha.1",
-  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,5 +15,16 @@
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.json && node --test"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hiteshbandhu/kandy.git"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

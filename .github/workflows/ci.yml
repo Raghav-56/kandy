@@ -1,0 +1,63 @@
+name: ci
+
+# Every push and every pull request. There was no CI at all until the first
+# release was being prepared, which meant 198 tests that ran only when someone
+# remembered to run them — fine for one person, useless the moment a change
+# arrives from anyone else.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  # A second push supersedes the first; there is no value in finishing a run
+  # for a commit nobody will ship.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches engines.node. kandy uses node:sqlite, which is not in 20.
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # One command: turbo orders them and builds each package's dependencies
+      # first, which is also what proves the workspace graph is honest.
+      - run: pnpm turbo run typecheck lint test build
+
+      # The release path, exercised on every commit rather than discovered on
+      # release day. `pnpm pack` and not `npm pack`: only pnpm rewrites
+      # `workspace:*` into a real version, and an npm-packed tarball fails to
+      # install at all with EUNSUPPORTEDPROTOCOL.
+      - name: the tarball is installable and serves the board
+        run: |
+          set -euo pipefail
+          out="$(mktemp -d)"
+          for p in packages/core packages/client apps/server; do
+            (cd "$p" && pnpm pack --pack-destination "$out" >/dev/null)
+          done
+          cd "$out"
+          npm init -y >/dev/null
+          npm i --silent ./kandy-core-*.tgz ./kandy-client-*.tgz ./kandy-*.tgz
+
+          # The board has to be inside the package. It was not, and the failure
+          # was invisible in the repo because a sibling path happened to resolve.
+          test -f node_modules/kandy/dist/web/index.html
+
+          XDG_STATE_HOME="$out/state" ./node_modules/.bin/kandy serve --port 4911 &
+          for _ in $(seq 1 30); do
+            curl -sf localhost:4911/health >/dev/null && break || sleep 1
+          done
+          curl -sf localhost:4911/health
+          curl -sf localhost:4911/ | grep -q "<title>kandy</title>"
+          kill %1

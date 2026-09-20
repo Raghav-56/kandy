@@ -1,7 +1,6 @@
 {
   "name": "@kandy/client",
   "version": "0.1.0-alpha.1",
-  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,5 +18,16 @@
   },
   "dependencies": {
     "@kandy/core": "workspace:*"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hiteshbandhu/kandy.git"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

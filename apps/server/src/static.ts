@@ -16,8 +16,33 @@ import type { ServerResponse } from "node:http"
  */
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 
-/** dist/ of @kandy/web, resolved from the server's own build output. */
-export const WEB_ROOT = path.resolve(HERE, "../../web/dist")
+/**
+ * Where the board is, installed or in the repo.
+ *
+ * Two places, and the order matters. `dist/web` is inside the published
+ * package, put there at build time; `../../web/dist` is the sibling workspace,
+ * which only exists in this repository.
+ *
+ * Only the second used to be checked, so the packed tarball carried 153 files
+ * and not one of them was the board. `kandy serve` would have started, printed
+ * its banner, and served nothing at all to the first person who installed it —
+ * a failure invisible here, because in the repo that path happens to resolve.
+ */
+export const WEB_ROOTS = [
+  path.resolve(HERE, "web"),
+  path.resolve(HERE, "../../web/dist"),
+]
+
+/**
+ * Looked up each time rather than frozen at import.
+ *
+ * In the repo the board is often built *after* the daemon starts, and a
+ * constant resolved at module load would keep saying "board not built" until
+ * someone restarted a daemon that was working fine.
+ */
+export function webRoot(): string {
+  return WEB_ROOTS.find((dir) => existsSync(path.join(dir, "index.html"))) ?? WEB_ROOTS[0]!
+}
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -32,7 +57,7 @@ const TYPES: Record<string, string> = {
 }
 
 export function hasWebBuild(): boolean {
-  return existsSync(path.join(WEB_ROOT, "index.html"))
+  return existsSync(path.join(webRoot(), "index.html"))
 }
 
 /**
@@ -43,14 +68,15 @@ export function serveStatic(pathname: string, res: ServerResponse): boolean {
   if (!hasWebBuild()) return false
 
   const rel = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "")
-  let file = path.join(WEB_ROOT, rel)
+  const root = webRoot()
+  let file = path.join(root, rel)
 
   // Never let a crafted path escape the build directory.
-  if (!file.startsWith(WEB_ROOT + path.sep) && file !== path.join(WEB_ROOT, "index.html")) {
-    file = path.join(WEB_ROOT, "index.html")
+  if (!file.startsWith(root + path.sep) && file !== path.join(root, "index.html")) {
+    file = path.join(root, "index.html")
   }
   if (!existsSync(file) || !statSync(file).isFile()) {
-    file = path.join(WEB_ROOT, "index.html")
+    file = path.join(root, "index.html")
   }
 
   const ext = path.extname(file)

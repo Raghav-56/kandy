@@ -1,13 +1,12 @@
 {
   "name": "kandy",
   "version": "0.1.0-alpha.1",
-  "private": true,
   "type": "module",
   "bin": {
     "kandy": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js && node scripts/stage-web.mjs",
     "dev": "node --watch --experimental-strip-types src/cli.ts",
     "start": "node dist/cli.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -17,7 +16,7 @@
     "@kandy/core": "workspace:*",
     "@kandy/client": "workspace:*"
   },
-  "description": "A board for orchestrating coding agents. Each note is one job, run in its own git worktree.",
+  "description": "A board for coding agents. Each note is one job, run in its own git worktree.",
   "license": "MIT",
   "engines": {
     "node": ">=22"
@@ -40,5 +39,11 @@
     "dist",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@kandy/web": "workspace:*"
+  }
 }

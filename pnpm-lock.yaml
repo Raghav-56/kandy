@@ -35,6 +35,10 @@ importers:
       '@kandy/core':
         specifier: workspace:*
         version: link:../../packages/core
+    devDependencies:
+      '@kandy/web':
+        specifier: workspace:*
+        version: link:../web
 
   apps/tui:
     dependencies:

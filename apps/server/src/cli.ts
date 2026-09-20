@@ -6,6 +6,7 @@ import { Runner } from "./runner.js"
 import { createHttpServer } from "./http.js"
 import { ASK_TIMEOUT_MS, Permissions } from "./permission.js"
 import { loadToken } from "./auth.js"
+import { kandyVersion } from "./version.js"
 import { DB_PATH, TOKEN_PATH } from "./paths.js"
 import { hasWebBuild } from "./static.js"
 import { warmPrices } from "./pricing.js"
@@ -281,7 +282,17 @@ async function main(): Promise<void> {
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
   // and reporting "nothing here" is worse than refusing it.
-  const KNOWN = [...VALUED, ...BARE, "--help", "-h"]
+  const KNOWN = [...VALUED, ...BARE, "--help", "-h", "--version", "-V"]
+
+  /*
+   * `--version` before anything else, because the first thing anyone is asked
+   * in a bug report is which build they are on, and the honest answer has to
+   * come from the package that is running rather than from a constant.
+   */
+  if (argv.includes("--version") || argv.includes("-V")) {
+    process.stdout.write(kandyVersion() + "\n")
+    return
+  }
   const unknown = argv.find((a) => a.startsWith("-") && !KNOWN.includes(a))
   if (unknown) {
     const guess = KNOWN.find((k) => k.replace(/^-+/, "") === unknown.replace(/^-+/, ""))

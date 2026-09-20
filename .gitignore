@@ -16,3 +16,8 @@ dist/
 # vitepress build output and cache
 apps/docs/.vitepress/dist/
 apps/docs/.vitepress/cache/
+
+# Staged into the package at build time from the repo root.
+apps/server/README.md
+apps/server/LICENSE
+apps/server/dist/

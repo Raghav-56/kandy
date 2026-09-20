@@ -1,5 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
+import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
+import { fileURLToPath } from "node:url"
 import path from "node:path"
 import {
   between,
@@ -17,6 +19,7 @@ import type { PrWatch } from "./prwatch.js"
 import type { Permissions } from "./permission.js"
 import { detectForge, openPr } from "./forge.js"
 import { serveStatic } from "./static.js"
+import { kandyVersion } from "./version.js"
 import {
   clearStaged,
   describe,
@@ -46,7 +49,7 @@ import {
 
 import { authorized } from "./auth.js"
 
-const VERSION = "0.0.0"
+const VERSION = kandyVersion()
 const STARTED = Date.now()
 
 export type ServerDeps = {
