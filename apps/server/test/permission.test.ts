@@ -44,6 +44,28 @@ function fresh(timeoutMs = 50) {
 /** Let the pending request reach the board before asserting about it. */
 const settle = () => new Promise((r) => setImmediate(r))
 
+/**
+ * Hold the event loop open while waiting on a question to expire.
+ *
+ * The timeout inside Permissions is deliberately `unref`'d — a question nobody
+ * has answered must not keep the daemon alive. In a test where that timer is
+ * the only pending work, the loop empties, node decides the awaited promise
+ * has been abandoned, and reports "Promise resolution is still pending but the
+ * event loop has already resolved" — cancelling the rest of the file with it.
+ *
+ * Passed locally and failed on CI's first run, because this machine had enough
+ * incidental handles open to mask it. The fix belongs here rather than in
+ * `permission.ts`: the daemon's behaviour is the correct one.
+ */
+async function awaitingTimeout<T>(work: Promise<T>): Promise<T> {
+  const keepAlive = setInterval(() => {}, 1_000)
+  try {
+    return await work
+  } finally {
+    clearInterval(keepAlive)
+  }
+}
+
 test("an unanswered request blocks, and the question lands on the board", async () => {
   const { permissions, view } = fresh(10_000)
   const pending = permissions.request(RUN, "Bash", { command: "pnpm test" })
@@ -158,7 +180,7 @@ test("deny without a message still tells the agent not to retry", async () => {
 test("a question nobody answers times out rather than hanging forever", async () => {
   const { permissions, engine, view } = fresh(30)
   const started = Date.now()
-  const verdict = await permissions.request(RUN, "Bash", { command: "pnpm test" })
+  const verdict = await awaitingTimeout(permissions.request(RUN, "Bash", { command: "pnpm test" }))
 
   assert.ok(Date.now() - started >= 25)
   assert.equal(verdict.behavior, "deny")
