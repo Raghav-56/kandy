@@ -185,9 +185,34 @@ export const claude: AgentAdapter = {
         break
       }
 
-      // Advertised rate-limit notices are interleaved into the stream and are
-      // not part of the conversation.
-      case "rate_limit_event":
+      /*
+       * The subscription's usage windows, reported by Claude Code itself.
+       *
+       * Interleaved into the stream and not part of the conversation, so they
+       * never reach the transcript — but they were being thrown away, and they
+       * are the one number a Max subscriber actually watches: how much of the
+       * five-hour and weekly allowance is gone, and when it comes back.
+       *
+       * Captured shape, 2.1.278:
+       *   rate_limit_info: { status: "allowed",
+       *     unifiedWindows: { five_hour: { utilization: 0.23, resetsAt: 1790079600 },
+       *                       seven_day: { utilization: 0.7,  resetsAt: 1790193600 } } }
+       * `resetsAt` is epoch seconds.
+       */
+      case "rate_limit_event": {
+        const info = (msg["rate_limit_info"] ?? {}) as Record<string, any>
+        const windows = Object.entries((info["unifiedWindows"] ?? {}) as Record<string, any>)
+          .filter(([, w]) => typeof w?.utilization === "number")
+          .map(([window, w]) => ({
+            window,
+            used: Math.max(0, Math.min(1, w.utilization as number)),
+            resetsAt: typeof w.resetsAt === "number" ? w.resetsAt * 1000 : null,
+          }))
+        if (windows.length > 0) {
+          out.push({ kind: "limits", status: String(info["status"] ?? "allowed"), windows })
+        }
+        break
+      }
       case "system":
         break
     }

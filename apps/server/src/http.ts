@@ -20,6 +20,7 @@ import type { Permissions } from "./permission.js"
 import { detectForge, openPr } from "./forge.js"
 import { serveStatic } from "./static.js"
 import { kandyVersion } from "./version.js"
+import { limitsFor } from "./limits.js"
 import {
   clearStaged,
   describe,
@@ -151,7 +152,10 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     const failures = new Map(deps.runner.agentsFailingAuth().map((f) => [f.agent, f.at]))
     const agents = (await detectAll()).map((a) => {
       const at = failures.get(a.id) ?? null
-      return at ? { ...a, authed: false, authFailedAt: at } : { ...a, authFailedAt: null }
+      const limits = limitsFor(a.id)
+      return at
+        ? { ...a, authed: false, authFailedAt: at, limits }
+        : { ...a, authFailedAt: null, limits }
     })
     return send(res, 200, { agents })
   }

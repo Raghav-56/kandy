@@ -36,6 +36,7 @@ import {
 import { Logo } from "@/brand/Logo"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { authState } from "@/features/agents/authState"
+import { Limits, limitTone, tightest } from "@/features/agents/Limits"
 import type { Theme } from "@/hooks/useTheme"
 import { cn, money } from "@/lib/utils"
 
@@ -119,6 +120,14 @@ export function Sidebar({
       a.installed &&
       (a.authFailedAt !== null || (a.expiresAt !== null && a.expiresAt <= Date.now())),
   )
+
+  /* The fullest usage window any agent reported. A near-full limit is the
+     thing to notice before a run stops halfway, so the footer says it without
+     being opened — after an expired sign-in, which blocks everything. */
+  const pressure = agents
+    .map((a) => tightest(a.limits))
+    .filter((t): t is { label: string; used: number } => t !== null)
+    .sort((a, b) => b.used - a.used)[0] ?? null
 
   /* One badge, not four. The list already shows every status; what belongs
      here is the single most urgent thing, so the rail can carry it too. */
@@ -289,8 +298,19 @@ export function Sidebar({
                   </span>
                   <div className="grid flex-1 text-left leading-tight">
                     <span className="truncate text-aux font-medium">{user}</span>
-                    <span className="text-muted-foreground truncate text-meta">
-                      {stale.length > 0
+                    <span
+                      className={cn(
+                        "truncate text-meta",
+                        pressure && limitTone(pressure.used) !== "ok" && stale.length === 0
+                          ? limitTone(pressure.used) === "stop"
+                            ? "text-berry"
+                            : "text-lemon"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {stale.length === 0 && pressure && limitTone(pressure.used) !== "ok"
+                        ? `${pressure.label} limit ${Math.round(pressure.used * 100)}%`
+                        : stale.length > 0
                         ? `${stale.length} sign-in${stale.length === 1 ? "" : "s"} need${stale.length === 1 ? "s" : ""} attention`
                         : ready.length > 0
                           ? `${ready.length} ${ready.length === 1 ? "agent" : "agents"} ready`
@@ -314,13 +334,13 @@ export function Sidebar({
                 {agents
                   .filter((a) => a.installed)
                   .map((a) => (
+                    <div key={a.id} className="px-2 py-1.5">
                     <div
-                      key={a.id}
                       // Not a DropdownMenuItem: there is nothing to choose
                       // here. It still wears the item's exact gutter, or the
                       // marks would sit in a different column from the icons
                       // two rows below.
-                      className="flex items-center gap-2 px-2 py-1.5 text-ui"
+                      className="flex items-center gap-2 text-ui"
                     >
                       <AgentMark agent={a.id} size={16} />
                       <span className="min-w-0 flex-1 truncate">{agentLabel(a.id)}</span>
@@ -336,6 +356,8 @@ export function Sidebar({
                       >
                         {authState(a).label}
                       </span>
+                    </div>
+                    {a.limits && a.limits.windows.length > 0 && <Limits limits={a.limits} />}
                     </div>
                   ))}
 

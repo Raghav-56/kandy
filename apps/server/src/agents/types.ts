@@ -25,6 +25,8 @@ export type AgentEvent =
    * the runner it is safe to close the pipe and let the process exit.
    */
   | { kind: "turn_end" }
+  /** The subscription's usage windows, as the agent reported them. */
+  | { kind: "limits"; status: string; windows: import("@kandy/core").LimitWindow[] }
   | { kind: "error"; message: string }
 
 export type SpawnOptions = {

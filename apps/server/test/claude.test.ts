@@ -150,3 +150,40 @@ test("tokens count the cached halves too, so agents can be compared", () => {
   assert.equal(usage.turns, 7, "Claude does report turns, and they are kept")
   assert.equal(usage.costUsd, 0.42)
 })
+
+test("the subscription's usage windows are kept, not thrown away", () => {
+  // The real frame from Claude Code 2.1.278, trimmed only of ids.
+  const out = claude.parse(
+    line({
+      type: "rate_limit_event",
+      rate_limit_info: {
+        status: "allowed",
+        resetsAt: 1790079600,
+        rateLimitType: "five_hour",
+        overageStatus: "rejected",
+        isUsingOverage: false,
+        unifiedWindows: {
+          five_hour: { utilization: 0.23, resetsAt: 1790079600 },
+          seven_day: { utilization: 0.7, resetsAt: 1790193600 },
+        },
+      },
+    }),
+  )
+  assert.deepEqual(out, [
+    {
+      kind: "limits",
+      status: "allowed",
+      windows: [
+        // resetsAt arrives in seconds and leaves in milliseconds, like every
+        // other timestamp in kandy.
+        { window: "five_hour", used: 0.23, resetsAt: 1790079600_000 },
+        { window: "seven_day", used: 0.7, resetsAt: 1790193600_000 },
+      ],
+    },
+  ])
+})
+
+test("a rate-limit frame with no windows says nothing rather than zero", () => {
+  // "No reading" and "0% used" are different claims; only one is true here.
+  assert.deepEqual(claude.parse(line({ type: "rate_limit_event", rate_limit_info: { status: "allowed" } })), [])
+})

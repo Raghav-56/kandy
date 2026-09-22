@@ -157,6 +157,33 @@ export type Rejection = { name: string; reason: string }
  */
 export type Delivery = "live" | "queued"
 
+/**
+ * One usage window on a subscription — "how much of the five-hour allowance
+ * have I burned, and when does it come back".
+ */
+export type LimitWindow = {
+  /** As the provider names it: `five_hour`, `seven_day`. */
+  window: string
+  /** Fraction used, 0–1. */
+  used: number
+  /** When it resets, epoch ms. */
+  resetsAt: number | null
+}
+
+/**
+ * The last thing an agent said about its rate limits.
+ *
+ * Reported by the agent itself, mid-run — Claude Code interleaves a
+ * `rate_limit_event` into its stream — so it is as fresh as the last run and
+ * no fresher. `at` is when it was heard, so a stale reading can say so.
+ */
+export type AgentLimits = {
+  at: number
+  /** `allowed`, or the provider's word for throttled. */
+  status: string
+  windows: LimitWindow[]
+}
+
 export type AgentInfo = {
   id: AgentId
   installed: boolean
@@ -172,6 +199,8 @@ export type AgentInfo = {
    * so this stays null there and absence means "it did not say", never "fine".
    */
   expiresAt: number | null
+  /** Subscription usage, when the agent reports it. */
+  limits?: AgentLimits | null
   /**
    * How the agent is paid for: a plan name, or "api" for a key.
    *

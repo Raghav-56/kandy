@@ -17,6 +17,7 @@ import {
 import type { Engine } from "./engine.js"
 import { priorRuns, promptForRun } from "./handoff.js"
 import { takeStripped } from "./gc.js"
+import { recordLimits } from "./limits.js"
 import type { AskChannel } from "./agents/types.js"
 import { closeAskChannel, openAskChannel, type Permissions } from "./permission.js"
 import { adapter } from "./agents/index.js"
@@ -480,7 +481,7 @@ export class Runner {
     if (!a.live) child.stdin?.end()
 
     this.syncColumn(q.boardId, q.noteId)
-    this.consume(q.runId, child, (line) => a.parse(line, model ? { model } : {}))
+    this.consume(q.runId, child, (line) => a.parse(line, model ? { model } : {}), q.agent)
 
     child.on("error", (err) => {
       this.say(q.runId, "error", err.message)
@@ -495,6 +496,7 @@ export class Runner {
     runId: string,
     child: ChildProcess,
     parse: (line: string) => import("./agents/types.js").AgentEvent[],
+    agent: AgentId,
   ): void {
     if (child.stdout) {
       const rl = createInterface({ input: child.stdout })
@@ -558,6 +560,11 @@ export class Runner {
               )
               break
             }
+            case "limits":
+              // Account-level, not run-level: recorded against the agent so the
+              // sidebar can show it, never written into the transcript.
+              recordLimits(agent, { status: ev.status, windows: ev.windows })
+              break
             case "turn_end":
               // One run is one turn. Closing stdin lets the agent exit, which
               // finishes the run, frees the slot, and moves the note to review.
