@@ -44,6 +44,7 @@ import {
   diffStat,
   mergeBranch,
   removeWorktree,
+  retireWorktree,
   trackedPaths,
 } from "./worktree.js"
 
@@ -814,14 +815,22 @@ async function noteAction(
             )
           }
         }
-        // Both verdicts end the same way: the worktree and the branch have
-        // served their purpose. A merged branch is safe to delete — the
-        // --no-ff merge commit names it, so the history stays readable — and a
-        // branch per note piles up fast if we keep them.
-        await removeWorktree(view.board.repoPath, wt.path, true).catch(() => {})
-        await deleteBranch(view.board.repoPath, wt.branch)
-        deps.runner.forget(noteId)
-        emit(deps, event("note.reclaimed", { noteId }))
+        /*
+         * Both verdicts end the same way, and that way used to lose work: the
+         * worktree was force-removed and the branch deleted, so discarding a
+         * note destroyed the agent's commits and anything uncommitted, with
+         * nothing pushed first. Push, then delete — and if either cannot be
+         * done safely, keep the checkout and say why.
+         */
+        const retired = await retireWorktree(view.board.repoPath, wt).catch(
+          (err: unknown) => ({ removed: false as const, reason: String(err) }),
+        )
+        if (retired.removed) {
+          deps.runner.forget(noteId)
+          emit(deps, event("note.reclaimed", { noteId }))
+        } else if (note.runId) {
+          deps.engine.say(note.runId, "system", `kept the checkout: ${retired.reason}`)
+        }
       }
 
       // Merged or discarded, the note is finished with; anything still staged

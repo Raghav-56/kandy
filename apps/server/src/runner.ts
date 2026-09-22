@@ -28,6 +28,7 @@ import {
   carryInto,
   commitLeftovers,
   removeWorktree,
+  retireWorktree,
   createWorktree,
   diff as gitDiff,
   diffNumbers,
@@ -751,12 +752,26 @@ export class Runner {
    * A note landed somewhere other than here — a PR was merged on the forge.
    * Clean up after it exactly as a local merge would.
    */
+  /**
+   * A note's pull request merged: put its checkout away.
+   *
+   * Used to force-remove the worktree and tell nobody, so uncommitted changes
+   * went with it and the note kept naming a directory that was gone. It goes
+   * through the same push-then-delete path as a discard now, and says so in
+   * the log when it cannot.
+   */
   landed(boardId: string, noteId: string): void {
     const wt = this.worktrees.get(noteId)
     const view = this.getView(boardId)
     if (wt && view) {
-      void removeWorktree(view.board.repoPath, wt.path, true).catch(() => {})
-      this.worktrees.delete(noteId)
+      void retireWorktree(view.board.repoPath, wt)
+        .then((r) => {
+          if (r.removed) {
+            this.worktrees.delete(noteId)
+            this.emit(event("note.reclaimed", { noteId }))
+          }
+        })
+        .catch(() => {})
     }
     this.syncColumn(boardId, noteId)
   }

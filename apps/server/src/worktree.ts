@@ -404,3 +404,67 @@ export async function trackedPaths(
   }
   return { files, dirs: [...dirs].sort() }
 }
+
+export type Retired =
+  | { removed: true; pushed: boolean; branchKept: boolean }
+  | { removed: false; reason: string }
+
+/**
+ * Put a finished note's checkout away without losing a line of its work.
+ *
+ * The rule is the one that makes deleting safe: **push first, then delete.**
+ * Once the branch is on the remote, the checkout is only a place the work
+ * happened, and it can go.
+ *
+ * This replaces two paths that disagreed and one that lost work. Discarding a
+ * note force-removed its worktree and deleted its branch — so the agent's
+ * commits *and* anything uncommitted were gone, with nothing pushed first. A
+ * merged PR force-removed the worktree too, and never told the log, so the
+ * note went on naming a directory that no longer existed.
+ *
+ * In order, and each step can stop the next:
+ *
+ * 1. Uncommitted changes → keep everything. Nothing here commits on anyone's
+ *    behalf, and `--force` is never used.
+ * 2. A remote exists → push the branch. If the push fails, keep everything:
+ *    the checkout might be the only copy.
+ * 3. Remove the worktree.
+ * 4. Delete the local branch *only* if it reached the remote. With no remote,
+ *    the local branch is the only copy of the work, so it stays.
+ *
+ * A branch with nothing on it beyond its base has nothing to lose, and is not
+ * pushed — a remote full of empty branches is its own kind of mess.
+ */
+export async function retireWorktree(
+  repoPath: string,
+  wt: { path: string; branch: string; baseRef: string },
+): Promise<Retired> {
+  if (existsSync(wt.path) && (await isDirty(wt.path))) {
+    return { removed: false, reason: "uncommitted changes in the checkout" }
+  }
+
+  const ahead = Number(
+    (await git(repoPath, "rev-list", "--count", `${wt.baseRef}..${wt.branch}`).catch(() => "0")).trim(),
+  )
+  const remote = (await git(repoPath, "remote").catch(() => "")).split("\n").map((r) => r.trim()).find(Boolean)
+
+  let pushed = false
+  if (ahead > 0 && remote) {
+    try {
+      await git(repoPath, "push", "--quiet", "-u", remote, wt.branch)
+      pushed = true
+    } catch (err) {
+      const why = err instanceof Error ? err.message.split("\n")[0]! : String(err)
+      return { removed: false, reason: `could not push ${wt.branch} to ${remote}: ${why}` }
+    }
+  }
+
+  if (existsSync(wt.path)) await removeWorktree(repoPath, wt.path)
+
+  // Nothing on it, or safely on the remote: the local branch is clutter.
+  // Unpushed work with no remote to send it to: the local branch is the work.
+  const branchKept = ahead > 0 && !pushed
+  if (!branchKept) await deleteBranch(repoPath, wt.branch)
+
+  return { removed: true, pushed, branchKept }
+}

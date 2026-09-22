@@ -264,3 +264,88 @@ test("a merge commit is unsigned by default and signed on request", async () => 
   )
   await removeWorktree(dir, signed.path, true)
 })
+
+/*
+ * Retiring a finished note's checkout: push first, then delete.
+ *
+ * What these replace: discarding a note force-removed its worktree and deleted
+ * its branch, so the agent's commits and anything uncommitted were gone with
+ * nothing pushed. Every case below is a way that could have lost work.
+ */
+import { retireWorktree } from "../dist/worktree.js"
+
+const gitOut = (cwd: string, ...args: string[]) =>
+  execFileSync("git", args, { cwd, encoding: "utf8" }).trim()
+
+/** A repo with a bare remote beside it, the way a real clone has origin. */
+function repoWithRemote(): { dir: string; remote: string } {
+  const dir = repo()
+  const remote = realpathSync(mkdtempSync(path.join(tmpdir(), "kandy-remote-")))
+  execFileSync("git", ["init", "-q", "--bare"], { cwd: remote })
+  execFileSync("git", ["remote", "add", "origin", remote], { cwd: dir })
+  return { dir, remote }
+}
+
+async function workOn(dir: string, id: string) {
+  const wt = await createWorktree(dir, id, "work")
+  writeFileSync(path.join(wt.path, `${id}.ts`), "export const x = 1\n")
+  execFileSync("git", ["add", "-A"], { cwd: wt.path })
+  execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "work"], { cwd: wt.path })
+  return wt
+}
+
+test("a finished note is pushed, then its checkout and local branch go", async () => {
+  const { dir, remote } = repoWithRemote()
+  const wt = await workOn(dir, "note_push")
+
+  const r = await retireWorktree(dir, wt)
+  assert.deepEqual(r, { removed: true, pushed: true, branchKept: false })
+  assert.equal(existsSync(wt.path), false)
+  // Gone locally — and safe, because the remote has every commit.
+  assert.equal(gitOut(dir, "branch", "--list", wt.branch), "")
+  assert.match(gitOut(remote, "branch", "--list", wt.branch), new RegExp(wt.branch.replace(/[/.]/g, "\\$&")))
+})
+
+test("uncommitted work keeps the whole checkout", async () => {
+  // Nothing here commits on anyone's behalf, and --force is never used.
+  const { dir } = repoWithRemote()
+  const wt = await workOn(dir, "note_dirty")
+  writeFileSync(path.join(wt.path, "half-done.ts"), "// not committed yet\n")
+
+  const r = await retireWorktree(dir, wt)
+  assert.equal(r.removed, false)
+  assert.match(!r.removed ? r.reason : "", /uncommitted/)
+  assert.equal(existsSync(path.join(wt.path, "half-done.ts")), true)
+})
+
+test("with no remote, the local branch is the only copy, so it stays", async () => {
+  const dir = repo()
+  const wt = await workOn(dir, "note_local")
+
+  const r = await retireWorktree(dir, wt)
+  assert.deepEqual(r, { removed: true, pushed: false, branchKept: true })
+  assert.equal(existsSync(wt.path), false)
+  assert.notEqual(gitOut(dir, "branch", "--list", wt.branch), "", "the work must survive somewhere")
+})
+
+test("a push that fails keeps everything, because the checkout may be the only copy", async () => {
+  const dir = repo()
+  execFileSync("git", ["remote", "add", "origin", "/nonexistent/remote.git"], { cwd: dir })
+  const wt = await workOn(dir, "note_offline")
+
+  const r = await retireWorktree(dir, wt)
+  assert.equal(r.removed, false)
+  assert.match(!r.removed ? r.reason : "", /could not push/)
+  assert.equal(existsSync(wt.path), true)
+  assert.notEqual(gitOut(dir, "branch", "--list", wt.branch), "")
+})
+
+test("a branch with nothing on it is not pushed — there is nothing to lose", async () => {
+  // A remote full of empty branches is its own kind of mess.
+  const { dir, remote } = repoWithRemote()
+  const wt = await createWorktree(dir, "note_empty", "work")
+
+  const r = await retireWorktree(dir, wt)
+  assert.deepEqual(r, { removed: true, pushed: false, branchKept: false })
+  assert.equal(gitOut(remote, "branch", "--list", wt.branch), "")
+})
