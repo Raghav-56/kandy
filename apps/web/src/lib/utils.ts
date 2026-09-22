@@ -1,4 +1,29 @@
-export { cn } from "cn"
+import { createCn } from "cn/config"
+
+/**
+ * `cn`, taught kandy's type scale.
+ *
+ * The class merger knows Tailwind's own font sizes — `text-xs`, `text-sm` —
+ * and nothing about `--text-*` tokens added in `@theme`. Faced with
+ * `text-meta text-muted-foreground` it read both as colours and kept only the
+ * last, so the size was silently deleted and the text fell back to whatever it
+ * inherited. Reversed, the colour was deleted instead.
+ *
+ * Which quietly undid the type scale wherever a size met a colour inside a
+ * `cn()` call. Found because the sidebar footer's "3 agents ready" measured
+ * 14px against the 11px its class asked for.
+ *
+ * Every size the scale defines is listed here. Add one to `styles.css`, add it
+ * here — or it will be merged away the first time it shares a call with a
+ * colour.
+ */
+export const cn = createCn({
+  extend: {
+    classGroups: {
+      "font-size": [{ text: ["micro", "meta", "aux", "ui", "title", "prose", "lede", "display"] }],
+    },
+  },
+})
 
 export function relTime(ts: number): string {
   const s = Math.round((Date.now() - ts) / 1000)
