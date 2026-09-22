@@ -12,6 +12,13 @@ import { cubicBezier } from "animejs"
  */
 export const RISE = cubicBezier(0.23, 1, 0.32, 1)
 export const SPRING = cubicBezier(0.34, 1.4, 0.64, 1)
+/**
+ * For things moving across the screen rather than arriving on it — mirrors
+ * --ease-in-out. RISE starts fast because an entrance should answer at once;
+ * something already on screen and changing place reads better accelerating
+ * away and settling, which is what this does.
+ */
+export const IN_OUT = cubicBezier(0.77, 0, 0.175, 1)
 
 /** Whether to animate at all. Checked at call time, not at import. */
 export function motionAllowed(): boolean {

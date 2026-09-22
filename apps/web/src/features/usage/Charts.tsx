@@ -45,10 +45,14 @@ export function RankedBars({
                 <span className="text-muted-foreground/60 ml-2 text-meta">{r.meta}</span>
               )}
             </span>
-            <span className="col-span-2 mt-1 block h-1.5 w-full rounded-full bg-[var(--color-hairline)]">
+            {/* Moved, not resized. Animating width re-laid out every row on every
+                frame; a transform is composited. A full-width fill slides left
+                inside a clipped track rather than scaling, because scaleX
+                squashes the rounded end into an ellipse at small values. */}
+            <span className="col-span-2 mt-1 block h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-hairline)]">
               <span
-                className="block h-full rounded-full bg-[var(--color-mark-solo)] transition-[width] duration-500 ease-[var(--ease-rise)]"
-                style={{ width: `${pct}%` }}
+                className="block h-full w-full rounded-full bg-[var(--color-mark-solo)] transition-transform duration-500 ease-out"
+                style={{ transform: `translateX(${pct - 100}%)` }}
               />
             </span>
           </li>

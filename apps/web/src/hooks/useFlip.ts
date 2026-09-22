@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from "react"
 import { animate } from "animejs"
-import { RISE, motionAllowed } from "@/lib/motion"
+import { IN_OUT, motionAllowed } from "@/lib/motion"
 
 /**
  * Keep the eye on a row that just moved.
@@ -55,10 +55,17 @@ export function useFlip(container: React.RefObject<HTMLElement | null>, keys: st
       // Sub-pixel drift from a reflow is not movement worth animating.
       if (Math.abs(dy) <= 1) continue
 
+      /*
+       * A row changing groups is moving across the screen, not arriving on
+       * it, so it takes the in-out curve rather than the entrance one — and
+       * 240ms rather than 320, inside the budget UI motion gets. 320 on an
+       * ease-out spent its last third barely moving, which read as the list
+       * still settling after it had visibly arrived.
+       */
       animate(row, {
         translateY: [dy, 0],
-        duration: 320,
-        ease: RISE,
+        duration: 240,
+        ease: IN_OUT,
       })
     }
   }, [keys, container])

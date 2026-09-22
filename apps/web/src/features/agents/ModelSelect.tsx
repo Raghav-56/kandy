@@ -170,7 +170,20 @@ function ModelFilter({
         <div
           className={cn(
             "border-line bg-popover absolute left-0 z-50 w-[min(340px,86vw)] overflow-hidden rounded-xl border p-1.5 shadow-xl shadow-black/30",
-            up ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]",
+            /*
+             * The same entrance as the Radix Select beside it, which this is
+             * standing in for — it appeared instantly while every other picker
+             * faded and scaled, and a control that behaves unlike its siblings
+             * reads as broken rather than fast. Scaled from the edge nearest
+             * the trigger, so it grows out of the button rather than the
+             * middle of the air. Opened with the mouse, a handful of times a
+             * day: the budget allows it. The `@` picker in the composer is
+             * deliberately not given this — it opens on a keystroke, constantly.
+             */
+            "animate-in fade-in-0 zoom-in-[0.97] duration-150 ease-out",
+            up
+              ? "bottom-[calc(100%+6px)] origin-bottom-left slide-in-from-bottom-1"
+              : "top-[calc(100%+6px)] origin-top-left slide-in-from-top-1",
           )}
         >
           <input

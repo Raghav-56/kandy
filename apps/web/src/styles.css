@@ -265,8 +265,31 @@ body {
 @keyframes rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 .rise { animation: rise 170ms var(--ease-rise) both; }
 
+/*
+ * Reduced motion means fewer and gentler, not none.
+ *
+ * This used to cover only kandy's own four keyframes. Every popover, menu,
+ * select, tooltip and dialog still zoomed and slid in — tw-animate-css does
+ * not consult the preference — and six `animate-pulse`s ran forever.
+ *
+ * The fades stay, because they say "this appeared" without moving anything.
+ * The scale and translate go: tw-animate builds both from these variables, so
+ * pinning them to identity leaves an opacity-only entrance and exit. Infinite
+ * pulses stop outright; a static dot still carries the state.
+ */
 @media (prefers-reduced-motion: reduce) {
   .shimmer::after, .breathe, .rise, .kandy-tick { animation: none; }
+  .animate-pulse, .animate-ping { animation: none; }
+  *, ::before, ::after {
+    --tw-enter-scale: 1 !important;
+    --tw-exit-scale: 1 !important;
+    --tw-enter-translate-x: 0 !important;
+    --tw-enter-translate-y: 0 !important;
+    --tw-exit-translate-x: 0 !important;
+    --tw-exit-translate-y: 0 !important;
+    --tw-enter-rotate: 0 !important;
+    --tw-exit-rotate: 0 !important;
+  }
 }
 
 /* Markdown from agents: tight rhythm, because these are messages in a stream
