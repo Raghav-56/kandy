@@ -5,7 +5,6 @@ import path from "node:path"
 import type { AgentAdapter, AgentEvent } from "./types.js"
 
 /** Claude Code's own Keychain item name on macOS. */
-const KEYCHAIN_ITEM = "Claude Code-credentials"
 
 /**
  * Claude Code adapter.
@@ -222,69 +221,56 @@ function summarize(name: unknown, input: Record<string, unknown> | undefined): s
 }
 
 /**
- * What Claude Code's stored credential says about itself.
+ * Whether anyone is signed in to Claude Code, and on which plan — asked of
+ * Claude Code itself.
  *
- * Only the metadata beside the tokens: when the sign-in dies and which plan it
- * is on. The tokens themselves are never read — kandy has no use for them, and
- * the spawned child already has its own.
+ * This used to read the Keychain item `Claude Code-credentials` (and on Linux
+ * `~/.claude/.credentials.json`) to pull out an expiry date and a plan. Its
+ * comment said the tokens were never read; they were — `security
+ * find-generic-password -w` returns the whole secret, which *is* the token
+ * JSON, so every detection loaded a live OAuth credential into this process to
+ * look at two fields beside it.
  *
- * The Keychain first, and this is the whole subtlety. On macOS Claude Code
- * keeps the live credential in the Keychain and `~/.claude/.credentials.json`
- * is left behind from before it moved, so reading the file reported a sign-in
- * that expired a month ago while the real one was good for another fortnight.
- * A false "expired" is worse than no expiry at all: it sends you to re-login
- * for nothing.
+ * Nothing was ever sent anywhere, but reading another application's credential
+ * store is exactly what got opencode's users banned when a community plugin
+ * did it to make its own requests. `claude auth status --json` answers the
+ * same question the sanctioned way and never touches the token.
  *
- * `refreshTokenExpiresAt` is the field that matters. The access token expires
- * every few hours and is refreshed silently; it is the refresh token running
- * out that makes you sign in again.
+ * What it costs: auth status reports no expiry, so there is no "expires in 12
+ * days". The runtime auth-failure detection catches a dead sign-in on its
+ * first failed run, which is the more honest signal anyway — Claude Code's own
+ * init succeeds on cached credentials, so a cheerful "ready" was never a
+ * promise.
  *
- * Anything unreadable returns null, never a guess. T3 Code declines to probe
- * for this at all — Claude Code's local init succeeds on cached credentials,
- * so their reliable signal is a 401 at run time — which is a fair warning that
- * a cheerful "ready" here is not a promise.
+ * Half a second per call and detection runs on every agents request, so the
+ * answer is held for a minute.
  */
-function readClaudeAuth(): { expiresAt: number | null; plan: string | null } | null {
-  const raw = keychainCredential() ?? fileCredential()
-  if (!raw) return null
+const AUTH_TTL_MS = 60_000
+let authCache: { at: number; value: ReturnType<typeof askClaudeAuth> } | null = null
+
+function readClaudeAuth(): { expiresAt: number | null; plan: string | null; authed?: boolean } | null {
+  if (authCache && Date.now() - authCache.at < AUTH_TTL_MS) return authCache.value
+  const value = askClaudeAuth()
+  authCache = { at: Date.now(), value }
+  return value
+}
+
+function askClaudeAuth(): { expiresAt: number | null; plan: string | null; authed?: boolean } | null {
   try {
-    const oauth = (JSON.parse(raw) as Record<string, any>)?.["claudeAiOauth"]
-    if (!oauth) return null
-    const exp = oauth["refreshTokenExpiresAt"] ?? oauth["expiresAt"]
+    const out = execFileSync("claude", ["auth", "status", "--json"], {
+      encoding: "utf8",
+      timeout: 8000,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+    const s = JSON.parse(out) as { loggedIn?: unknown; subscriptionType?: unknown }
     return {
-      expiresAt: typeof exp === "number" ? exp : null,
-      plan: typeof oauth["subscriptionType"] === "string" ? oauth["subscriptionType"] : null,
+      expiresAt: null,
+      plan: typeof s.subscriptionType === "string" ? s.subscriptionType : null,
+      authed: s.loggedIn === true,
     }
   } catch {
-    return null
-  }
-}
-
-/** The live credential on macOS. Silent — no prompt for the user's own item. */
-function keychainCredential(): string | null {
-  if (process.platform !== "darwin") return null
-  try {
-    return execFileSync("security", ["find-generic-password", "-s", KEYCHAIN_ITEM, "-w"], {
-      encoding: "utf8",
-      timeout: 4000,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim()
-  } catch {
-    // No item, or it declined to hand it over. Either way we know nothing.
-    return null
-  }
-}
-
-/**
- * The file, which is authoritative on Linux and a relic on macOS.
- *
- * Only consulted when the Keychain gave nothing, so a stale copy can never
- * outvote the credential actually in use.
- */
-function fileCredential(): string | null {
-  try {
-    return readFileSync(path.join(homedir(), ".claude", ".credentials.json"), "utf8")
-  } catch {
+    // Not installed, too old to have `auth status`, or it said something we
+    // cannot read. Unknown is not "signed out".
     return null
   }
 }
