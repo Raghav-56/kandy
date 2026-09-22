@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { CornerDownLeft } from "lucide-react"
+import { Paperclip } from "lucide-react"
 import { splitPrompt, type AgentId, type AgentInfo } from "@kandy/core"
 import { Button, Dialog, DialogContent, DialogTitle, Kbd, Textarea } from "@/ui"
 import { AgentSelect } from "@/features/agents/AgentSelect"
@@ -84,24 +84,20 @@ export function Composer({
         {/* Present for screen readers; the placeholder is the visible prompt. */}
         <DialogTitle className="sr-only">New note</DialogTitle>
 
-        <div className="px-5 pt-5 pb-3">
-          {/*
-            Both fields sit inside one drop target, and both take a pasted
-            screenshot — the clipboard does not know which box you were in.
-          */}
-          <Attachments files={files} onChange={setFiles}>
-            {({ onPaste }) => (
-              /*
-                No box around these.
-                
-                Wrapping both fields in a border was worse than the flush
-                version it replaced: an outline turns the room left for typing
-                into a visible empty rectangle, and it fenced the Attach button
-                out of the thing it belongs to. A hairline between the two
-                fields says "these are separate" without drawing a container
-                around whitespace.
-              */
-              <div>
+        {/*
+          One drop target around everything, so the paperclip can sit with the
+          other controls — `bare` hands over `open` and leaves the placement to
+          us. It used to render its own "Attach" on a row of its own beneath an
+          empty textarea, stranded from the controls it belongs with; the
+          board's composer already keeps its paperclip beside send.
+        */}
+        <Attachments files={files} onChange={setFiles} bare>
+          {({ onPaste, open }) => (
+            <>
+              {/* No box around these. An outline turns the room left for typing
+                  into a visible empty rectangle; a hairline between the two
+                  fields says "separate" without fencing in whitespace. */}
+              <div className="px-5 pt-5 pb-3">
                 <input
                   autoFocus
                   value={title}
@@ -126,18 +122,15 @@ export function Composer({
 
                 {/*
                   The base Textarea is a bordered field with its own padding and
-                  a dark-mode fill. Here it is the continuation of the title
-                  above it, so all three go — including `dark:bg-input/30`, which
-                  `bg-transparent` alone does not outrank and which left it
-                  reading as a sunken slab.
+                  a dark-mode fill. Here it continues the title above it, so all
+                  three go — including `dark:bg-input/30`, which `bg-transparent`
+                  alone does not outrank.
                 */}
                 <Textarea
                   ref={detail}
                   rows={4}
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
-                  // Text pastes into the detail exactly as the browser does it;
-                  // only files are intercepted.
                   onPaste={onPaste}
                   placeholder="Constraints, how to verify — optional"
                   className="placeholder:text-muted-foreground/40 min-h-[72px] resize-none border-0 bg-transparent p-0 py-1 text-title leading-[1.6] shadow-none focus-visible:ring-0 dark:bg-transparent"
@@ -147,46 +140,59 @@ export function Composer({
                   }}
                 />
               </div>
-            )}
-          </Attachments>
-        </div>
 
-        <div className="bg-muted/50 flex flex-wrap items-center gap-2 border-t px-4 py-3">
-          <AgentSelect
-            value={agent || null}
-            agents={agents}
-            onChange={setAgent}
-            className="w-[150px]"
-          />
-          <ModelSelect
-            agent={agent || null}
-            value={model}
-            onChange={setModel}
-            className="w-[176px]"
-          />
+              {/*
+                One row of controls, on the same 20px gutter as the fields above
+                — it was 16px, so neither edge of the row lined up with the text
+                it sits under. And one type size across it: the pickers were
+                14px beside 12px buttons.
 
-          <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => submit(false)} disabled={!title.trim()}>
-              Save
-            </Button>
-            <Button size="sm" onClick={() => submit(true)} disabled={!title.trim() || !agent}>
-              Save &amp; run
-              <CornerDownLeft className="size-3 opacity-70" />
-            </Button>
-          </div>
-        </div>
+                The shortcuts live on the buttons they trigger rather than in a
+                third bordered strip of their own. Escape is not spelled out:
+                every dialog closes on it.
+              */}
+              <div className="bg-muted/50 flex flex-wrap items-center gap-2 border-t px-5 py-3">
+                <button
+                  type="button"
+                  onClick={open}
+                  aria-label="Attach files"
+                  title="Attach files — or paste a screenshot"
+                  className="text-muted-foreground hover:bg-accent hover:text-foreground -ml-1.5 grid size-7 shrink-0 place-items-center rounded-lg transition-colors"
+                >
+                  <Paperclip className="size-4" />
+                </button>
+                <AgentSelect
+                  value={agent || null}
+                  agents={agents}
+                  onChange={setAgent}
+                  className="w-[150px]"
+                />
+                <ModelSelect
+                  agent={agent || null}
+                  value={model}
+                  onChange={setModel}
+                  className="w-[176px]"
+                />
 
-        <div className="text-muted-foreground/60 flex items-center gap-3 border-t px-4 py-2 text-meta">
-          <span className="flex items-center gap-1">
-            <Kbd>⌘↵</Kbd> save &amp; run
-          </span>
-          <span className="flex items-center gap-1">
-            <Kbd>⇧⌘↵</Kbd> save
-          </span>
-          <span className="flex items-center gap-1">
-            <Kbd>esc</Kbd> cancel
-          </span>
-        </div>
+                <div className="ml-auto flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => submit(false)}
+                    disabled={!title.trim()}
+                    title="Save without running — ⇧⌘↵"
+                  >
+                    Save
+                  </Button>
+                  <Button size="sm" onClick={() => submit(true)} disabled={!title.trim() || !agent}>
+                    Save &amp; run
+                    <Kbd className="bg-primary-foreground/15 text-primary-foreground/80 ml-0.5 border-0">⌘↵</Kbd>
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </Attachments>
       </DialogContent>
     </Dialog>
   )
