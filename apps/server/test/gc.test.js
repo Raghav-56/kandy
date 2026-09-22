@@ -147,3 +147,74 @@ test("sizes read as sizes", () => {
   assert.equal(humanBytes(1024 * 1024 * 5.5), "5.5 MB")
   assert.equal(humanBytes(1024 * 1024 * 512), "512 MB")
 })
+
+/*
+ * Trimming. The case that exposed this: two notes in review holding 810MB,
+ * of which 801MB was node_modules and the turbo cache, while `kandy gc` said
+ * "nothing to reclaim" because neither note was finished.
+ */
+import { mkdirSync } from "node:fs"
+import { findStrippable, strip, takeStripped } from "../dist/gc.js"
+
+/** A worktree carrying the kind of weight a real one does. */
+async function heavy(dir, id) {
+  writeFileSync(path.join(dir, ".gitignore"), "node_modules/\n.turbo/\n")
+  commit(dir, "ignore build output")
+  const wt = await createWorktree(dir, id, "work")
+  mkdirSync(path.join(wt.path, "node_modules", "left-pad"), { recursive: true })
+  writeFileSync(path.join(wt.path, "node_modules", "left-pad", "index.js"), "x".repeat(4096))
+  mkdirSync(path.join(wt.path, ".turbo"), { recursive: true })
+  writeFileSync(path.join(wt.path, ".turbo", "cache"), "y".repeat(4096))
+  // Work in progress the trim must never touch.
+  writeFileSync(path.join(wt.path, "feature.ts"), "export const done = false\n")
+  return wt
+}
+
+test("a note in review keeps its checkout but loses its node_modules", async () => {
+  const dir = repo()
+  const wt = await heavy(dir, "note_review")
+  const found = await findStrippable(dir, [note("note_review", { status: "review" })])
+
+  assert.equal(found.length, 1)
+  assert.deepEqual(found[0].dirs.sort(), [".turbo", "node_modules"])
+  assert.ok(found[0].bytes > 0)
+
+  strip(found[0])
+  assert.equal(existsSync(path.join(wt.path, "node_modules")), false)
+  assert.equal(existsSync(path.join(wt.path, ".turbo")), false)
+  // The work is untouched: uncommitted changes survive, because they are not ignored.
+  assert.equal(existsSync(path.join(wt.path, "feature.ts")), true)
+})
+
+test("a running note is never trimmed", async () => {
+  // Pulling node_modules out from under an agent mid-run is the one outcome
+  // here worse than wasting the disk.
+  const dir = repo()
+  await heavy(dir, "note_busy")
+  for (const status of ["running", "queued", "blocked"]) {
+    const found = await findStrippable(dir, [note("note_busy", { status })])
+    assert.equal(found.length, 0, `${status} was trimmed`)
+  }
+})
+
+test("a folder the repo commits is left alone even if it is called .cache", async () => {
+  // Only ignored directories count as rebuildable. The name is not enough.
+  const dir = repo()
+  mkdirSync(path.join(dir, ".cache"), { recursive: true })
+  writeFileSync(path.join(dir, ".cache", "keep.json"), "{}")
+  commit(dir, "a committed cache")
+  await createWorktree(dir, "note_cache", "work")
+  const found = await findStrippable(dir, [note("note_cache", { status: "review" })])
+  assert.equal(found.length, 0)
+})
+
+test("the runner is told to reinstall, exactly once", async () => {
+  // Setup only runs on a fresh worktree, so a trimmed one would reach the next
+  // agent with no dependencies. The marker says it needs its install back.
+  const dir = repo()
+  await heavy(dir, "note_once")
+  const [item] = await findStrippable(dir, [note("note_once", { status: "failed" })])
+  strip(item)
+  assert.equal(takeStripped("note_once"), true)
+  assert.equal(takeStripped("note_once"), false, "consumed by the first run that reinstalls")
+})

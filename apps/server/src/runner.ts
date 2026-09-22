@@ -16,6 +16,7 @@ import {
 } from "@kandy/core"
 import type { Engine } from "./engine.js"
 import { priorRuns, promptForRun } from "./handoff.js"
+import { takeStripped } from "./gc.js"
 import type { AskChannel } from "./agents/types.js"
 import { closeAskChannel, openAskChannel, type Permissions } from "./permission.js"
 import { adapter } from "./agents/index.js"
@@ -332,7 +333,15 @@ export class Runner {
       if (carried.length) this.say(q.runId, "system", `carried in ${carried.join(", ")}`)
     }
 
-    if (fresh && view.board.setup) {
+    /*
+     * `kandy gc` may have taken this checkout's node_modules and caches while
+     * the note sat idle. The checkout is real and keeps its work, but it needs
+     * its install back before an agent arrives — otherwise that agent writes a
+     * test it cannot run. Consumed here, so it reinstalls exactly once.
+     */
+    const reinstall = !fresh && takeStripped(q.noteId)
+
+    if ((fresh || reinstall) && view.board.setup) {
       this.engine.activity(q.runId, "setup", view.board.setup)
       this.say(q.runId, "system", `preparing workspace: ${view.board.setup}`)
 

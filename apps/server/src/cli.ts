@@ -93,9 +93,10 @@ function usage(): void {
   w(head("setup"))
   w(cmd("kandy serve [--port N]", "run the daemon in the foreground"))
   w(cmd("kandy skill", "let other agents queue work onto a board"))
-  w(cmd("kandy gc [--dry-run]", "reclaim the worktrees of finished notes"))
-  w(`\n  ${dim("Each note keeps a whole checkout until its note is done. gc gives")}\n`)
-  w(`  ${dim("that disk back and leaves every branch where it is.")}\n`)
+  w(cmd("kandy gc [--dry-run]", "reclaim disk held by notes' checkouts"))
+  w(`\n  ${dim("Finished notes lose their checkout. Notes in review or failed keep it")}\n`)
+  w(`  ${dim("but lose node_modules and caches, which the next run reinstalls.")}\n`)
+  w(`  ${dim("Running notes are never touched, and every branch stays where it is.")}\n`)
 
   w(head("flags"))
   w(cmd("--agent claude|codex", "which agent runs it"))

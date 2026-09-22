@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process"
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { promisify } from "node:util"
 import path from "node:path"
 import type { Note, Outcome } from "@kandy/core"
-import { worktreeRoot } from "./paths.js"
+import { STATE_DIR, worktreeRoot } from "./paths.js"
 
 const exec = promisify(execFile)
 
@@ -164,4 +165,120 @@ export function humanBytes(n: number): string {
     i++
   }
   return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`
+}
+
+/*
+ * Stripping: take the rebuildable weight, keep the checkout.
+ *
+ * A worktree is mostly not the work. On this repo each one is 405MB, of which
+ * 330MB is node_modules and 71MB is the turbo cache — the source is 3.7MB. The
+ * board's setup command reinstalls all of it on demand, so for any note that is
+ * not currently running there is no reason to keep it on disk.
+ *
+ * This is what makes gc useful between notes rather than only after them. The
+ * full reclaim above waits for a note to be done; a note sitting in review or
+ * failed held its 405MB indefinitely, and `kandy gc` reported "nothing to
+ * reclaim" about 810MB because those notes were not its business.
+ */
+
+/**
+ * Directory names that are always rebuildable.
+ *
+ * Deliberately short, and each one is only removed if git ignores it in that
+ * worktree — so a repo that commits a `.cache` directory keeps it. Not `dist`
+ * or `build`: small, and sometimes the thing someone wanted to look at.
+ */
+const HEAVY = new Set([
+  "node_modules",
+  ".turbo",
+  ".next",
+  ".nuxt",
+  ".svelte-kit",
+  ".parcel-cache",
+  ".vite",
+  ".cache",
+])
+
+export type Strippable = {
+  noteId: string
+  title: string
+  status: string
+  path: string
+  /** Ignored heavy directories inside it, relative to the worktree. */
+  dirs: string[]
+  bytes: number
+}
+
+/** Ignored directories in a worktree that are safe to delete and rebuild. */
+async function heavyIn(worktree: string): Promise<string[]> {
+  const out = await git(worktree, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory").catch(
+    () => "",
+  )
+  return out
+    .split("\n")
+    .map((l) => l.trim().replace(/\/$/, ""))
+    .filter((p) => p && HEAVY.has(path.basename(p)))
+    // A nested node_modules is inside a top-level one we are already removing.
+    .filter((p, _i, all) => !all.some((q) => q !== p && p.startsWith(q + "/")))
+}
+
+/**
+ * Worktrees worth stripping: the note exists, is not doing anything, and its
+ * checkout is carrying rebuildable weight.
+ *
+ * Running, queued and blocked notes are left entirely alone — pulling
+ * node_modules out from under an agent mid-run is the one outcome here that is
+ * worse than wasting the disk.
+ */
+export async function findStrippable(repoPath: string, notes: Note[]): Promise<Strippable[]> {
+  // Of NOTE_STATUSES: not queued, running or blocked, and not done — done
+  // notes are the full reclaim's, which takes the whole checkout.
+  const idle = new Set(["review", "failed", "draft"])
+  const byId = new Map(notes.map((n) => [n.id, n]))
+  const trees = await listWorktrees(repoPath)
+  const found: Strippable[] = []
+  for (const w of trees) {
+    const note = byId.get(path.basename(w.path))
+    if (!note || !idle.has(note.status) || !existsSync(w.path)) continue
+    const dirs = await heavyIn(w.path)
+    if (dirs.length === 0) continue
+    let bytes = 0
+    for (const d of dirs) bytes += await sizeOf(path.join(w.path, d))
+    found.push({ noteId: note.id, title: note.title, status: note.status, path: w.path, dirs, bytes })
+  }
+  return found
+}
+
+/** Delete the heavy directories and leave a note for the runner. */
+export function strip(item: Strippable): void {
+  for (const d of item.dirs) rmSync(path.join(item.path, d), { recursive: true, force: true })
+  markStripped(item.noteId)
+}
+
+/*
+ * The runner has to know.
+ *
+ * It runs the board's setup only when a worktree is fresh, so a stripped one
+ * would be handed to the next agent with no dependencies — and that agent
+ * would write a test it cannot run. A marker says "this checkout is real but
+ * needs its install back".
+ *
+ * Kept in the state dir rather than the worktree: a file inside the checkout
+ * is an untracked file an agent can `git add -A` into a commit.
+ */
+function markerFor(noteId: string): string {
+  return path.join(STATE_DIR, "stripped", noteId)
+}
+
+export function markStripped(noteId: string): void {
+  mkdirSync(path.dirname(markerFor(noteId)), { recursive: true })
+  writeFileSync(markerFor(noteId), String(Date.now()))
+}
+
+/** True once, then cleared — the runner consumes it by reinstalling. */
+export function takeStripped(noteId: string): boolean {
+  const m = markerFor(noteId)
+  if (!existsSync(m)) return false
+  rmSync(m, { force: true })
+  return true
 }

@@ -8,7 +8,7 @@ import { splitPrompt, type AgentId, type Board, type BoardView, type Note } from
 import { banner, berry, bold, dim, faint, heat, lemon, mint, sparkline, statusTag } from "./banner.js"
 import { client, DEFAULT_PORT, ensureUp } from "./daemon.js"
 import type { Reclaimable } from "../gc.js"
-import { findReclaimable, heldBack, humanBytes, reclaim } from "../gc.js"
+import { findReclaimable, findStrippable, strip, heldBack, humanBytes, reclaim } from "../gc.js"
 
 const exec = promisify(execFile)
 const out = (s = "") => process.stdout.write(s + "\n")
@@ -343,8 +343,18 @@ export async function cmdGc(opts: {
   }
 
   const found = await findReclaimable(here.board.repoPath, here.view.notes, known)
-  if (found.length === 0) {
-    if (stale.length === 0) out(dim("  nothing to reclaim — no worktrees left by finished notes"))
+  const strippable = await findStrippable(here.board.repoPath, here.view.notes)
+
+  /*
+   * Never "nothing to reclaim" while there is something on disk.
+   *
+   * This used to say exactly that about 810MB — true of the narrow question it
+   * asked (are any *finished* notes holding a checkout?) and useless to the
+   * person running it, who could see the disk being used. Silence about what
+   * was skipped is indistinguishable from gc being broken.
+   */
+  if (found.length === 0 && strippable.length === 0) {
+    if (stale.length === 0) out(dim("  nothing to reclaim — no checkout is holding rebuildable files"))
     return 0
   }
 
@@ -352,7 +362,7 @@ export async function cmdGc(opts: {
   // Colour codes make a string longer than it looks, so pad the plain label and
   // colour the result — otherwise the size column walks left and right.
   const VERB = 10
-  const row = (verb: string, colour: (s: string) => string, item: Reclaimable, tail = "") =>
+  const row = (verb: string, colour: (s: string) => string, item: { bytes: number; title: string }, tail = "") =>
     out(
       `  ${colour(verb.padEnd(VERB))} ${faint(humanBytes(item.bytes).padStart(8))}  ${item.title}${tail}`,
     )
@@ -393,11 +403,44 @@ export async function cmdGc(opts: {
     }
   }
 
+  /*
+   * Checkouts that stay, lighter.
+   *
+   * Notes in review or failed keep their worktree — the diff is right there
+   * and a follow-up run continues in it — but not their node_modules. The
+   * runner is told, and reinstalls before the next agent arrives.
+   */
+  let stripped = 0
+  for (const item of strippable) {
+    if (opts.dryRun) {
+      row("would trim", faint, item, dim(`  ${item.status}`))
+    } else {
+      try {
+        strip(item)
+        row("trimmed", mint, item, dim(`  ${item.status}`))
+      } catch (err) {
+        row("failed", berry, item)
+        under(err instanceof Error ? err.message.split("\n")[0]! : String(err))
+        continue
+      }
+    }
+    stripped++
+    freed += item.bytes
+  }
+  if (strippable.length > 0) {
+    under(`${strippable.map((s) => s.dirs.length).reduce((a, b) => a + b, 0)} rebuildable folders — the checkout and its changes stay; the next run reinstalls`)
+  }
+
   out()
+  const removed = found.length - held
+  const parts = [
+    removed ? `${removed} worktree${removed === 1 ? "" : "s"} removed` : "",
+    stripped ? `${stripped} trimmed` : "",
+    held ? `${held} kept` : "",
+  ].filter(Boolean)
   out(
     `  ${bold(humanBytes(freed))} ${opts.dryRun ? "would be reclaimed" : "reclaimed"}` +
-      dim(` · ${found.length - held} worktree${found.length - held === 1 ? "" : "s"}`) +
-      (held ? dim(` · ${held} kept`) : ""),
+      (parts.length ? dim(` · ${parts.join(" · ")}`) : ""),
   )
   // The commits are the work; the checkout was only a place to do it.
   out(dim("  branches are left alone"))
