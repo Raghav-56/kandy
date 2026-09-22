@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, statSync } from "node:fs"
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import type { ServerResponse } from "node:http"
@@ -28,10 +28,30 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
  * its banner, and served nothing at all to the first person who installed it —
  * a failure invisible here, because in the repo that path happens to resolve.
  */
-export const WEB_ROOTS = [
-  path.resolve(HERE, "web"),
-  path.resolve(HERE, "../../web/dist"),
-]
+const STAGED = path.resolve(HERE, "web")
+const SIBLING = path.resolve(HERE, "../../web/dist")
+
+/*
+ * In this repository the sibling is the truth and goes first.
+ *
+ * The staged copy is a snapshot taken at the last *server* build. Rebuilding
+ * only the web app left the daemon serving that snapshot — a stale board that
+ * looked exactly like a fix not working, which is how this was found.
+ *
+ * But the sibling is only trusted when it is really @kandy/web. Installed, the
+ * same relative path lands in `node_modules/web/dist`, and a stranger's package
+ * called `web` is not our board.
+ */
+function isOurWeb(): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(path.resolve(SIBLING, "../package.json"), "utf8")) as { name?: string }
+    return pkg.name === "@kandy/web"
+  } catch {
+    return false
+  }
+}
+
+export const WEB_ROOTS = isOurWeb() ? [SIBLING, STAGED] : [STAGED]
 
 /**
  * Looked up each time rather than frozen at import.
