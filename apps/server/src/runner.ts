@@ -23,7 +23,7 @@ import { takeStripped } from "./gc.js"
 import { recordLimits } from "./limits.js"
 import { authFailures, clearAuthFailure, recordAuthFailure } from "./auth-failures.js"
 import type { AskChannel } from "./agents/types.js"
-import { closeAskChannel, openAskChannel, type Permissions } from "./permission.js"
+import { closeAskChannel, openAskChannel } from "./permission.js"
 import { adapter } from "./agents/index.js"
 import { adoptStaged, describe as describeAttachments } from "./attach.js"
 import { commitTrailers } from "./attribution.js"
@@ -111,7 +111,18 @@ export class Runner {
      * Where an agent's permission prompts go, and what they need to get back.
      * Absent in tests and in any deployment that would rather auto-deny.
      */
-    private asking?: { permissions: Permissions; port: number; token: string },
+    private asking?: {
+      /**
+       * Where the sidecar sends its question: this daemon on `kandy serve`,
+       * the hub on a runner. Either way the question is put to a person and
+       * the answer comes back down the same request.
+       */
+      url: string
+      /** Empty on a tailnet, where Tailscale says whose machine is asking. */
+      token: string
+      /** Settle a dead run's questions. Absent on a runner: the hub does it on `run.finished`. */
+      abandon?: (runId: string) => void
+    },
   ) {}
 
   /** Which note and board a live run belongs to. The broker's only view in. */
@@ -156,6 +167,8 @@ export class Runner {
   /** Persist a transcript frame and push it to anyone watching, live. */
   /** Last notice written per run, to suppress immediate repeats. */
   private lastNotice = new Map<string, string>()
+  /** The session id each live run last reported, so it is logged once. */
+  private sessions = new Map<string, string>()
 
   /**
    * Agents whose last run could not authenticate.
@@ -409,7 +422,7 @@ export class Runner {
     const asking = this.asking
     const ask =
       asking && a.asks && policy !== "full"
-        ? openAskChannel(q.runId, asking.port, asking.token)
+        ? openAskChannel(q.runId, asking.url, asking.token)
         : undefined
 
     // Note pin wins over the board default; neither means the agent's own.
@@ -584,6 +597,11 @@ export class Runner {
         for (const ev of parsed) {
           switch (ev.kind) {
             case "session":
+              // Claude repeats its session id on every line of its stream.
+              // Once is a fact worth logging; every line is noise in the log
+              // and, with a hub, a network write each.
+              if (this.sessions.get(runId) === ev.sessionId) break
+              this.sessions.set(runId, ev.sessionId)
               this.emit(event("run.session", { runId, agentSessionId: ev.sessionId }))
               break
             case "text":
@@ -739,11 +757,12 @@ export class Runner {
   ): Promise<void> {
     const l = this.live.get(runId)
     this.live.delete(runId)
+    this.sessions.delete(runId)
 
     // Settle anything this run was waiting on before anything else. A promise
     // held by a dead process never resolves on its own, and a question on the
     // board that nothing is listening to is worse than no question at all.
-    this.asking?.permissions.abandon(runId)
+    this.asking?.abandon?.(runId)
     closeAskChannel(l?.ask)
 
     let error: string | null = null

@@ -3,6 +3,12 @@ import {
   between,
   checkMcpServers,
   event,
+  ROLES,
+  type ActorId,
+  type Hello,
+  type Role,
+  type LogBatch,
+  type Reply,
   id,
   isEphemeral,
   notesIn,
@@ -21,6 +27,9 @@ import type { Engine } from "./engine.js"
 import { coerceAttribution, commitTrailers, prBody } from "./attribution.js"
 
 import { authorized } from "./auth.js"
+import type { Identity } from "./identity.js"
+import type { Members } from "./members.js"
+import type { Runners } from "./hub.js"
 
 const VERSION = kandyVersion()
 const STARTED = Date.now()
@@ -97,6 +106,21 @@ export type ServerDeps = {
   permissions?: Permissions
   /** Extra Host names to answer to, from `KANDY_HOSTS`. */
   hosts?: ReadonlySet<string>
+  /**
+   * A hub's parts. All absent on `kandy serve`, which is one person on one
+   * machine and has nobody to tell apart.
+   *
+   * `identity` says who a request is from; `members` says whether they are on
+   * the team and what they may do; `runners` is who is connected; and
+   * `workshopFor` builds a workshop that knows who is asking, because "your
+   * own machine" means nothing without a "you".
+   */
+  identity?: Identity
+  members?: Members
+  runners?: Runners
+  workshopFor?: (actor: ActorId | null) => Workshop
+  /** Stamped on every event this request emits. Set per request, never passed in. */
+  actor?: ActorId | null
 }
 
 const EMPTY: ReadonlySet<string> = new Set()
@@ -104,7 +128,22 @@ const EMPTY: ReadonlySet<string> = new Set()
 export function createHttpServer(deps: ServerDeps) {
   return createServer((req, res) => {
     void handle(deps, req, res).catch((err) => {
+      /*
+       * A status on the error is a failure that means something — a hub whose
+       * runner is offline is a 503, a note placed nowhere is a 409 — and the
+       * person asking should get that, not "internal". Only an error that
+       * carries no status is a bug of ours.
+       */
+      const status = (err as { status?: unknown }).status
+      if (typeof status === "number" && status >= 400 && status < 600) {
+        if (res.headersSent) return void res.end()
+        return send(res, status, {
+          ok: false,
+          error: { code: status === 403 ? "forbidden" : status === 404 ? "note_not_found" : "bad_request", message: (err as Error).message },
+        })
+      }
       console.error("[http]", err)
+      if (res.headersSent) return void res.end()
       send(res, 500, { ok: false, error: { code: "internal", message: String(err) } })
     })
   })
@@ -166,6 +205,44 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
    */
   const local = isLoopback(req.socket.remoteAddress) && isLoopbackHost(host, port)
 
+  /*
+   * Who is asking, on a hub that can tell.
+   *
+   * Off this machine, a hub with an identity provider takes nothing else: not
+   * the bearer token, which never leaves the box, and not a claim in the
+   * request. Tailscale says who it is, the member list says whether they are
+   * on the team, and the role says what they may do. Someone the tailnet let
+   * through but no owner has admitted is told exactly who they are and who to
+   * ask — an empty board would be a worse answer.
+   */
+  let actor: ActorId | null = null
+  if (deps.identity && deps.members && !local) {
+    const person = deps.identity.identify(req)
+    if (!person) {
+      return fail(
+        res,
+        401,
+        "unauthorized",
+        "no Tailscale identity on this request. Tagged devices and anything that did not come through tailscale serve are refused.",
+      )
+    }
+    const role = deps.members.arrive(person)
+    if (!role) {
+      return fail(res, 403, "forbidden", `you are ${person.email}, and nobody has added you to this hub yet — ask one of its owners`)
+    }
+    actor = person.email
+    if (routed === "/auth/token") {
+      // The identity is the credential here, so there is no token to hand
+      // over — and the one this hub has never leaves the machine.
+      res.setHeader("Cache-Control", "no-store")
+      return send(res, 200, { token: "", identity: { email: person.email, name: person.name, role } })
+    }
+    const reads = req.method === "GET" || req.method === "HEAD"
+    if (!deps.members.allows(actor, reads ? "board:read" : "board:write")) {
+      return fail(res, 403, "forbidden", `a ${role} can look but not change anything here`)
+    }
+  }
+
   if (req.method === "GET" && routed === "/auth/token") {
     // Never off-machine: this is the credential itself, and a caller that
     // reached us from elsewhere has no claim on it.
@@ -184,9 +261,86 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   const reading = req.method === "GET" || req.method === "HEAD"
   const open = reading && (routed === "/health" || (apiPath === null && isBundleAsset(url.pathname)))
 
-  if (!open && !(local && reading) && !authorized(req.headers.authorization, deps.token)) {
+  if (actor === null && !open && !(local && reading) && !authorized(req.headers.authorization, deps.token)) {
     res.setHeader("WWW-Authenticate", "Bearer")
     return send(res, 401, { ok: false, error: { code: "unauthorized", message: "Valid bearer token required" } })
+  }
+
+  // Everything below sees who is asking, and a workshop that knows it.
+  deps = {
+    ...deps,
+    actor,
+    workshop: deps.workshopFor ? deps.workshopFor(actor) : deps.workshop,
+  }
+
+  if (routed.startsWith("/runner/") && deps.runners) {
+    return runnerRoute(deps, deps.runners, routed, req, res, url, actor)
+  }
+
+  // GET /me — who this request is, and what this hub is. Answers on every
+  // daemon, so a client can ask without first knowing which kind it has.
+  if (req.method === "GET" && routed === "/me") {
+    return send(res, 200, {
+      hub: Boolean(deps.runners),
+      email: actor,
+      role: deps.members?.roleOf(actor) ?? null,
+    })
+  }
+
+  // GET /runners — every machine that has said hello, and whether it is here now.
+  if (req.method === "GET" && routed === "/runners") {
+    return send(res, 200, { runners: deps.runners?.list() ?? [] })
+  }
+
+  // GET /members, POST /members — who is on this hub.
+  if (routed === "/members" && deps.members) {
+    if (req.method === "GET") return send(res, 200, { members: deps.members.list() })
+    if (req.method === "POST") {
+      const b = await json<{ email?: string; role?: Role | null }>(req)
+      if (typeof b?.email !== "string") return fail(res, 400, "bad_request", "email is required")
+      if (b.role !== null && b.role !== undefined && !ROLES.includes(b.role)) {
+        return fail(res, 400, "bad_request", `role must be one of ${ROLES.join(", ")}, or null to remove`)
+      }
+      try {
+        deps.members.set(actor as string, b.email, b.role ?? null)
+      } catch (err) {
+        const e = err as { status?: number; message?: string }
+        return fail(res, e.status ?? 400, e.status === 403 ? "forbidden" : "bad_request", e.message ?? String(err))
+      }
+      return send(res, 200, { ok: true, seq: deps.engine.head(), members: deps.members.list() })
+    }
+  }
+
+  /*
+   * POST /notes/:id/consent — the owner of the machine a note is waiting on,
+   * answering. Nobody else may: that is the entire point of consent living on
+   * the runner. An admin of the hub cannot answer for someone's laptop.
+   */
+  if (req.method === "POST" && parts[0] === "notes" && parts[2] === "consent" && deps.runners) {
+    const noteId = parts[1]!
+    const view = deps.engine.boardOf(noteId)
+    const note = view?.notes.find((n) => n.id === noteId)
+    if (!view || !note) return fail(res, 404, "note_not_found", "no such note")
+    if (!note.held) return fail(res, 409, "invalid_transition", "this note is not waiting on anyone")
+    const runner = deps.runners.get(note.held.runnerId)
+    if (!runner || runner.owner !== actor) {
+      return fail(res, 403, "forbidden", "only the owner of the machine it would run on can answer this")
+    }
+    const b = await json<{ accept?: boolean; always?: boolean }>(req)
+    try {
+      const runId = await deps.runners.call<string>(runner.runnerId, "consent", [
+        view.board.id,
+        noteId,
+        b?.accept === true,
+        b?.always === true,
+        note.held.requestedBy,
+        note.held.agent,
+      ])
+      return send(res, 200, { ok: true, seq: deps.engine.head(), runId: runId || null })
+    } catch (err) {
+      const e = err as { status?: number; message?: string }
+      return fail(res, e.status ?? 502, "bad_request", e.message ?? String(err))
+    }
   }
 
   if (req.method === "GET" && routed === "/health") {
@@ -577,6 +731,22 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
       comment?: string
     }>(req)
     if (!b?.requestId) return fail(res, 400, "bad_request", "requestId required")
+    /*
+     * On a hub, only the person whose machine is asking may answer. A shell
+     * command an agent wants to run on Alice's laptop is Alice's to allow;
+     * the hub relays the question and the answer, and decides neither.
+     */
+    if (deps.runners && deps.actor !== undefined) {
+      const run = deps.engine.projections
+        .boards()
+        .flatMap((x) => deps.engine.view(x.id)?.runs ?? [])
+        .find((r) => r.id === parts[1])
+      const placed = run ? deps.runners.placement(run.noteId) : null
+      const owner = placed ? deps.runners.get(placed)?.owner ?? null : null
+      if (owner !== null && owner !== deps.actor) {
+        return fail(res, 403, "forbidden", "only the owner of the machine running this can answer it")
+      }
+    }
     if (b.decision !== "allow" && b.decision !== "deny")
       return fail(res, 400, "bad_request", "decision must be 'allow' or 'deny'")
     if (b.scope !== undefined && b.scope !== "once" && b.scope !== "note")
@@ -755,6 +925,8 @@ async function noteAction(
         return fail(res, 409, "invalid_transition", `note is already ${note.status}`)
 
       const runId = await deps.workshop.request(view.board.id, noteId, agent)
+      // Empty means the machine's owner has been asked first. Accepted, not done.
+      if (runId === "") return send(res, 202, { ok: true, seq: deps.engine.head(), runId: null, held: true })
       return send(res, 200, { ok: true, seq: deps.engine.head(), runId })
     }
     case "message": {
@@ -886,7 +1058,52 @@ function write(res: ServerResponse, f: StreamFrame) {
 }
 
 function emit(deps: ServerDeps, pending: Parameters<Engine["emit"]>[0]) {
-  return deps.engine.emit(pending)
+  return deps.engine.emit(pending, deps.actor ?? null)
+}
+
+/**
+ * The runner protocol's four routes. See docs/18-runner-protocol.md.
+ *
+ * A runner authenticates exactly as a person does — it is a person's
+ * machine, and on a tailnet Tailscale says whose. Its owner is that person,
+ * or nobody on a hub with no identity.
+ */
+async function runnerRoute(
+  deps: ServerDeps,
+  runners: Runners,
+  routed: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  owner: ActorId | null,
+): Promise<void> {
+  try {
+    if (req.method === "POST" && routed === "/runner/hello") {
+      return send(res, 200, runners.hello((await json<Hello>(req)) as Hello, owner))
+    }
+    if (req.method === "GET" && routed === "/runner/stream") {
+      return runners.attach(
+        url.searchParams.get("runner") ?? "",
+        owner,
+        req,
+        res,
+        Number(url.searchParams.get("after") ?? 0) || 0,
+      )
+    }
+    if (req.method === "POST" && routed === "/runner/log") {
+      runners.log((await json<LogBatch>(req)) as LogBatch, owner)
+      return send(res, 200, { ok: true, seq: deps.engine.head() })
+    }
+    if (req.method === "POST" && routed === "/runner/reply") {
+      runners.reply((await json<Reply>(req)) as Reply, owner)
+      return send(res, 200, { ok: true })
+    }
+    return fail(res, 404, "bad_request", "no such runner route")
+  } catch (err) {
+    const e = err as { status?: number; message?: string }
+    if (res.headersSent) return void res.end()
+    return fail(res, e.status ?? 400, e.status === 403 ? "forbidden" : "bad_request", e.message ?? String(err))
+  }
 }
 
 async function json<T>(req: IncomingMessage): Promise<T | null> {

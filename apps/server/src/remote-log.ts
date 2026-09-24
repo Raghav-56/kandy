@@ -44,6 +44,13 @@ export class RemoteLog implements Log {
   private flushing: Promise<void> | null = null
   /** The last seq folded in, which is where a reconnect resumes from. */
   head = 0
+  private listeners = new Set<(e: KandyEvent) => void>()
+
+  /** Every event from the hub, after it is folded. For a runner that must react — a new board, say. */
+  onEvent(fn: (e: KandyEvent) => void): () => void {
+    this.listeners.add(fn)
+    return () => this.listeners.delete(fn)
+  }
 
   constructor(
     private readonly send: (ops: LogOp[]) => Promise<void>,
@@ -105,6 +112,7 @@ export class RemoteLog implements Log {
       return
     }
     this.replica.apply(e)
+    for (const fn of this.listeners) fn(e)
   }
 
   /** Start again from a known-good board, discarding anything optimistic. */

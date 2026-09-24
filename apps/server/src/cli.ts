@@ -5,6 +5,7 @@ import { PrWatch } from "./prwatch.js"
 import { Runner } from "./runner.js"
 import { createHttpServer, parseHosts } from "./http.js"
 import { cmdMcp, cmdSkills } from "./cli/capabilities.js"
+import { runHub, runRunner } from "./cli/roles.js"
 import { LocalLog } from "./local-log.js"
 import { LocalWorkshop } from "./local-workshop.js"
 import { ASK_TIMEOUT_MS, Permissions } from "./permission.js"
@@ -103,6 +104,12 @@ function usage(): void {
   w(head("setup"))
   w(cmd("kandy serve [--port N]", "run the daemon in the foreground"))
   w(cmd("kandy skill", "let other agents queue work onto a board"))
+
+  w(head("teams"))
+  w(cmd("kandy hub --tailscale", "a board your team shares; runs nothing itself"))
+  w(cmd("kandy runner --hub <url>", "run the notes given to you, on this machine"))
+  w(`\n  ${dim("Everyone's notes run on their own machine, with their own agents and")}\n`)
+  w(`  ${dim("their own logins. The hub keeps the board and never runs anything.")}\n`)
 
   w(head("capabilities"))
   w(cmd("kandy skills", "skills in this repo, and which runs can see them"))
@@ -216,7 +223,7 @@ async function serve(args: string[]): Promise<void> {
     (boardId, noteId) => {
       void prs.refresh(boardId, noteId).catch(() => {})
     },
-    { permissions, port, token },
+    { url: `http://127.0.0.1:${port}`, token, abandon: (runId) => permissions.abandon(runId) },
   )
 
   prs.start()
@@ -318,8 +325,8 @@ async function main(): Promise<void> {
   const port = intFlag(argv, "--port", DEFAULT_PORT)
   const agent = strFlag(argv, "--agent") as AgentId | undefined
   const noRun = argv.includes("--no-run")
-  const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env"]
-  const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json"]
+  const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env", "--hub", "--token", "--https-port"]
+  const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json", "--tailscale"]
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
   // and reporting "nothing here" is worse than refusing it.
@@ -355,6 +362,28 @@ async function main(): Promise<void> {
       break
     case "serve":
       return serve(argv)
+    case "hub":
+      return runHub({
+        port,
+        tailscale: argv.includes("--tailscale"),
+        httpsPort: intFlag(argv, "--https-port", 443),
+        json: argv.includes("--json"),
+      })
+    case "runner": {
+      const hub = strFlag(argv, "--hub") ?? process.env["KANDY_HUB"]
+      if (!hub) {
+        process.stderr.write(berry("  kandy runner needs --hub <url>\n"))
+        process.exit(1)
+      }
+      return runRunner({
+        hub,
+        // On one machine the hub's own token; across a tailnet, none —
+        // Tailscale says whose machine this is.
+        token: strFlag(argv, "--token") ?? process.env["KANDY_HUB_TOKEN"] ?? "",
+        slots: intFlag(argv, "--slots", 4),
+        json: argv.includes("--json"),
+      })
+    }
     case "new":
       process.exit(await cmdNew(rest.slice(1), { port, agent, run: false }))
       break

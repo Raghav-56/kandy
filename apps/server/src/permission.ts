@@ -287,7 +287,7 @@ const CONFIG_DIR = path.join(STATE_DIR, "ask")
  * smaller thing to leave lying around than one that is useful forever. 0600,
  * and removed when the run ends.
  */
-export function openAskChannel(runId: string, port: number, token: string): AskChannel {
+export function openAskChannel(runId: string, url: string, token: string): AskChannel {
   mkdirSync(CONFIG_DIR, { recursive: true })
   const configPath = path.join(CONFIG_DIR, `${runId}.json`)
   const config = {
@@ -296,7 +296,7 @@ export function openAskChannel(runId: string, port: number, token: string): AskC
         command: process.execPath,
         args: sidecarArgs(),
         env: {
-          KANDY_URL: `http://127.0.0.1:${port}`,
+          KANDY_URL: url,
           KANDY_TOKEN: token,
           KANDY_RUN_ID: runId,
         },
