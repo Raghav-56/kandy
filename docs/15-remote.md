@@ -174,14 +174,19 @@ the body on the branch forever. **"Delete" will not mean what a user assumes it 
 1. ✅ **The translation layer**, single-player — [`16-threads.md`](16-threads.md). Continue a note
    with a different agent on one machine. The hard part, testable today, useful alone.
 2. ✅ **Close the daemon** — phase 0 above. Shipped by itself, as intended.
-3. **Split hub from runner.** The runner dials out and claims notes; the hub stops spawning
+3. ✅ **Split hub from runner.** The runner dials out and claims notes; the hub stops spawning
    anything. Localhost first, so the split is proven before a network is added.
-4. **Hand a note to another person's runner.** The thread from step 1 crossing the boundary from
+4. ✅ **Hand a note to another person's runner.** The thread from step 1 crossing the boundary from
    step 3, with the branch pushed alongside so the receiver can see the diff — the one step
    [`12`](12-spike-git-share.md) found does not survive the trip.
 5. **Remote control of your own daemon** from your own phone. Deliberately last: it is a
    convenience, not the product, and `docs/11` is right that it is the feature t3code already
    has.
+
+Built as described, with two changes worth knowing. The transport is HTTP and SSE rather than a
+WebSocket — see [`18-runner-protocol.md`](18-runner-protocol.md). And identity is Tailscale's, with
+the hub keeping only its own member list and roles; who may run code on a laptop is decided on that
+laptop, not by the hub. Running one: [`19-self-host.md`](19-self-host.md).
 
 ## Not doing
 

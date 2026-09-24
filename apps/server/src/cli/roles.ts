@@ -38,7 +38,22 @@ const out = (s = "") => process.stdout.write(s + "\n")
  * test checks the hub's modules for it — so a hub cannot start an agent even
  * by accident.
  */
-export async function runHub(opts: { port: number; tailscale: boolean; httpsPort: number; json: boolean }) {
+export async function runHub(opts: {
+  port: number
+  /** Run `tailscale serve` ourselves: the hub is on a machine that has Tailscale. */
+  tailscale: boolean
+  /**
+   * Trust Tailscale's identity headers without managing `serve` — for a hub
+   * in a container whose Tailscale is a sidecar sharing its network. Implied
+   * by `tailscale`.
+   */
+  identity: "tailscale" | null
+  /** The one tailnet name to answer to when a sidecar serves us. */
+  tailnetHost: string | null
+  bind: string
+  httpsPort: number
+  json: boolean
+}) {
   const token = loadToken(TOKEN_PATH)
   const engine = new Engine()
   const runners = new Runners(engine)
@@ -60,6 +75,30 @@ export async function runHub(opts: { port: number; tailscale: boolean; httpsPort
   let hosts = parseHosts(process.env["KANDY_HOSTS"])
   let members: Members | undefined
   let reach = `http://127.0.0.1:${opts.port}`
+  const identity = opts.tailscale ? "tailscale" : opts.identity
+
+  /*
+   * Identity headers are trusted only from a loopback peer, which is only
+   * safe while nothing but tailscaled can be that peer. A hub listening on
+   * any other address would accept `Tailscale-User-Login: owner@…` from
+   * whoever can reach the socket. Refused outright rather than warned about:
+   * this is the one misconfiguration that hands the hub to anyone.
+   */
+  if (identity && opts.bind !== "127.0.0.1" && opts.bind !== "::1") {
+    out(lemon(`  --bind ${opts.bind} with Tailscale identity would let anyone who can reach this port claim to be anyone.`))
+    out(dim("  Keep it on 127.0.0.1 and let tailscale serve (or a sidecar sharing its network) reach it there."))
+    process.exit(1)
+  }
+
+  if (identity && !opts.tailscale) {
+    if (!opts.tailnetHost) {
+      out(lemon("  a hub trusting a Tailscale sidecar needs the name it is served under — KANDY_TAILNET_HOST=hub.your-tailnet.ts.net"))
+      process.exit(1)
+    }
+    hosts = new Set([...hosts, opts.tailnetHost.toLowerCase()])
+    members = new Members(engine)
+    reach = `https://${opts.tailnetHost}`
+  }
 
   if (opts.tailscale) {
     const ts = await tailscaleStatus()
@@ -92,7 +131,7 @@ export async function runHub(opts: { port: number; tailscale: boolean; httpsPort
 
   // Loopback only, always. With Tailscale in front this is what makes the
   // identity headers trustworthy: nothing but tailscaled can connect here.
-  await new Promise<void>((resolve) => server.listen(opts.port, "127.0.0.1", resolve))
+  await new Promise<void>((resolve) => server.listen(opts.port, opts.bind, resolve))
   if (opts.tailscale) await tailscaleServe(opts.port, opts.httpsPort)
 
   if (opts.json) {
@@ -100,8 +139,8 @@ export async function runHub(opts: { port: number; tailscale: boolean; httpsPort
   } else {
     process.stdout.write(banner(reach))
     out(`  ${faint("role")}   ${dim("hub — runs nothing itself; runners connect to it")}`)
-    out(`  ${faint("join")}   ${dim(`kandy runner --hub ${reach}${opts.tailscale ? "" : " --token <token>"}`)}`)
-    if (opts.tailscale) out(`  ${faint("who")}    ${dim("whoever Tailscale says; the first person to open it owns it")}`)
+    out(`  ${faint("join")}   ${dim(`kandy runner --hub ${reach}${identity ? "" : " --token <token>"}`)}`)
+    if (identity) out(`  ${faint("who")}    ${dim("whoever Tailscale says; the first person to open it owns it")}`)
     out()
   }
 

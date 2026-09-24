@@ -61,3 +61,26 @@ jobs:
           curl -sf localhost:4911/health
           curl -sf localhost:4911/ | grep -q "<title>kandy</title>"
           kill %1
+
+  # The hub image, built and run. The first local build shipped an empty
+  # dist: `**/dist` was ignored but `*.tsbuildinfo` was not, so tsc decided
+  # everything was up to date and emitted nothing. Only building it catches
+  # that, and only running it proves it serves.
+  hub-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t kandy-hub .
+      - name: the image serves the board, and runs nothing
+        run: |
+          set -euo pipefail
+          docker run -d --name kh kandy-hub
+          for _ in $(seq 1 30); do
+            docker exec kh node -e "fetch('http://127.0.0.1:4477/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" && break || sleep 1
+          done
+          docker exec kh node -e "fetch('http://127.0.0.1:4477/').then(r=>r.text()).then(t=>process.exit(t.includes('<title>kandy</title>')?0:1))"
+          test "$(docker exec kh whoami)" = node
+          # No agent and no git: a hub that cannot run them cannot be asked to.
+          ! docker exec kh sh -c 'command -v claude || command -v codex || command -v cursor-agent || command -v git'
+          # Identity on a public bind is the one misconfiguration that hands the hub to anyone.
+          ! docker run --rm -e KANDY_IDENTITY=tailscale -e KANDY_TAILNET_HOST=h.ts.net -e KANDY_BIND=0.0.0.0 kandy-hub

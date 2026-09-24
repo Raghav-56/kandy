@@ -325,7 +325,7 @@ async function main(): Promise<void> {
   const port = intFlag(argv, "--port", DEFAULT_PORT)
   const agent = strFlag(argv, "--agent") as AgentId | undefined
   const noRun = argv.includes("--no-run")
-  const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env", "--hub", "--token", "--https-port", "--repo"]
+  const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env", "--hub", "--token", "--https-port", "--repo", "--bind"]
   const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json", "--tailscale"]
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
@@ -366,6 +366,11 @@ async function main(): Promise<void> {
       return runHub({
         port,
         tailscale: argv.includes("--tailscale"),
+        // For a container whose Tailscale is a sidecar: trust its headers,
+        // answer to its name, but leave `serve` to the sidecar.
+        identity: process.env["KANDY_IDENTITY"] === "tailscale" ? "tailscale" : null,
+        tailnetHost: process.env["KANDY_TAILNET_HOST"] ?? null,
+        bind: strFlag(argv, "--bind") ?? process.env["KANDY_BIND"] ?? "127.0.0.1",
         httpsPort: intFlag(argv, "--https-port", 443),
         json: argv.includes("--json"),
       })

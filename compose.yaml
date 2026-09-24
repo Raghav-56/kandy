@@ -1,0 +1,42 @@
+# A kandy hub on your tailnet, with nothing exposed to the internet.
+#
+#   1. Make an auth key: https://login.tailscale.com/admin/settings/keys
+#      (reusable is fine; tag it only if you know tagged devices send no
+#      identity — the hub will then refuse them, which is the point).
+#   2. TS_AUTHKEY=tskey-auth-… KANDY_TAILNET_HOST=kandy-hub.<your-tailnet>.ts.net docker compose up -d
+#   3. Open https://kandy-hub.<your-tailnet>.ts.net — the first person in owns it.
+#   4. On each laptop: kandy runner --hub https://kandy-hub.<your-tailnet>.ts.net
+#
+# The hub listens on 127.0.0.1 inside a network it shares with Tailscale and
+# nothing else, which is what makes Tailscale's identity headers trustworthy:
+# the only thing that can connect from loopback is the sidecar.
+
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: kandy-hub
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?make an auth key at https://login.tailscale.com/admin/settings/keys}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_USERSPACE: "true"
+    volumes:
+      - tailscale:/var/lib/tailscale
+      - ./deploy/serve.json:/config/serve.json:ro
+    restart: unless-stopped
+
+  hub:
+    build: .
+    # Share the sidecar's network: its loopback is our loopback.
+    network_mode: service:tailscale
+    depends_on: [tailscale]
+    environment:
+      KANDY_IDENTITY: tailscale
+      KANDY_TAILNET_HOST: ${KANDY_TAILNET_HOST:?the name Tailscale serves the hub under, e.g. kandy-hub.tail1234.ts.net}
+    volumes:
+      - kandy:/data
+    restart: unless-stopped
+
+volumes:
+  tailscale:
+  kandy:
