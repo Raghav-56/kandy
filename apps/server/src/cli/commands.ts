@@ -1,14 +1,16 @@
 import { execFile } from "node:child_process"
-import { copyFileSync, existsSync, mkdirSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { splitPrompt, type AgentId, type Board, type BoardView, type Note } from "@kandy/core"
 import { banner, berry, bold, dim, faint, heat, lemon, mint, sparkline, statusTag } from "./banner.js"
-import { client, DEFAULT_PORT, ensureUp } from "./daemon.js"
+import { client, DEFAULT_PORT, ensureUp, hubFor } from "./daemon.js"
 import type { Reclaimable } from "../gc.js"
 import { findReclaimable, findStrippable, strip, heldBack, humanBytes, reclaim } from "../gc.js"
+import { originOf } from "../worktree.js"
+import { STATE_DIR } from "../paths.js"
 
 const exec = promisify(execFile)
 const out = (s = "") => process.stdout.write(s + "\n")
@@ -22,9 +24,16 @@ export async function boardHere(port: number): Promise<{ board: Board; view: Boa
 
   const { boards } = await api.boards()
   // Longest match wins, so a repo nested inside another picks the inner one.
-  const match = boards
+  const byPath = boards
     .filter((b) => cwd === b.repoPath || cwd.startsWith(b.repoPath + "/"))
     .sort((a, b) => b.repoPath.length - a.repoPath.length)[0]
+  /*
+   * On a team the path in a board is where the repository is on whoever made
+   * it; yours is somewhere else. The remote is the same for everyone, so a
+   * board is found by it when the path says nothing.
+   */
+  const origin = byPath ? null : await originOf(cwd).catch(() => null)
+  const match = byPath ?? (origin ? boards.find((b) => b.remote === origin) : undefined)
   if (!match) return null
   return { board: match, view: await api.view(match.id) }
 }
@@ -82,7 +91,7 @@ export async function cmdNew(
     `  ${mint("✓")} ${bold(first)}` +
       (opts.run && agent ? dim(`  running with ${agent}`) : agent ? dim(`  assigned to ${agent}`) : ""),
   )
-  out(dim(`    http://127.0.0.1:${opts.port}`))
+  out(dim(`    ${boardUrl(opts.port)}`))
   return 0
 }
 
@@ -126,12 +135,37 @@ export async function cmdList(opts: { port: number; all: boolean }): Promise<num
 }
 
 export async function cmdStatus(opts: { port: number }): Promise<number> {
+  const hub = hubFor(opts.port)
   const up = await ensureUp(opts.port)
-  out(banner(up ? `running on :${opts.port}` : "not running"))
+  out(banner(hub ? (up ? hub.url : "hub unreachable") : up ? `running on :${opts.port}` : "not running"))
   if (!up) return 1
 
   const api = client(opts.port)
   const [{ boards }, { agents }] = await Promise.all([api.boards(), api.agents()])
+
+  if (hub) {
+    // On a team the questions are different: who am I here, and is my
+    // machine actually taking work — a runner that is down means my notes
+    // sit waiting for a machine that never arrives.
+    const [me, { runners }] = await Promise.all([api.me(), api.runners()])
+    // This machine's own runner, by the id it keeps — not by email, which a
+    // hub with no identity does not have.
+    const myId = (() => {
+      try {
+        return readFileSync(path.join(STATE_DIR, "runner-id"), "utf8").trim()
+      } catch {
+        return null
+      }
+    })()
+    const mine = runners.filter((r) => r.runnerId === myId)
+    out(`  ${dim("team")}   ${bold(me.email ?? "the only person")}${me.role ? dim(` · ${me.role}`) : ""}`)
+    out(
+      `  ${dim("runner")} ${mine.some((r) => r.online) ? mint("connected") : lemon("not connected")}` +
+        dim(`  · ${runners.filter((r) => r.online).length} machine(s) online on the hub`),
+    )
+    if (!me.admitted) out(lemon("  nobody has added you yet") + dim(` — ask ${me.owners.join(", ") || "an owner"}`))
+    out()
+  }
 
   out(`  ${dim("repos")}`)
   for (const b of boards) out(`    ${bold(b.name)} ${dim(b.repoPath)}`)
@@ -143,7 +177,7 @@ export async function cmdStatus(opts: { port: number }): Promise<number> {
     out(`    ${a.id.padEnd(10)} ${state} ${dim(a.version ?? "")}`)
   }
   out()
-  out(`  ${dim("board")}  http://127.0.0.1:${opts.port}`)
+  out(`  ${dim("board")}  ${boardUrl(opts.port)}`)
   out()
   return 0
 }
@@ -478,7 +512,7 @@ export async function cmdSkillInstall(): Promise<number> {
 
 export async function cmdOpen(opts: { port: number }): Promise<number> {
   if (!(await ensureUp(opts.port))) return fail()
-  const url = `http://127.0.0.1:${opts.port}`
+  const url = boardUrl(opts.port)
   out(dim("  opening ") + url)
   const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open"
   await exec(cmd, [url]).catch(() => out(dim(`  open ${url}`)))
@@ -496,4 +530,9 @@ function fail(): number {
   out(berry("  could not reach the kandy daemon"))
   out(dim(`  try: kandy serve --port ${DEFAULT_PORT}`))
   return 1
+}
+
+/** Where the board is: the team hub when this machine has joined one. */
+function boardUrl(port: number): string {
+  return hubFor(port)?.url ?? `http://127.0.0.1:${port}`
 }

@@ -19,7 +19,8 @@ import { Composer } from "@/features/notes/Composer"
 import { BoardComposer } from "@/features/notes/BoardComposer"
 import { FirstRun } from "@/features/onboarding/FirstRun"
 import { NewBoardDialog } from "@/features/boards/NewBoardDialog"
-import { readOnlyFor, SOLO, TeamProvider, type Me, type Team } from "@/features/team/team"
+import { myMachineOnline, readOnlyFor, SOLO, TeamProvider, type Me, type Team } from "@/features/team/team"
+import { MachineBanner, NotAdmitted, SetupHub, useHubSetup, useMembers } from "@/features/team/onboarding"
 import { useBoard } from "@/hooks/useBoard"
 import { useTheme } from "@/hooks/useTheme"
 import { useRoute } from "@/hooks/useRoute"
@@ -33,6 +34,9 @@ import { Sidebar, type View } from "./Sidebar"
 import { TriageList } from "./TriageList"
 
 const DETAIL_SIZE_KEY = "kandy.detail-size"
+
+/** How often to look for your machine while it is not connected. */
+const RUNNER_WAIT_MS = 15_000
 
 /**
  * Whether the sidebar was left collapsed.
@@ -91,9 +95,22 @@ export function App() {
    * UI switches into, it is simply what renders when there is no team.
    */
   const [me, setMe] = useState<Me>(SOLO)
+  const [meKnown, setMeKnown] = useState(false)
   /** The hub's machines, for naming where a note runs. Empty off a hub. */
   const [runners, setRunners] = useState<RunnerInfo[]>([])
+  const [runnersLoaded, setRunnersLoaded] = useState(false)
+  const [boardsLoaded, setBoardsLoaded] = useState(false)
+  /** Sends an owner to Team → People's add row, from the setup card. */
+  const [focusAdd, setFocusAdd] = useState(false)
+  const focusedAdd = useCallback(() => setFocusAdd(false), [])
   const readOnly = readOnlyFor(me)
+  /*
+   * Nothing asks for a board until we know this person may see one. Someone
+   * on the tailnet whom no owner has added gets a token (so this page loads)
+   * and a 403 from everything else — fetching the board for them would only
+   * paint a broken app behind the screen that explains why.
+   */
+  const ready = meKnown && !(me.hub && !me.admitted)
 
   /*
    * Where you are lives in the URL rather than in three useStates, so a
@@ -162,17 +179,35 @@ export function App() {
   )
 
   const { view, connected, error, act, transcript, activity, recent, loadTranscript, clearError } =
-    useBoard(boardId, { hub: me.hub })
+    useBoard(ready ? boardId : null, { hub: me.hub })
+
+  /*
+   * Asked first, and again from "Check again". An older daemon has no /me —
+   * that is a single-player daemon by definition — and one without `admitted`
+   * predates the gate, so it let everyone in.
+   */
+  const loadMe = useCallback(async (): Promise<Me> => {
+    const next = await client
+      .me()
+      .then((r): Me => ({ ...r, admitted: r.admitted !== false, owners: r.owners ?? [] }))
+      .catch(() => SOLO)
+    setMe(next)
+    setMeKnown(true)
+    return next
+  }, [client])
+  useEffect(() => {
+    void loadMe()
+  }, [loadMe])
 
   useEffect(() => {
+    if (!ready) return
     void client.boards().then((r) => {
       setBoards(r.boards)
+      setBoardsLoaded(true)
       setBoardId((id) => id ?? r.boards[0]?.id ?? null, true)
     })
     void client.agents().then((r) => setAgents(r.agents))
-    // An older daemon has no /me; that is a single-player daemon by definition.
-    void client.me().then(setMe).catch(() => setMe(SOLO))
-  }, [client])
+  }, [client, ready])
 
   /*
    * Runner names, fetched when a note mentions a machine we cannot name.
@@ -193,9 +228,47 @@ export function App() {
     return [...ids].sort().join(",")
   }, [me.hub, view, runners])
   useEffect(() => {
-    if (!me.hub) return
-    void client.runners().then((r) => setRunners(r.runners)).catch(() => {})
-  }, [client, me.hub, unknownRunners])
+    if (!me.hub || !ready) return
+    void client
+      .runners()
+      .then((r) => {
+        setRunners(r.runners)
+        setRunnersLoaded(true)
+      })
+      .catch(() => {})
+  }, [client, me.hub, ready, unknownRunners])
+
+  /*
+   * While your own machine is missing, keep asking — slowly — so the banner
+   * and the setup card notice the moment `kandy join` connects it, without
+   * a reload. Once it is here the Team page's own poll is enough.
+   */
+  const mineOnline = myMachineOnline(me, runners)
+  useEffect(() => {
+    if (!me.hub || !me.email || !ready || mineOnline) return
+    const t = setInterval(
+      () => void client.runners().then((r) => setRunners(r.runners)).catch(() => {}),
+      RUNNER_WAIT_MS,
+    )
+    return () => clearInterval(t)
+  }, [client, me.hub, me.email, ready, mineOnline])
+
+  /*
+   * The owner's setup card on an empty hub. Members are only fetched when that
+   * card could show — the Team page keeps its own list.
+   */
+  const emptyHub = ready && me.hub && boardsLoaded && boards.length === 0
+  const roster = useMembers(client, recent, emptyHub)
+  const setup = useHubSetup(
+    me,
+    runners,
+    boards.length,
+    emptyHub && roster.identity ? (roster.members?.length ?? null) : null,
+  )
+  const inviteTeam = useCallback(() => {
+    setPage("team")
+    setFocusAdd(true)
+  }, [setPage])
 
   const team = useMemo<Team>(
     () => ({
@@ -238,18 +311,18 @@ export function App() {
 
   useEffect(() => {
     setForge(null)
-    if (!boardId) return
+    if (!boardId || !ready) return
     void client.forge(boardId).then(setForge).catch(() => setForge(null))
-  }, [boardId, client])
+  }, [boardId, client, ready])
 
   useEffect(() => {
     setPaths({ files: [], dirs: [] })
-    if (!boardId) return
+    if (!boardId || !ready) return
     void client
       .files(boardId)
       .then((r) => setPaths({ files: r.files, dirs: r.dirs }))
       .catch(() => setPaths({ files: [], dirs: [] }))
-  }, [boardId, client])
+  }, [boardId, client, ready])
 
   const note = view?.notes.find((n) => n.id === selected) ?? null
   const defaultAgent = agents.find((a) => a.installed && a.authed)?.id ?? null
@@ -328,6 +401,12 @@ export function App() {
     )
   }
 
+  // Before anything else renders: nothing past this point may be fetched for
+  // someone the hub has not let in.
+  if (meKnown && me.hub && !me.admitted) {
+    return <NotAdmitted me={me} onCheck={loadMe} />
+  }
+
   return (
     <TeamProvider value={team}>
     <TooltipProvider delayDuration={250}>
@@ -377,6 +456,7 @@ export function App() {
       >
         <ResizablePanel id="board" minSize="28">
           <main className="relative flex h-full min-w-0 flex-col">
+        <MachineBanner me={me} runners={runners} loaded={runnersLoaded} />
         {(error ?? notice) && (
           <button
             onClick={() => {
@@ -403,6 +483,10 @@ export function App() {
               me={me}
               runners={runners}
               recent={recent}
+              boardCount={boards.length}
+              focusAdd={focusAdd}
+              onFocusedAdd={focusedAdd}
+              onAddBoard={() => setNewBoard(true)}
               onRunners={setRunners}
             />
           ) : page === "usage" ? (
@@ -435,8 +519,17 @@ export function App() {
                 void act((c) => c.deleteNote(id))
               }}
             />
-          ) : boards.length === 0 ? (
-            <FirstRun agents={agents} onChooseRepo={() => setNewBoard(true)} />
+          ) : boardsLoaded && boards.length === 0 ? (
+            /* On a hub the hub's own agents run nothing, so the solo first
+               run would talk about the wrong machine — an owner gets the
+               hub's setup instead. */
+            setup.show ? (
+              <div className="mx-auto w-full max-w-[560px] px-6 pt-[12vh] pb-16">
+                <SetupHub setup={setup} onAddBoard={() => setNewBoard(true)} onInvite={inviteTeam} />
+              </div>
+            ) : (
+              <FirstRun agents={agents} onChooseRepo={() => setNewBoard(true)} />
+            )
           ) : (
             <LoadingBlock className="pt-24" label="Opening the board" />
           )}

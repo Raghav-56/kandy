@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { KandyClient } from "@kandy/client"
-import type { BoardView, KandyEvent, Member, Role, RunnerInfo } from "@kandy/core"
+import type { BoardView, KandyEvent, Role, RunnerInfo } from "@kandy/core"
 import { can, ROLES } from "@kandy/core"
 import {
   Button,
+  CopyButton,
+  CopyCommand,
   Dot,
   Input,
   Select,
@@ -14,6 +16,8 @@ import {
 } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { ago, person, runnerById, sameEmail, type Me } from "@/features/team/team"
+import { inviteMessage, joinCommand } from "@/features/team/install"
+import { InviteCard, SetupHub, useHubSetup, useMembers, type Roster } from "@/features/team/onboarding"
 import { useTick } from "@/hooks/useTick"
 import { cn } from "@/lib/utils"
 import { Section } from "./SettingsPage"
@@ -34,6 +38,10 @@ export function TeamPage({
   me,
   runners,
   recent,
+  boardCount,
+  focusAdd,
+  onFocusedAdd,
+  onAddBoard,
   onRunners,
 }: {
   client: KandyClient
@@ -42,8 +50,30 @@ export function TeamPage({
   runners: RunnerInfo[]
   /** Attributed events, newest first, from the board's own stream. */
   recent: KandyEvent[]
+  boardCount: number
+  /** Set by "Invite your team" elsewhere, to land on the add-person row once. */
+  focusAdd: boolean
+  onFocusedAdd: () => void
+  onAddBoard: () => void
   onRunners: (runners: RunnerInfo[]) => void
 }) {
+  // Owned here rather than in People so the setup card ticks "Invite your
+  // team" the moment someone is added — the stream only says so when a board
+  // is open, and a fresh hub may not have one yet.
+  const roster = useMembers(client, recent)
+  const setup = useHubSetup(me, runners, boardCount, roster.identity ? (roster.members?.length ?? null) : null)
+  const addRef = useRef<HTMLInputElement>(null)
+  const focusAddRow = () => {
+    addRef.current?.scrollIntoView({ block: "center", behavior: "smooth" })
+    addRef.current?.focus({ preventScroll: true })
+  }
+  useEffect(() => {
+    if (!focusAdd) return
+    focusAddRow()
+    // Handled once, so opening Team later from the sidebar does not grab focus.
+    onFocusedAdd()
+  }, [focusAdd, onFocusedAdd])
+
   /*
    * Runners come and go without writing to the log — a laptop lid closing is
    * not an event anyone appended — so "online" can only be kept honest by
@@ -76,13 +106,19 @@ export function TeamPage({
         {me.role && <span className="text-faint"> · {me.role}</span>}
       </p>
 
-      <People client={client} me={me} recent={recent} />
+      <SetupHub setup={setup} onAddBoard={onAddBoard} onInvite={focusAddRow} className="mt-6" />
+
+      <People client={client} me={me} roster={roster} addRef={addRef} />
 
       <Section
         title="Machines"
         body="Each person's notes run on their own machine, with their own agents and logins. The hub runs nothing."
       >
         <Machines runners={runners} me={me} />
+        <div className="mt-4">
+          <p className="text-muted-foreground text-aux">To connect a machine, run this on it:</p>
+          <CopyCommand command={joinCommand()} className="mt-1.5" />
+        </div>
       </Section>
 
       <Section title="Activity" body="What people did on this hub, most recent first.">
@@ -92,33 +128,24 @@ export function TeamPage({
   )
 }
 
-function People({ client, me, recent }: { client: KandyClient; me: Me; recent: KandyEvent[] }) {
-  const [members, setMembers] = useState<Member[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+function People({
+  client,
+  me,
+  roster,
+  addRef,
+}: {
+  client: KandyClient
+  me: Me
+  roster: Roster
+  addRef: React.Ref<HTMLInputElement>
+}) {
+  const { members, setMembers, identity, error, setError } = roster
   const [busy, setBusy] = useState<string | null>(null)
+  /** Who was just added, for the message to send them. */
+  const [invited, setInvited] = useState<string | null>(null)
   const [email, setEmail] = useState("")
   const [role, setRole] = useState<Role>("member")
   const admin = can(me.role, "member:admin")
-
-  /*
-   * Refetched when someone else changes the list, not polled. Membership is
-   * in the log, so the stream already says when it moved — keyed on the
-   * newest member event rather than on `recent`, which changes with every
-   * note anyone touches.
-   */
-  const memberSeq = recent.find((e) => e.type.startsWith("member."))?.seq ?? 0
-  // A hub started without an identity provider has one person — whoever holds
-  // its token — and so no list to show. Said, rather than shown empty.
-  const [identity, setIdentity] = useState(true)
-  useEffect(() => {
-    void client
-      .members()
-      .then((r) => {
-        setIdentity(r.identity !== false)
-        setMembers(r.members)
-      })
-      .catch((err: Error) => setError(err.message))
-  }, [client, memberSeq])
 
   async function set(target: string, next: Role | null) {
     setBusy(target)
@@ -172,6 +199,9 @@ function People({ client, me, recent }: { client: KandyClient; me: Me; recent: K
                 </div>
                 {admin ? (
                   <>
+                    {/* Anyone added may still need telling how to get in —
+                        the message is the same for everyone, so any row has it. */}
+                    {!self && <CopyButton text={inviteMessage()} label="Copy invite" />}
                     <RoleSelect
                       value={m.role}
                       disabled={busy === m.email}
@@ -203,10 +233,15 @@ function People({ client, me, recent }: { client: KandyClient; me: Me; recent: K
             e.preventDefault()
             const target = email.trim()
             if (!target) return
-            void set(target, role).then((ok) => ok && setEmail(""))
+            void set(target, role).then((ok) => {
+              if (!ok) return
+              setEmail("")
+              setInvited(target)
+            })
           }}
         >
           <Input
+            ref={addRef}
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -220,6 +255,8 @@ function People({ client, me, recent }: { client: KandyClient; me: Me; recent: K
           </Button>
         </form>
       )}
+
+      {admin && invited && <InviteCard email={invited} onDone={() => setInvited(null)} />}
 
       {error && members !== null && <p className="text-berry mt-2.5 text-aux">{error}</p>}
     </Section>
@@ -255,7 +292,7 @@ function Machines({ runners, me }: { runners: RunnerInfo[]; me: Me }) {
   if (runners.length === 0) {
     return (
       <p className="text-muted-foreground text-aux">
-        No machine has connected yet. Run <code className="font-mono">kandy runner</code> on yours.
+        No machine has connected yet.
       </p>
     )
   }

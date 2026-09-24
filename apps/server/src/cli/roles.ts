@@ -10,6 +10,7 @@ import { Runners } from "../hub.js"
 import { createHttpServer, parseHosts } from "../http.js"
 import { tailscaleIdentity } from "../identity.js"
 import { Members } from "../members.js"
+import { clearRunner, markRunner } from "../joined.js"
 import { STATE_DIR, TOKEN_PATH } from "../paths.js"
 import { Permissions } from "../permission.js"
 import type { PrWatch } from "../prwatch.js"
@@ -205,6 +206,9 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
 
   const hub = opts.hub.replace(/\/+$/, "")
   const me = runnerId()
+  // At once, not once connected: a hub that is slow to answer must not make
+  // the next `kandy` command think no runner exists and start a second.
+  markRunner(process.pid)
   const headers: Record<string, string> = opts.token ? { authorization: `Bearer ${opts.token}` } : {}
   const consent = new ConsentStore()
 
@@ -401,6 +405,7 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
     link?.stop()
     runner.shutdown()
     await log.drain().catch(() => {})
+    clearRunner(process.pid)
     process.exit(0)
   }
   process.on("SIGINT", () => void shutdown())

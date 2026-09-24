@@ -13,7 +13,18 @@ import { agentLabel } from "@/features/agents/AgentMark"
 import { cn } from "@/lib/utils"
 
 /** Who this browser is, as the daemon sees it. */
-export type Me = { hub: boolean; email: string | null; role: Role | null }
+export type Me = {
+  hub: boolean
+  email: string | null
+  role: Role | null
+  /**
+   * False only for someone a hub can name but no owner has added yet. Every
+   * other call they make is refused, so the app stops at a screen saying so.
+   */
+  admitted: boolean
+  /** Who can add people, so "ask an owner" can name one. */
+  owners: string[]
+}
 
 /**
  * What `kandy serve` answers, and what we assume until `me()` says otherwise.
@@ -23,7 +34,7 @@ export type Me = { hub: boolean; email: string | null; role: Role | null }
  * one round-trip it takes to learn otherwise — rather than flashing them at
  * someone who has none.
  */
-export const SOLO: Me = { hub: false, email: null, role: null }
+export const SOLO: Me = { hub: false, email: null, role: null, admitted: true, owners: [] }
 
 export type Team = {
   me: Me
@@ -70,6 +81,16 @@ export function readOnlyFor(me: Me): boolean {
 
 /** The tooltip every disabled write control shares, so it reads as one rule. */
 export const VIEWER_HINT = "Viewers can look but not change anything."
+
+/**
+ * Whether this person has a machine connected right now.
+ *
+ * Only asked on a hub that knows who people are: without an email there is
+ * no "yours", and on `kandy serve` the machine is the daemon itself.
+ */
+export function myMachineOnline(me: Me, runners: RunnerInfo[]): boolean {
+  return runners.some((r) => r.online && sameEmail(r.owner, me.email))
+}
 
 export function sameEmail(a: string | null | undefined, b: string | null | undefined): boolean {
   return !!a && !!b && normalEmail(a) === normalEmail(b)

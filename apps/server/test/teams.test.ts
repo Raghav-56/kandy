@@ -99,10 +99,28 @@ test("the first person in owns the hub; the next is told who they are and who to
   const h = await tailnetHub()
   try {
     const alice = await h.as("alice@example.com")("/me")
-    assert.deepEqual(await alice.json(), { hub: true, email: "alice@example.com", role: "owner" })
+    assert.deepEqual(await alice.json(), {
+      hub: true,
+      email: "alice@example.com",
+      role: "owner",
+      admitted: true,
+      owners: ["alice@example.com"],
+    })
 
     const bob = await h.as("bob@example.com")("/boards")
     assert.equal(bob.status, 403)
+
+    // Not admitted, but told so properly: who he is, and whom to ask.
+    const who = await h.as("bob@example.com")("/me")
+    assert.equal(who.status, 200)
+    assert.deepEqual(await who.json(), {
+      hub: true,
+      email: "bob@example.com",
+      name: "bob",
+      role: null,
+      admitted: false,
+      owners: ["alice@example.com"],
+    })
     assert.match((await bob.json()).error.message, /you are bob@example\.com.*ask one of its owners/)
 
     const add = await h.as("alice@example.com")("/members", { method: "POST", body: { email: "bob@example.com", role: "member" } })

@@ -6,6 +6,8 @@ import { Runner } from "./runner.js"
 import { createHttpServer, parseHosts } from "./http.js"
 import { cmdMcp, cmdSkills } from "./cli/capabilities.js"
 import { runHub, runRunner } from "./cli/roles.js"
+import { joinedHub } from "./joined.js"
+import { cmdInvite, cmdJoin, cmdLeave } from "./cli/join.js"
 import { LocalLog } from "./local-log.js"
 import { LocalWorkshop } from "./local-workshop.js"
 import { ASK_TIMEOUT_MS, Permissions } from "./permission.js"
@@ -106,8 +108,10 @@ function usage(): void {
   w(cmd("kandy skill", "let other agents queue work onto a board"))
 
   w(head("teams"))
-  w(cmd("kandy hub --tailscale", "a board your team shares; runs nothing itself"))
-  w(cmd("kandy runner --hub <url>", "run the notes given to you, on this machine"))
+  w(cmd("kandy join <hub-url>", "put this machine on a team — once, then forget it"))
+  w(cmd("kandy invite <email>", "add someone, and get the message to send them"))
+  w(cmd("kandy leave", "back to one person, one machine"))
+  w(cmd("kandy hub --tailscale", "start a team's board; it runs nothing itself"))
   w(`\n  ${dim("Everyone's notes run on their own machine, with their own agents and")}\n`)
   w(`  ${dim("their own logins. The hub keeps the board and never runs anything.")}\n`)
 
@@ -326,7 +330,7 @@ async function main(): Promise<void> {
   const port = intFlag(argv, "--port", DEFAULT_PORT)
   const agent = strFlag(argv, "--agent") as AgentId | undefined
   const noRun = argv.includes("--no-run")
-  const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env", "--hub", "--token", "--https-port", "--repo", "--bind"]
+  const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env", "--hub", "--token", "--https-port", "--repo", "--bind", "--role"]
   const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json", "--tailscale"]
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
@@ -363,6 +367,20 @@ async function main(): Promise<void> {
       break
     case "serve":
       return serve(argv)
+    case "join":
+      process.exit(
+        await cmdJoin(rest[1], {
+          ...(strFlag(argv, "--token") ? { token: strFlag(argv, "--token")! } : {}),
+          repos: allFlags(argv, "--repo"),
+        }),
+      )
+      break
+    case "leave":
+      process.exit(await cmdLeave())
+      break
+    case "invite":
+      process.exit(await cmdInvite(rest[1], strFlag(argv, "--role")))
+      break
     case "hub":
       return runHub({
         port,
@@ -376,19 +394,22 @@ async function main(): Promise<void> {
         json: argv.includes("--json"),
       })
     case "runner": {
-      const hub = strFlag(argv, "--hub") ?? process.env["KANDY_HUB"]
+      // Flags win; otherwise the hub this machine joined.
+      const joined = joinedHub()
+      const hub = strFlag(argv, "--hub") ?? process.env["KANDY_HUB"] ?? joined?.url
       if (!hub) {
-        process.stderr.write(berry("  kandy runner needs --hub <url>\n"))
+        process.stderr.write(berry("  not on a team yet — kandy join <hub-url>, or kandy runner --hub <url>\n"))
         process.exit(1)
       }
+      const repos = allFlags(argv, "--repo")
       return runRunner({
         hub,
         // On one machine the hub's own token; across a tailnet, none —
         // Tailscale says whose machine this is.
-        token: strFlag(argv, "--token") ?? process.env["KANDY_HUB_TOKEN"] ?? "",
+        token: strFlag(argv, "--token") ?? process.env["KANDY_HUB_TOKEN"] ?? joined?.token ?? "",
         slots: intFlag(argv, "--slots", 4),
         json: argv.includes("--json"),
-        repos: allFlags(argv, "--repo"),
+        repos: repos.length ? repos : (joined?.repos ?? []),
       })
     }
     case "new":

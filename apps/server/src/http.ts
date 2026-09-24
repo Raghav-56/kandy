@@ -228,6 +228,31 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     }
     const role = deps.members.arrive(person)
     if (!role) {
+      /*
+       * On the tailnet, not on the team — yet. Two questions still get an
+       * answer, because the rest of onboarding depends on them: who am I
+       * (so the page and `kandy join` can say "you are bob@…, ask alice@…"),
+       * and the empty token the web app needs to load far enough to say it.
+       * The owners are named because "ask an owner" is useless without a
+       * name, and everyone asking is already on the company's network.
+       */
+      // The app itself, too: it is a public build artifact, and without it
+      // there is no page to say any of this on. Only real files in the build
+      // — a bare API path like `/boards` is not one, even without `/api`.
+      if (req.method === "GET" && apiPath === null && isBundleAsset(url.pathname)) {
+        return void serveStatic(url.pathname, res)
+      }
+      if (req.method === "GET" && (routed === "/me" || routed === "/auth/token")) {
+        res.setHeader("Cache-Control", "no-store")
+        const owners = deps.members.list().filter((m) => m.role === "owner").map((m) => m.email)
+        return send(
+          res,
+          200,
+          routed === "/me"
+            ? { hub: true, email: person.email, name: person.name, role: null, admitted: false, owners }
+            : { token: "", identity: { email: person.email, name: person.name, role: null } },
+        )
+      }
       return fail(res, 403, "forbidden", `you are ${person.email}, and nobody has added you to this hub yet — ask one of its owners`)
     }
     actor = person.email
@@ -284,6 +309,10 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
       hub: Boolean(deps.runners),
       email: actor,
       role: deps.members?.roleOf(actor) ?? null,
+      // Past the gate means admitted: a single-player daemon and a token hub
+      // have nobody to keep out.
+      admitted: true,
+      owners: deps.members?.list().filter((m) => m.role === "owner").map((m) => m.email) ?? [],
     })
   }
 

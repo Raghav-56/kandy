@@ -46,18 +46,60 @@ kandy hub --tailscale
 
 It runs `tailscale serve` for itself and takes it down on exit.
 
-### Then
+### Then — onboarding, start to finish
 
-1. **Open the hub's URL.** The first person in owns it.
-2. **Add people** on the Team page, by the email Tailscale knows them by. Roles: *owner* (admits
-   people), *member* (writes and runs), *viewer* (looks).
-3. **Everyone runs a runner** on their own laptop, inside the repositories they work on:
+**The owner** (whoever opens the hub first):
+
+1. Opens the hub's URL. They are its owner, and a **Set up your hub** checklist ticks itself off as
+   they go: connect your machine, add a board, invite your team.
+2. Connects their own laptop: `kandy join https://kandy-hub.<tailnet>.ts.net`.
+3. Adds people — on the Team page, or from any joined machine:
 
    ```sh
-   kandy runner --hub https://kandy-hub.<your-tailnet>.ts.net --repo ~/code/app
+   kandy invite bob@corp.com            # --role member (default) | viewer | owner
    ```
 
-   `--repo` is optional; without it a runner finds its clones by git remote in the usual places.
+   Either way they get a message to paste to Bob:
+
+   ```
+   You're on the kandy hub at https://kandy-hub.<tailnet>.ts.net
+   1. Make sure you're on our Tailscale network.
+   2. Install kandy:  <install command>
+   3. Connect your machine:  kandy join https://kandy-hub.<tailnet>.ts.net
+   Your notes run on your own machine, with your own agents.
+   ```
+
+**The new person** runs one command:
+
+```sh
+kandy join https://kandy-hub.<tailnet>.ts.net
+```
+
+It checks, in order, and says plainly what is wrong at whichever step fails:
+
+| Check | If it fails |
+| --- | --- |
+| Can this machine reach the hub? | "cannot reach it", plus whether Tailscale is up here |
+| Does the hub know who this is? | not on the tailnet, or a tagged device — which carries nobody's identity |
+| Has an owner added them? | "Nobody has added you yet — ask alice@…: `kandy invite bob@…`". The machine is saved and connects the moment they do |
+| Which agents are signed in here? | lists the signed-out ones and how to sign in |
+| Which team repositories are cloned here? | ✓ per board, found by git remote, not path |
+
+Then it starts this machine's runner in the background and waits until the hub sees it. From then
+on **every `kandy` command on that machine talks to the hub**: `kandy "fix the flash"` inside a
+repository makes a note on the team's board and runs it here; `kandy` shows the team, and whether
+this machine's runner is connected. Nothing to remember, no runner to start by hand — any command
+restarts it if it has stopped. `kandy leave` puts the machine back to single-player.
+
+Someone who opens the hub in a browser before being added sees who they are signed in as, which
+owners can add them, and the exact command to give them — never an error page. A member whose own
+machine is not connected sees a banner with the `kandy join` command until it is.
+
+`KANDY_LOCAL=1 kandy …` uses this machine's own board even while on a team.
+
+> **Install command.** Every onboarding message reads it from one constant,
+> `packages/core/src/install.ts`. It is a placeholder: the name `kandy` on npm belongs to someone
+> else, so it must be changed once the package's npm name is chosen.
 
 ## What people control, and what the hub does not
 

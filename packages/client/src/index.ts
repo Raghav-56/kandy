@@ -170,7 +170,15 @@ export class KandyClient {
   }
   /** Who this request is, and whether the daemon is a hub. Answers on every daemon. */
   me() {
-    return this.req<{ hub: boolean; email: string | null; role: Role | null }>("GET", "/me")
+    return this.req<{
+      hub: boolean
+      email: string | null
+      role: Role | null
+      /** False for someone on the tailnet whom no owner has added yet. */
+      admitted: boolean
+      /** Who can add people, so "ask an owner" can name one. */
+      owners: string[]
+    }>("GET", "/me")
   }
   /** The latest events someone can be named for, newest first. */
   activity(limit = 50) {
