@@ -201,7 +201,8 @@ async function serve(args: string[]): Promise<void> {
 
   const token = loadToken(TOKEN_PATH)
   const engine = new Engine()
-  const prs: PrWatch = new PrWatch(engine, 60_000, (boardId, noteId) => {
+  const prs: PrWatch = new PrWatch(
+    { view: (id) => engine.view(id), boards: () => engine.projections.boards(), emit: (p) => void engine.emit(p) }, 60_000, (boardId, noteId) => {
     runner.landed(boardId, noteId)
   })
   // The broker asks the runner where a run lives; the runner hands the broker

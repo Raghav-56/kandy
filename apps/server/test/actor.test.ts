@@ -114,3 +114,17 @@ test("opening twice does not try to add the column twice", () => {
   assert.equal(again.append(board, 1000, "alice@example.com").actor, "alice@example.com")
   again.close()
 })
+
+test("activity is the newest attributed events, and nothing nobody did", () => {
+  const store = new Store(freshFile())
+  store.append(board, 1, null)
+  store.append({ type: "board.removed", data: { boardId: "x" } } as never, 2, "alice@example.com")
+  store.append({ type: "board.removed", data: { boardId: "y" } } as never, 3, null)
+  store.append({ type: "board.removed", data: { boardId: "z" } } as never, 4, "bob@example.com")
+  assert.deepEqual(
+    store.attributed(10).map((e) => e.actor),
+    ["bob@example.com", "alice@example.com"],
+  )
+  assert.equal(store.attributed(1).length, 1)
+  store.close()
+})

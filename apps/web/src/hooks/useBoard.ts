@@ -13,18 +13,6 @@ import {
 const RECENT = 50
 
 /**
- * How far back to replay on a hub, so the activity list opens with history.
- *
- * There is no "recent events" endpoint, but the stream already replays
- * everything after the seq it is given — so asking from a little before the
- * snapshot backfills the list for the cost of a few hundred small frames. The
- * view is not refolded from them: anything at or below the snapshot's seq is
- * skipped exactly as before. Off a hub every actor is null, so this is 0 and
- * the stream starts where it always did.
- */
-const BACKFILL = 400
-
-/**
  * Snapshot, then stream. The reducer is the one in @kandy/core — the same code
  * the server projects with and the TUI will render with.
  */
@@ -67,12 +55,16 @@ export function useBoard(boardId: string | null, opts: { hub?: boolean } = {}) {
         seq.current = snapshot.seq
         setError(null)
 
-        close = client.events(hub ? Math.max(0, snapshot.seq - BACKFILL) : snapshot.seq, {
+        // History from `/activity`; everything after the snapshot from the stream.
+        if (hub) {
+          void client
+            .activity(RECENT)
+            .then(({ events }) => !cancelled && setRecent((r) => merge(r, events)))
+            .catch(() => {})
+        }
+        close = client.events(snapshot.seq, {
           onEvent: (e) => {
-            if (e.actor)
-              setRecent((r) =>
-                r.some((x) => x.seq === e.seq) ? r : [e, ...r].sort((a, b) => b.seq - a.seq).slice(0, RECENT),
-              )
+            if (e.actor) setRecent((r) => merge(r, [e]))
             // Skip anything already folded into the snapshot.
             if (e.seq <= seq.current) return
             seq.current = e.seq
@@ -157,4 +149,11 @@ export function useBoard(boardId: string | null, opts: { hub?: boolean } = {}) {
     loadTranscript,
     clearError: () => setError(null),
   }
+}
+
+/** Newest first, each event once, no more than the list shows. */
+function merge(have: KandyEvent[], more: KandyEvent[]): KandyEvent[] {
+  const bySeq = new Map(have.map((e) => [e.seq, e]))
+  for (const e of more) bySeq.set(e.seq, e)
+  return [...bySeq.values()].sort((a, b) => b.seq - a.seq).slice(0, RECENT)
 }

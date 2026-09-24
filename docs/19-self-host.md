@@ -98,10 +98,13 @@ KANDY_HOSTS=kandy.example.com kandy hub --bind 0.0.0.0
 `--bind` anything other than loopback is refused when identity is on: it would let anyone who can
 reach the port claim to be anyone.
 
+## PRs
+
+A PR opens from the runner that holds the branch, pushed with its owner's `gh`. Each runner also
+watches the PRs of its own notes — CI going green, a review, a merge on GitHub landing the note —
+because watching needs `gh` and the repository, and the hub has neither.
+
 ## Known gaps in this version
 
-- **PR status is not watched on a hub.** PRs still open from the runner that holds the branch, but
-  a PR merged on GitHub does not move its note until someone looks. Watching needs `gh` and the
-  repository, which a hub has neither of.
 - **Permission prompts reach the board from Claude only.** Codex, Cursor and opencode need their own
   structured protocols to ask; see [`17-capabilities.md`](17-capabilities.md).

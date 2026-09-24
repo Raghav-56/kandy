@@ -172,6 +172,10 @@ export class KandyClient {
   me() {
     return this.req<{ hub: boolean; email: string | null; role: Role | null }>("GET", "/me")
   }
+  /** The latest events someone can be named for, newest first. */
+  activity(limit = 50) {
+    return this.req<{ events: KandyEvent[] }>("GET", `/activity?limit=${limit}`)
+  }
   /** Every machine that has connected to this hub, and whether it is here now. */
   runners() {
     return this.req<{ runners: RunnerInfo[] }>("GET", "/runners")

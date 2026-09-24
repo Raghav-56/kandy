@@ -112,9 +112,16 @@ export async function runHub(opts: {
   }
 
   // PR state is read with `gh`, inside a repository, with someone's own
-  // credentials — none of which a hub has. On a hub it is not watched; the
-  // PR still opens from the runner that holds the branch.
-  const prs = { refresh: async () => {}, start() {}, stop() {} } as unknown as PrWatch
+  // credentials — none of which a hub has. Each runner watches its own notes;
+  // when the hub wants a note looked at now, it asks the runner holding it.
+  const prs = {
+    refresh: async (_boardId: string, noteId: string) => {
+      const r = runners.placement(noteId)
+      if (r) await runners.call(r, "refreshPr", [_boardId, noteId]).catch(() => {})
+    },
+    start() {},
+    stop() {},
+  } as unknown as PrWatch
 
   const server = createHttpServer({
     engine,
@@ -194,6 +201,7 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
   const { detectAll } = await import("../agents/index.js")
   const { originOf } = await import("../worktree.js")
   const { repos: nearby } = await import("../browse.js")
+  const { PrWatch } = await import("../prwatch.js")
 
   const hub = opts.hub.replace(/\/+$/, "")
   const me = runnerId()
@@ -205,7 +213,21 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
     (ops) => link!.sendLog(ops),
     (runId) => link!.history(runId),
   )
-  const runner = new Runner(log, opts.slots, undefined, { url: hub, token: opts.token })
+  // PRs are watched here, with this person's own `gh`, for this machine's
+  // notes only. The hub cannot: it has no repository and no credentials.
+  let prs: InstanceType<typeof PrWatch> | undefined
+  const runner = new Runner(
+    log,
+    opts.slots,
+    (boardId, noteId) => void prs?.refresh(boardId, noteId).catch(() => {}),
+    { url: hub, token: opts.token },
+  )
+  prs = new PrWatch(
+    { view: (id) => log.view(id), boards: () => log.replica.boards(), emit: (p) => log.emit(p) },
+    60_000,
+    (boardId, noteId) => runner.landed(boardId, noteId),
+    (n) => n.runner === me,
+  )
   const workshop = new LocalWorkshop(runner)
 
   /*
@@ -305,6 +327,10 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
     return workshop.request(boardId, noteId, agent as never)
   }) as never
 
+  handlers["refreshPr"] = (async (boardId: string, noteId: string) => {
+    await prs?.refresh(boardId, noteId)
+  }) as never
+
   handlers["consent"] = (async (
     boardId: string,
     noteId: string,
@@ -346,6 +372,7 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
     if (e.type === "board.created" || e.type === "board.removed") void locate().then(announce)
   })
   const again = setInterval(() => void refresh(), 60_000)
+  prs.start()
 
   async function refresh() {
     agents = await detectAll()
@@ -370,6 +397,7 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
 
   const shutdown = async () => {
     clearInterval(again)
+    prs?.stop()
     link?.stop()
     runner.shutdown()
     await log.drain().catch(() => {})

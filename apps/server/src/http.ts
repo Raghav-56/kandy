@@ -287,6 +287,12 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     })
   }
 
+  // GET /activity — who did what lately, newest first. Empty on `kandy serve`,
+  // where nobody is named.
+  if (req.method === "GET" && routed === "/activity") {
+    return send(res, 200, { events: deps.engine.store.attributed(Number(url.searchParams.get("limit") ?? 50) || 50) })
+  }
+
   // GET /runners — every machine that has said hello, and whether it is here now.
   if (req.method === "GET" && routed === "/runners") {
     return send(res, 200, { runners: deps.runners?.list() ?? [] })

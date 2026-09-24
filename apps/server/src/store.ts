@@ -91,6 +91,9 @@ export class Store {
     // which is honest: nobody recorded who, and inventing an answer now would
     // be worse than the null.
     this.addColumn("events", "actor", "TEXT")
+    // Activity reads the newest attributed events; without this it scans the
+    // whole log to find them.
+    this.db.exec("CREATE INDEX IF NOT EXISTS events_actor ON events(actor, seq) WHERE actor IS NOT NULL")
   }
 
   /** Add a column unless it is already there. Idempotent, like the DDL above. */
@@ -152,6 +155,17 @@ export class Store {
          WHERE e.seq > ? AND s.seq IS NULL ORDER BY e.seq LIMIT ?`,
       )
       .all(after, limit) as Row[]
+    return rows.map(hydrate)
+  }
+
+  /**
+   * The latest events someone can be named for, newest first — what the Team
+   * page's activity shows. Not a replay: nothing is folded from these.
+   */
+  attributed(limit = 50): KandyEvent[] {
+    const rows = this.db
+      .prepare("SELECT seq, ts, type, data, actor FROM events WHERE actor IS NOT NULL ORDER BY seq DESC LIMIT ?")
+      .all(Math.min(Math.max(limit, 1), 500)) as Row[]
     return rows.map(hydrate)
   }
 
