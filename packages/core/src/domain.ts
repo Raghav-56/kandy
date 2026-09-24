@@ -186,6 +186,20 @@ export type Note = {
    * have been flattering nonsense.
    */
   outcome: Outcome | null
+  /**
+   * The runner holding this note's worktree, once one has taken it.
+   *
+   * Null on a single-player daemon, where there is only one machine and so
+   * nothing to name. On a hub it says where the work is, and it is where every
+   * later command about the note has to go — the diff, the merge, the PR —
+   * because that is the only machine with the checkout.
+   */
+  runner: string | null
+  /**
+   * Someone asked for this note to run on a machine whose owner has not said
+   * yes. The run has not started and will not until they do.
+   */
+  held: { runnerId: string; requestedBy: string | null; agent: AgentId; at: number } | null
   createdAt: number
   updatedAt: number
 }

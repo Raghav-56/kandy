@@ -97,11 +97,31 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         stat: null,
         pr: null,
         outcome: null,
+        runner: null,
+        held: null,
         createdAt: e.ts,
         updatedAt: e.ts,
       }
       return { ...view, notes: [...view.notes, note] }
     }
+
+    case "note.placed":
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, runner: e.data.runnerId }))
+
+    case "note.held":
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({
+        ...n,
+        held: { runnerId: e.data.runnerId, requestedBy: e.data.requestedBy, agent: e.data.agent, at: e.ts },
+      }))
+
+    case "note.released":
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, held: null }))
+
+    // Hub-wide. A board has no members of its own.
+    case "member.added":
+    case "member.role":
+    case "member.removed":
+      return view
 
     case "note.edited":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({

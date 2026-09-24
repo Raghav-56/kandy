@@ -18,8 +18,14 @@ export class Projections {
   /** noteId -> boardId, so a note action doesn't have to search every board. */
   private noteHome = new Map<string, string>()
 
-  constructor(store: Store) {
-    for (const e of store.since(0, 1_000_000)) this.apply(e)
+  /**
+   * From a store, replayed once — or from nothing, for a runner's replica,
+   * which has no store and is fed events as they arrive from its hub. One
+   * class either way, so the board a runner decides by is folded by exactly
+   * the code that folds the hub's.
+   */
+  constructor(store?: Store) {
+    if (store) for (const e of store.since(0, 1_000_000)) this.apply(e)
   }
 
   /** Fold one event into the cache. Called for every event as it is appended. */

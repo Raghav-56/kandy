@@ -1,8 +1,4 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
-import { readFileSync } from "node:fs"
-import { homedir } from "node:os"
-import { fileURLToPath } from "node:url"
-import path from "node:path"
 import {
   between,
   checkMcpServers,
@@ -15,43 +11,16 @@ import {
   type ErrorCode,
   type StreamFrame,
 } from "@kandy/core"
-import type { Runner } from "./runner.js"
 import type { PrWatch } from "./prwatch.js"
 import type { Permissions } from "./permission.js"
-import { detectForge, openPr } from "./forge.js"
+import type { Workshop } from "./workshop.js"
 import { isBundleAsset, serveStatic } from "./static.js"
 import { kandyVersion } from "./version.js"
-import { limitsFor } from "./limits.js"
-import {
-  clearStaged,
-  describe,
-  saveAttachments,
-  screen,
-  stageAttachments,
-  stagedFor,
-  unstageAttachment,
-} from "./attach.js"
-import { defaultModelFor, modelsFor, warmPrices } from "./pricing.js"
 import { computeStats } from "./stats.js"
-import { list as listDir, nativePick, repos, suggestions } from "./browse.js"
-import { warmCatalogue } from "./agents/catalogue.js"
-import { setCustomModels } from "./agents/custom-models.js"
 import type { Engine } from "./engine.js"
-import { detectAll } from "./agents/index.js"
 import { coerceAttribution, commitTrailers, prBody } from "./attribution.js"
-import {
-  checkRepo,
-  deleteBranch,
-  diff as gitDiff,
-  diffStat,
-  mergeBranch,
-  removeWorktree,
-  retireWorktree,
-  trackedPaths,
-} from "./worktree.js"
 
 import { authorized } from "./auth.js"
-import { addSkills, commitSkills, listSkills, removeSkill } from "./capabilities/skills.js"
 
 const VERSION = kandyVersion()
 const STARTED = Date.now()
@@ -114,7 +83,14 @@ export function isLoopback(address: string | undefined): boolean {
 
 export type ServerDeps = {
   engine: Engine
-  runner: Runner
+  /**
+   * The machine that holds the repositories and runs the agents.
+   *
+   * Everything a route needs from a checkout, a CLI or the local disk goes
+   * through here and nowhere else, so this file can one day answer from a hub
+   * that has none of those. See `workshop.ts`.
+   */
+  workshop: Workshop
   prs: PrWatch
   token: string
   /** Absent when the daemon was built without a way to ask. */
@@ -223,11 +199,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
 
   // GET /agents/:id/models — a menu for the model pickers
   if (req.method === "GET" && parts[0] === "agents" && parts[2] === "models") {
-    // Both are cached with their own TTLs, so this is a no-op most of the time.
-    const agentId = parts[1]!
-    await Promise.all([warmPrices(), warmCatalogue(agentId)])
-    const version = (await detectAll()).find((a) => a.id === agentId)?.version ?? null
-    return send(res, 200, { models: modelsFor(agentId, version) })
+    return send(res, 200, { models: await deps.workshop.models(parts[1]!) })
   }
 
   // POST /agents/:id/models — replace the models you added yourself
@@ -236,26 +208,11 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     const ids = Array.isArray(body?.models)
       ? body.models.filter((m): m is string => typeof m === "string")
       : []
-    return send(res, 200, { models: setCustomModels(parts[1]!, ids) })
+    return send(res, 200, { models: await deps.workshop.setModels(parts[1]!, ids) })
   }
 
   if (req.method === "GET" && routed === "/agents") {
-    /*
-     * What the files say, corrected by what actually happened.
-     *
-     * A run that was refused outranks a credential that looks fine, because
-     * the CLI's own init succeeds on cached credentials and only a real
-     * attempt proves anything.
-     */
-    const failures = new Map(deps.runner.agentsFailingAuth().map((f) => [f.agent, f.at]))
-    const agents = (await detectAll()).map((a) => {
-      const at = failures.get(a.id) ?? null
-      const limits = limitsFor(a.id)
-      return at
-        ? { ...a, authed: false, authFailedAt: at, limits }
-        : { ...a, authFailedAt: null, limits }
-    })
-    return send(res, 200, { agents })
+    return send(res, 200, { agents: await deps.workshop.agents() })
   }
 
   // POST /notes/:id/reclaimed — gc removed this note's checkout
@@ -287,25 +244,14 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   if (req.method === "GET" && parts[0] === "boards" && parts[2] === "files" && parts[1]) {
     const view = deps.engine.view(parts[1]!)
     if (!view) return fail(res, 404, "board_not_found", "no such board")
-    try {
-      return send(res, 200, await trackedPaths(view.board.repoPath))
-    } catch (err) {
-      // A repo that cannot be read is not an error worth a banner; the picker
-      // simply has nothing to offer.
-      return send(res, 200, { files: [], dirs: [], error: err instanceof Error ? err.message : String(err) })
-    }
+    return send(res, 200, await deps.workshop.files(view.board.repoPath))
   }
 
   // GET /repo/browse?path=... — directory listing for the picker
   if (req.method === "GET" && routed === "/repo/browse") {
     const p = url.searchParams.get("path")
     try {
-      return send(res, 200, {
-        ...listDir(p ?? homedir()),
-        suggestions: suggestions(),
-        // The list the picker actually wants: repos, not every folder.
-        repos: repos(),
-      })
+      return send(res, 200, await deps.workshop.browse(p))
     } catch (err) {
       return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))
     }
@@ -313,13 +259,12 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
 
   // POST /repo/pick — the OS folder chooser, where the platform has one
   if (req.method === "POST" && routed === "/repo/pick") {
-    const picked = await nativePick()
-    return send(res, 200, { path: picked, supported: process.platform === "darwin" })
+    return send(res, 200, await deps.workshop.pick())
   }
 
   if (req.method === "GET" && routed === "/repo/check") {
     const p = url.searchParams.get("path") ?? ""
-    return send(res, 200, await checkRepo(expandHome(p)))
+    return send(res, 200, await deps.workshop.checkRepo(p))
   }
 
   if (req.method === "GET" && routed === "/boards") {
@@ -340,7 +285,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
 
     // Validate here rather than at first run. A board pointed at a
     // non-repo is a board that looks fine until the moment it matters.
-    const check = await checkRepo(expandHome(body.repoPath))
+    const check = await deps.workshop.checkRepo(body.repoPath)
     if (!check.isRepo) {
       return fail(res, 400, "not_a_repo", check.error ?? `${body.repoPath} is not a git repository`)
     }
@@ -348,16 +293,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     const boardId = id("board")
     const name = body.name?.trim() || check.name || "board"
 
-    // Pick a default model per installed agent rather than leaving every new
-    // board on "whatever the agent feels like". A stated default is something
-    // you can disagree with; an unstated one is something you discover.
-    await warmPrices()
-    const models: Record<string, string> = {}
-    for (const a of await detectAll()) {
-      if (!a.installed) continue
-      const pick = defaultModelFor(a.id)
-      if (pick) models[a.id] = pick
-    }
+    const models = await deps.workshop.defaultModels()
     emit(
       deps,
       event("board.created", {
@@ -410,23 +346,14 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   if (req.method === "GET" && parts[0] === "boards" && parts[2] === "forge") {
     const view = deps.engine.view(parts[1]!)
     if (!view) return fail(res, 404, "board_not_found", "no such board")
-    return send(res, 200, await detectForge(view.board.repoPath))
+    return send(res, 200, await deps.workshop.forge(view.board.repoPath))
   }
 
   // POST /boards/:id/remove
   if (req.method === "POST" && parts[0] === "boards" && parts[2] === "remove") {
     const board = deps.engine.view(parts[1]!)
     if (!board) return fail(res, 404, "board_not_found", "no such board")
-    // Worktrees live inside the user's repo; leaving them behind would be
-    // litter in a directory kandy no longer tracks.
-    for (const note of board.notes) {
-      const wt = deps.runner.worktreeOf(note.id)
-      if (wt) {
-        await removeWorktree(board.board.repoPath, wt.path, true).catch(() => {})
-        await deleteBranch(board.board.repoPath, wt.branch)
-        deps.runner.forget(note.id)
-      }
-    }
+    await deps.workshop.removeBoard(board.board.repoPath, board.notes.map((n) => n.id))
     const e = emit(deps, event("board.removed", { boardId: parts[1]! }))
     return send(res, 200, { ok: true, seq: e.seq })
   }
@@ -465,10 +392,8 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   }
 
   /*
-   * Skills. Read from the repository on every request rather than kept in the
-   * log: git is their home and their transport, and a copy in the log would
-   * be a second truth that goes stale the first time someone runs the
-   * `skills` CLI by hand.
+   * Skills. They live in the repository, so they are the workshop's to read
+   * and write; see `LocalWorkshop` for why they are never kept in the log.
    */
   if (parts[0] === "boards" && parts[2] === "skills" && parts[1]) {
     const view = deps.engine.view(parts[1]!)
@@ -476,30 +401,24 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     const repo = view.board.repoPath
     try {
       if (req.method === "GET" && parts.length === 3) {
-        return send(res, 200, { skills: await listSkills(repo) })
+        return send(res, 200, { skills: await deps.workshop.skills(repo) })
       }
       if (req.method === "POST" && parts.length === 3) {
         const b = await json<{ source?: string; skill?: string }>(req)
         if (typeof b?.source !== "string") return fail(res, 400, "bad_request", "source is required")
-        await addSkills(repo, b.source, b.skill)
-        return send(res, 200, { skills: await listSkills(repo) })
+        return send(res, 200, { skills: await deps.workshop.addSkills(repo, b.source, b.skill) })
       }
       if (req.method === "POST" && parts[3] === "remove") {
         const b = await json<{ name?: string }>(req)
         if (typeof b?.name !== "string") return fail(res, 400, "bad_request", "name is required")
-        await removeSkill(repo, b.name)
-        return send(res, 200, { skills: await listSkills(repo) })
+        return send(res, 200, { skills: await deps.workshop.removeSkill(repo, b.name) })
       }
       if (req.method === "POST" && parts[3] === "commit") {
-        const committed = await commitSkills(repo)
-        return send(res, 200, { committed, skills: await listSkills(repo) })
+        return send(res, 200, await deps.workshop.commitSkills(repo))
       }
     } catch (err) {
-      // The CLI's own words, trimmed — "no skills found in that repo" is more
-      // use than a generic failure, and it is never a secret.
-      const e = err as { stderr?: string; message?: string }
-      const why = (e.stderr?.trim() || e.message || String(err)).split("\n").slice(-3).join(" ").slice(0, 400)
-      return fail(res, 400, "bad_request", why)
+      // Already the CLI's own words, trimmed, by the workshop that ran it.
+      return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -574,7 +493,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     // so its files wait in the state dir under this id until it runs. Nothing
     // is written into the user's repository for a note nobody has run.
     const attached = body.files?.length
-      ? stageAttachments(noteId, body.files)
+      ? await deps.workshop.stage(noteId, body.files)
       : { staged: [], rejected: [] }
 
     return send(res, 200, {
@@ -590,7 +509,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   if (req.method === "GET" && parts[0] === "notes" && parts[2] === "attachments") {
     const noteId = parts[1]!
     if (!deps.engine.boardOf(noteId)) return fail(res, 404, "note_not_found", `no note ${noteId}`)
-    return send(res, 200, { attachments: stagedFor(noteId) })
+    return send(res, 200, { attachments: await deps.workshop.staged(noteId) })
   }
 
   // GET /notes/:id/diff
@@ -600,22 +519,8 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   // is gone, so we fall back to the snapshot taken when review opened.
   if (req.method === "GET" && parts[0] === "notes" && parts[2] === "diff") {
     const noteId = parts[1]!
-    const wt = deps.runner.worktreeOf(noteId)
-    if (wt) {
-      try {
-        const [diff, stat] = await Promise.all([gitDiff(wt), diffStat(wt)])
-        return send(res, 200, {
-          diff,
-          stat,
-          branch: wt.branch,
-          // Where "merge here" would put it, so the confirmation can say so.
-          baseBranch: wt.baseBranch,
-          capturedAt: null,
-        })
-      } catch {
-        // Worktree remembered but no longer on disk. The snapshot is all we have.
-      }
-    }
+    const live = await deps.workshop.diff(noteId)
+    if (live) return send(res, 200, { ...live, capturedAt: null })
     const saved = deps.engine.store.savedDiff(noteId)
     if (!saved)
       return send(res, 200, { diff: "", stat: "", branch: null, baseBranch: null, capturedAt: null })
@@ -689,7 +594,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
 
   // POST /runs/:id/cancel
   if (req.method === "POST" && parts[0] === "runs" && parts[2] === "cancel") {
-    return send(res, 200, { ok: true, seq: deps.engine.head(), cancelled: deps.runner.cancel(parts[1]!) })
+    return send(res, 200, { ok: true, seq: deps.engine.head(), cancelled: await deps.workshop.cancel(parts[1]!) })
   }
 
   // GET /runs/:id/output
@@ -746,7 +651,7 @@ async function noteAction(
     case "pr": {
       if (!note.branch) return fail(res, 409, "no_branch", "this note has not produced a branch yet")
 
-      const forge = await detectForge(view.board.repoPath)
+      const forge = await deps.workshop.forge(view.board.repoPath)
       if (!forge.available) return fail(res, 409, "no_forge", forge.reason ?? "no forge available")
 
       const b = await json<{ draft?: boolean; title?: string; body?: string }>(req)
@@ -754,7 +659,7 @@ async function noteAction(
         // Whatever the person edited in the dialog wins; the composed version
         // is only a starting point, and a PR nobody could edit before it
         // existed is how you get a wall of mechanical descriptions.
-        const pr = await openPr(
+        const pr = await deps.workshop.openPr(
           view.board.repoPath,
           note.branch,
           b?.title?.trim() || note.title,
@@ -814,7 +719,7 @@ async function noteAction(
       if (note.policy !== "full") emit(deps, event("note.policy", { noteId, policy: "full" }))
 
       try {
-        const delivery = deps.runner.escalate(view.board.id, noteId)
+        const delivery = await deps.workshop.escalate(view.board.id, noteId)
         return send(res, 200, { ok: true, seq: deps.engine.head(), delivery })
       } catch (err) {
         return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))
@@ -824,55 +729,20 @@ async function noteAction(
     case "attach": {
       const b = await json<{ files: { name: string; data: string }[] }>(req)
       if (!b?.files?.length) return fail(res, 400, "bad_request", "files required")
-      const wt = deps.runner.worktreeOf(noteId)
-      // Once there is a workspace the files belong in it — that is the path the
-      // agent opens. Before there is one they wait in the state dir.
-      if (wt) {
-        const { accepted, rejected } = screen(b.files)
-        const saved = saveAttachments(wt.path, accepted)
-        return send(res, 200, {
-          ok: true,
-          seq: deps.engine.head(),
-          attachments: saved.map((f) => ({ name: f.name, bytes: f.bytes })),
-          rejected,
-        })
-      }
-      const { staged, rejected } = stageAttachments(noteId, b.files)
-      return send(res, 200, { ok: true, seq: deps.engine.head(), attachments: staged, rejected })
+      const { attachments, rejected } = await deps.workshop.attach(noteId, b.files)
+      return send(res, 200, { ok: true, seq: deps.engine.head(), attachments, rejected })
     }
 
     case "unattach": {
       const b = await json<{ name: string }>(req)
       if (!b?.name) return fail(res, 400, "bad_request", "name required")
-      unstageAttachment(noteId, b.name)
-      return send(res, 200, { ok: true, seq: deps.engine.head(), attachments: stagedFor(noteId) })
+      const attachments = await deps.workshop.unattach(noteId, b.name)
+      return send(res, 200, { ok: true, seq: deps.engine.head(), attachments })
     }
 
     case "delete": {
-      clearStaged(noteId)
-
-      /*
-       * Take the worktree with it.
-       *
-       * Deleting a note used to leave its checkout on disk — a whole copy of
-       * the repo, 376MB in the case that found this — and nothing could ever
-       * reclaim it: gc matches a directory to a note by name and skips any it
-       * cannot identify, which a deleted note is by definition. The space was
-       * unreachable from every direction.
-       *
-       * The branch is kept. A worktree is a working copy and reproducible; a
-       * branch is the work. Deleting a note should not be able to destroy the
-       * only record of what an agent did.
-       */
-      const wt = deps.runner.worktreeOf(noteId)
-      if (wt) {
-        await removeWorktree(view.board.repoPath, wt.path, true).catch(() => {})
-        deps.runner.forget(noteId)
-      } else if (note.worktree) {
-        // Known only from the note itself — the runner forgets a worktree once
-        // its run ends, so a finished note's checkout is nobody's but ours.
-        await removeWorktree(view.board.repoPath, note.worktree, true).catch(() => {})
-      }
+      // Its checkout and anything staged go with it; the branch stays.
+      await deps.workshop.deleteNote(view.board.repoPath, noteId, note.worktree)
 
       const e = emit(deps, event("note.deleted", { noteId }))
       return send(res, 200, { ok: true, seq: e.seq })
@@ -884,7 +754,7 @@ async function noteAction(
       if (note.status === "running" || note.status === "queued")
         return fail(res, 409, "invalid_transition", `note is already ${note.status}`)
 
-      const runId = deps.runner.request(view.board.id, noteId, agent)
+      const runId = await deps.workshop.request(view.board.id, noteId, agent)
       return send(res, 200, { ok: true, seq: deps.engine.head(), runId })
     }
     case "message": {
@@ -892,23 +762,16 @@ async function noteAction(
       if (!b?.text?.trim() && !b?.files?.length)
         return fail(res, 400, "bad_request", "text or files required")
 
-      // Attachments go into the note's worktree, so the path we hand the agent
-      // is one it can actually open. A note with no worktree is about to get
-      // one — steering it queues a run — so its files are staged and the run
-      // moves them in and names them in the prompt itself. Refusing here was
-      // the old behaviour and it made attaching to a not-yet-run note
+      // Files go wherever the agent will be able to open them — its worktree,
+      // or the stage the next run adopts. Refusing a note with no worktree
+      // was the old behaviour and it made attaching to a not-yet-run note
       // impossible for no reason the user could see.
       let text = (b.text ?? "").trim()
       const rejected: { name: string; reason: string }[] = []
       if (b.files?.length) {
-        const wt = deps.runner.worktreeOf(noteId)
-        if (wt) {
-          const screened = screen(b.files)
-          rejected.push(...screened.rejected)
-          text += describe(saveAttachments(wt.path, screened.accepted))
-        } else {
-          rejected.push(...stageAttachments(noteId, b.files).rejected)
-        }
+        const carried = await deps.workshop.messageFiles(noteId, b.files)
+        rejected.push(...carried.rejected)
+        text += carried.mention
         // A message that was nothing but a file we would not take has nothing
         // left to send. Say why, rather than poking the agent with "".
         if (!text && rejected.length === b.files.length)
@@ -916,7 +779,7 @@ async function noteAction(
       }
 
       try {
-        const delivery = deps.runner.steer(view.board.id, noteId, text)
+        const delivery = await deps.workshop.steer(view.board.id, noteId, text)
         return send(res, 200, { ok: true, seq: deps.engine.head(), delivery, rejected })
       } catch (err) {
         return fail(res, 400, "bad_request", err instanceof Error ? err.message : String(err))
@@ -932,65 +795,58 @@ async function noteAction(
       if (b.decision === "revise") {
         if (!b.comment?.trim())
           return fail(res, 400, "bad_request", "revise needs a comment saying what to change")
-        const delivery = deps.runner.steer(view.board.id, noteId, b.comment.trim())
+        const delivery = await deps.workshop.steer(view.board.id, noteId, b.comment.trim())
         const e = emit(deps, event("review.decided", { noteId, decision: "revise", comment: b.comment }))
         return send(res, 200, { ok: true, seq: e.seq, delivery })
       }
 
-      const wt = deps.runner.worktreeOf(noteId)
-      if (wt) {
-        if (b.decision === "merge") {
-          // The merge commit is the one commit that is definitely still in
-          // history after the branch is deleted, so it is the one worth
-          // signing — when the board asked to be signed at all.
-          const model = note.model ?? (note.agent ? view.board.models?.[note.agent] : null) ?? null
-          const trailers = view.board.attribution?.commit
-            ? commitTrailers({ noteId, runId: note.runId, agent: note.agent, model })
-            : []
-          // The subject and body are the note's own words; the footer is what
-          // the run turned out to be. Both are already on the board — the
-          // merge commit is the last chance to write them down somewhere that
-          // outlives it.
-          const run = view.runs.find((r) => r.id === note.runId)
-          const result = await mergeBranch(view.board.repoPath, wt.branch, {
-            note: { id: noteId, title: note.title, body: note.body },
-            facts: { stat: note.stat, agent: note.agent, model, turns: run?.turns ?? null },
-            trailers,
-          })
-          if (!result.merged) {
-            // Leave everything exactly as it was. A conflict is the user's
-            // call, and they still have the branch and the worktree.
-            return fail(
-              res,
-              409,
-              "worktree_failed",
-              `merge conflict on ${wt.branch} — resolve it yourself, the branch is intact:\n${result.conflict ?? ""}`,
-            )
-          }
-        }
-        /*
-         * Both verdicts end the same way, and that way used to lose work: the
-         * worktree was force-removed and the branch deleted, so discarding a
-         * note destroyed the agent's commits and anything uncommitted, with
-         * nothing pushed first. Push, then delete — and if either cannot be
-         * done safely, keep the checkout and say why.
-         */
-        const retired = await retireWorktree(view.board.repoPath, wt).catch(
-          (err: unknown) => ({ removed: false as const, reason: String(err) }),
+      // The merge commit is the one commit that is definitely still in
+      // history after the branch is deleted, so it is the one worth
+      // signing — when the board asked to be signed at all.
+      const model = note.model ?? (note.agent ? view.board.models?.[note.agent] : null) ?? null
+      const trailers = view.board.attribution?.commit
+        ? commitTrailers({ noteId, runId: note.runId, agent: note.agent, model })
+        : []
+      // The subject and body are the note's own words; the footer is what
+      // the run turned out to be. Both are already on the board — the
+      // merge commit is the last chance to write them down somewhere that
+      // outlives it. The workshop only writes them into git.
+      const run = view.runs.find((r) => r.id === note.runId)
+      const outcome = await deps.workshop.review(
+        view.board.repoPath,
+        noteId,
+        b.decision === "merge"
+          ? {
+              decision: "merge",
+              land: {
+                note: { id: noteId, title: note.title, body: note.body },
+                facts: { stat: note.stat, agent: note.agent, model, turns: run?.turns ?? null },
+                trailers,
+              },
+            }
+          : { decision: "discard" },
+      )
+      if (outcome.checkout === "conflict") {
+        // Leave everything exactly as it was. A conflict is the user's
+        // call, and they still have the branch and the worktree.
+        return fail(
+          res,
+          409,
+          "worktree_failed",
+          `merge conflict on ${outcome.branch} — resolve it yourself, the branch is intact:\n${outcome.conflict}`,
         )
-        if (retired.removed) {
-          deps.runner.forget(noteId)
-          emit(deps, event("note.reclaimed", { noteId }))
-        } else if (note.runId) {
-          deps.engine.say(note.runId, "system", `kept the checkout: ${retired.reason}`)
-        }
+      }
+      // What the disk did is written down here, where the log is: the
+      // checkout going is an event, and one it could not safely take is a
+      // line on the run's transcript saying why it is still there.
+      if (outcome.checkout === "removed") {
+        emit(deps, event("note.reclaimed", { noteId }))
+      } else if (outcome.checkout === "kept" && note.runId) {
+        deps.engine.say(note.runId, "system", `kept the checkout: ${outcome.reason}`)
       }
 
-      // Merged or discarded, the note is finished with; anything still staged
-      // for it would outlive the thing it was attached to.
-      clearStaged(noteId)
       const e = emit(deps, event("review.decided", { noteId, ...b }))
-      deps.runner.syncColumn(view.board.id, noteId)
+      await deps.workshop.syncColumn(view.board.id, noteId)
       return send(res, 200, { ok: true, seq: e.seq })
     }
     default:
@@ -1027,11 +883,6 @@ function write(res: ServerResponse, f: StreamFrame) {
     return
   }
   res.write(`id: ${f.seq}\nevent: ${f.type}\ndata: ${JSON.stringify(f)}\n\n`)
-}
-
-/** `~/code/thing` is what people actually type. */
-function expandHome(p: string): string {
-  return p.startsWith("~") ? path.join(homedir(), p.slice(1)) : p
 }
 
 function emit(deps: ServerDeps, pending: Parameters<Engine["emit"]>[0]) {

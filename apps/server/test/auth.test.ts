@@ -26,7 +26,7 @@ test("HTTP authentication gates writes and protects browser bootstrap", async ()
   const server = createHttpServer({
     token,
     engine: { head: () => 0, projections: { boards: () => [] } },
-    runner: { cancel: () => { cancellations++; return true } },
+    workshop: { cancel: async () => { cancellations++; return true } },
     prs: {},
     // What `KANDY_HOSTS=laptop.tailnet.ts.net` configures on a real daemon.
     hosts: parseHosts("laptop.tailnet.ts.net"),

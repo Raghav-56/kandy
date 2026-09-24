@@ -6,6 +6,7 @@ import { Runner } from "./runner.js"
 import { createHttpServer, parseHosts } from "./http.js"
 import { cmdMcp, cmdSkills } from "./cli/capabilities.js"
 import { LocalLog } from "./local-log.js"
+import { LocalWorkshop } from "./local-workshop.js"
 import { ASK_TIMEOUT_MS, Permissions } from "./permission.js"
 import { loadToken } from "./auth.js"
 import { kandyVersion } from "./version.js"
@@ -224,7 +225,9 @@ async function serve(args: string[]): Promise<void> {
   void warmPrices()
   const server = createHttpServer({
     engine,
-    runner,
+    // The other half of the same seam: what the API asks of the machine with
+    // the repositories, answered by the runner right here in this process.
+    workshop: new LocalWorkshop(runner),
     prs,
     token,
     permissions,

@@ -11,6 +11,7 @@ import type {
 } from "./domain.js"
 import type { PermissionRule } from "./permission.js"
 import type { McpServer } from "./capabilities.js"
+import type { Role } from "./members.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
 /**
@@ -80,6 +81,31 @@ export type KandyEventMap = {
     pos: string
   }
   "note.edited": { noteId: NoteId; title?: string; body?: string }
+  /**
+   * A hub gave this note to a runner. Emitted by the hub, never by a runner:
+   * it is what a runner's later writes about the note are checked against.
+   */
+  "note.placed": { noteId: NoteId; runnerId: string }
+  /**
+   * A runner declined to start this note until its owner says yes.
+   *
+   * The consent half of permissions: a note assigned to someone else's
+   * machine arrives there as a request, not a running job. Cleared by
+   * `note.released` once the owner accepts, or by a decline.
+   */
+  "note.held": { noteId: NoteId; runnerId: string; requestedBy: string | null; agent: AgentId }
+  "note.released": { noteId: NoteId; accepted: boolean }
+
+  /**
+   * Who is on this hub, and what they may do.
+   *
+   * In the log rather than a side table so that who admitted whom, and when,
+   * is the audit trail without anyone having to build one. Hub-wide: they
+   * carry no board, and a single-player daemon never emits them.
+   */
+  "member.added": { email: string; role: Role }
+  "member.role": { email: string; role: Role }
+  "member.removed": { email: string }
   "note.moved": { noteId: NoteId; columnId: ColumnId; pos: string }
   "note.assigned": { noteId: NoteId; agent: AgentId }
   "note.model": { noteId: NoteId; model: string | null }
@@ -198,6 +224,12 @@ export const EVENT_TYPES = [
   "column.created",
   "note.created",
   "note.edited",
+  "note.placed",
+  "note.held",
+  "note.released",
+  "member.added",
+  "member.role",
+  "member.removed",
   "note.moved",
   "note.assigned",
   "note.model",
