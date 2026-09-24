@@ -251,3 +251,33 @@ test("cursor does not claim it can be asked", () => {
   assert.ok(!cursor.asks)
   assert.equal(cursor.live, undefined)
 })
+
+test("an MCP call is named the way Claude names it, not left blank", () => {
+  // Both shapes captured from a real cursor-agent run against a board server.
+  const lookup = cursor.parse(
+    JSON.stringify({
+      type: "tool_call",
+      subtype: "started",
+      tool_call: { getMcpToolsToolCall: { args: { server: "everything", toolName: "echo" } } },
+    }),
+  )
+  assert.deepEqual(lookup, [
+    { kind: "tool", tool: "mcp", detail: "look up everything.echo", status: "started" },
+  ])
+
+  const call = cursor.parse(
+    JSON.stringify({
+      type: "tool_call",
+      subtype: "completed",
+      tool_call: {
+        mcpToolCall: {
+          args: { name: "everything-echo", args: { message: "HI" }, providerIdentifier: "everything", toolName: "echo" },
+          result: { success: { content: "HI" } },
+        },
+      },
+    }),
+  )
+  assert.deepEqual(call, [
+    { kind: "tool", tool: "mcp__everything__echo", detail: '{"message":"HI"}', status: "completed" },
+  ])
+})

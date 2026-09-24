@@ -4,6 +4,7 @@ import { Engine } from "./engine.js"
 import { PrWatch } from "./prwatch.js"
 import { Runner } from "./runner.js"
 import { createHttpServer, parseHosts } from "./http.js"
+import { cmdMcp, cmdSkills } from "./cli/capabilities.js"
 import { LocalLog } from "./local-log.js"
 import { ASK_TIMEOUT_MS, Permissions } from "./permission.js"
 import { loadToken } from "./auth.js"
@@ -41,6 +42,13 @@ function intFlag(args: string[], flag: string, fallback: number): number {
 function strFlag(args: string[], flag: string): string | undefined {
   const i = args.indexOf(flag)
   return i === -1 ? undefined : args[i + 1]
+}
+
+/** Every value of a flag that may be given more than once: `--header A --header B`. */
+function allFlags(args: string[], flag: string): string[] {
+  const out: string[] = []
+  for (let i = 0; i < args.length; i++) if (args[i] === flag && args[i + 1] !== undefined) out.push(args[++i]!)
+  return out
 }
 
 /** Positional words, with `--flag value` pairs and bare flags removed. */
@@ -94,6 +102,16 @@ function usage(): void {
   w(head("setup"))
   w(cmd("kandy serve [--port N]", "run the daemon in the foreground"))
   w(cmd("kandy skill", "let other agents queue work onto a board"))
+
+  w(head("capabilities"))
+  w(cmd("kandy skills", "skills in this repo, and which runs can see them"))
+  w(cmd("kandy skills add <owner/repo>", "install for every agent (the skills CLI)"))
+  w(cmd("kandy skills commit", "commit the ones no worktree can see yet"))
+  w(cmd("kandy mcp", "MCP servers every agent on this board gets"))
+  w(cmd("kandy mcp add <name> -- <cmd…>", "a local server"))
+  w(cmd("kandy mcp add <name> --url <u>", 'a remote one; --header "K: V" to add auth'))
+  w(`\n  ${dim("Write secrets as ${NAME}. Each machine fills them from its own")}\n`)
+  w(`  ${dim("environment, so the board never holds a token.")}\n`)
   w(cmd("kandy gc [--dry-run]", "reclaim disk held by notes' checkouts"))
   w(`\n  ${dim("Finished notes lose their checkout. Notes in review or failed keep it")}\n`)
   w(`  ${dim("but lose node_modules and caches, which the next run reinstalls.")}\n`)
@@ -285,11 +303,19 @@ async function serve(args: string[]): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const argv = process.argv.slice(2)
+  const all = process.argv.slice(2)
+  /*
+   * Everything after `--` belongs to someone else's command line — an MCP
+   * server's `npx -y @scope/server` — where `-y` is an ordinary argument, not
+   * a kandy flag to refuse. So flags are read from before it only.
+   */
+  const dash = all.indexOf("--")
+  const argv = dash === -1 ? all : all.slice(0, dash)
+  const tail = dash === -1 ? [] : all.slice(dash + 1)
   const port = intFlag(argv, "--port", DEFAULT_PORT)
   const agent = strFlag(argv, "--agent") as AgentId | undefined
   const noRun = argv.includes("--no-run")
-  const VALUED = ["--port", "--slots", "--agent"]
+  const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env"]
   const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json"]
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
@@ -359,6 +385,24 @@ async function main(): Promise<void> {
     case "skill":
       process.exit(await cmdSkillInstall())
       break
+    case "skills": {
+      const skill = strFlag(argv, "--skill")
+      process.exit(await cmdSkills(rest.slice(1), { port, ...(skill ? { skill } : {}) }))
+      break
+    }
+    case "mcp": {
+      const url = strFlag(argv, "--url")
+      process.exit(
+        await cmdMcp(rest.slice(1), {
+          port,
+          ...(url ? { url } : {}),
+          headers: allFlags(argv, "--header"),
+          env: allFlags(argv, "--env"),
+          tail,
+        }),
+      )
+      break
+    }
     case "help":
       return usage()
     default: {

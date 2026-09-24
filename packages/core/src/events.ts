@@ -10,6 +10,7 @@ import type {
   RunStatus,
 } from "./domain.js"
 import type { PermissionRule } from "./permission.js"
+import type { McpServer } from "./capabilities.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
 /**
@@ -59,6 +60,8 @@ export type KandyEventMap = {
   "board.policy": { boardId: BoardId; defaultPolicy: Policy }
   /** Whether this board's commits carry trailers and its PRs carry a footer. */
   "board.attribution": { boardId: BoardId; attribution: Attribution }
+  /** The whole server list, replaced. A list this short is not worth diffing. */
+  "board.mcp": { boardId: BoardId; servers: McpServer[] }
 
   "column.created": {
     columnId: ColumnId
@@ -191,6 +194,7 @@ export const EVENT_TYPES = [
   "board.models",
   "board.policy",
   "board.attribution",
+  "board.mcp",
   "column.created",
   "note.created",
   "note.edited",

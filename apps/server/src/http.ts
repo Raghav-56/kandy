@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 import path from "node:path"
 import {
   between,
+  checkMcpServers,
   event,
   id,
   isEphemeral,
@@ -50,6 +51,7 @@ import {
 } from "./worktree.js"
 
 import { authorized } from "./auth.js"
+import { addSkills, commitSkills, listSkills, removeSkill } from "./capabilities/skills.js"
 
 const VERSION = kandyVersion()
 const STARTED = Date.now()
@@ -448,6 +450,57 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
       event("board.policy", { boardId: parts[1]!, defaultPolicy: b.defaultPolicy }),
     )
     return send(res, 200, { ok: true, seq: e.seq })
+  }
+
+  // POST /boards/:id/mcp — the board's MCP servers, replaced as a whole
+  if (req.method === "POST" && parts[0] === "boards" && parts[2] === "mcp" && parts.length === 3) {
+    const body = await json<{ servers: unknown }>(req)
+    if (!deps.engine.view(parts[1]!)) return fail(res, 404, "board_not_found", "no such board")
+    // Refused whole rather than half-applied: a list with one bad entry is a
+    // list the user is still writing, not one to act on.
+    const checked = checkMcpServers(body?.servers)
+    if (!checked.ok) return fail(res, 400, "bad_request", checked.error)
+    const e = emit(deps, event("board.mcp", { boardId: parts[1]!, servers: checked.servers }))
+    return send(res, 200, { ok: true, seq: e.seq, servers: checked.servers })
+  }
+
+  /*
+   * Skills. Read from the repository on every request rather than kept in the
+   * log: git is their home and their transport, and a copy in the log would
+   * be a second truth that goes stale the first time someone runs the
+   * `skills` CLI by hand.
+   */
+  if (parts[0] === "boards" && parts[2] === "skills" && parts[1]) {
+    const view = deps.engine.view(parts[1]!)
+    if (!view) return fail(res, 404, "board_not_found", "no such board")
+    const repo = view.board.repoPath
+    try {
+      if (req.method === "GET" && parts.length === 3) {
+        return send(res, 200, { skills: await listSkills(repo) })
+      }
+      if (req.method === "POST" && parts.length === 3) {
+        const b = await json<{ source?: string; skill?: string }>(req)
+        if (typeof b?.source !== "string") return fail(res, 400, "bad_request", "source is required")
+        await addSkills(repo, b.source, b.skill)
+        return send(res, 200, { skills: await listSkills(repo) })
+      }
+      if (req.method === "POST" && parts[3] === "remove") {
+        const b = await json<{ name?: string }>(req)
+        if (typeof b?.name !== "string") return fail(res, 400, "bad_request", "name is required")
+        await removeSkill(repo, b.name)
+        return send(res, 200, { skills: await listSkills(repo) })
+      }
+      if (req.method === "POST" && parts[3] === "commit") {
+        const committed = await commitSkills(repo)
+        return send(res, 200, { committed, skills: await listSkills(repo) })
+      }
+    } catch (err) {
+      // The CLI's own words, trimmed — "no skills found in that repo" is more
+      // use than a generic failure, and it is never a secret.
+      const e = err as { stderr?: string; message?: string }
+      const why = (e.stderr?.trim() || e.message || String(err)).split("\n").slice(-3).join(" ").slice(0, 400)
+      return fail(res, 400, "bad_request", why)
+    }
   }
 
   // POST /boards/:id/attribution

@@ -1,3 +1,4 @@
+import type { McpServer } from "./capabilities.js"
 import type { PermissionPrompt, PermissionRule } from "./permission.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
@@ -103,6 +104,13 @@ export type Board = {
   defaultPolicy: Policy
   /** Whether commits and PRs say kandy made them. Off unless asked for. */
   attribution: Attribution
+  /**
+   * MCP servers every agent on this board is given, in its own dialect.
+   *
+   * On the board rather than in each agent's config so that one list reaches
+   * all of them, and travels with the board. See `capabilities.ts`.
+   */
+  mcp: McpServer[]
   createdAt: number
 }
 

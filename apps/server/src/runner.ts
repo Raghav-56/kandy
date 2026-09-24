@@ -14,6 +14,7 @@ import {
   type Delivery,
   type DiffStat,
   type Log,
+  envRefs,
   type PendingEvent,
   type TranscriptFrame,
 } from "@kandy/core"
@@ -63,6 +64,8 @@ type Live = {
   repoPath: string
   /** The MCP config this run's prompts travel through, if it can be asked. */
   ask?: AskChannel
+  /** Reverses whatever the adapter's `prepare` put in the worktree. */
+  undo?: () => Promise<void>
 }
 
 type Queued = {
@@ -430,7 +433,33 @@ export class Runner {
       for (const run of past) frames.set(run.id, await this.log.history(run.id))
     }
 
-    const spec = a.spawn({
+    /*
+     * The board's MCP servers, read from the view on every run and never
+     * cached. That is the whole of "applies without a restart": each run
+     * spawns a fresh agent, so a server added a minute ago is simply there.
+     */
+    const servers = view.board.mcp ?? []
+    const mcp = a.mcp ? servers : []
+    if (servers.length && !a.mcp) {
+      this.say(
+        q.runId,
+        "system",
+        `${agentId} cannot use MCP servers, so this board's ${servers.length} ${servers.length === 1 ? "server was" : "servers were"} not given to it`,
+      )
+    }
+    // Only whether each is set — never its value. A server whose token is
+    // missing fails deep inside the agent with an auth error that names
+    // neither the server nor the variable; this names both, up front.
+    const unset = [...new Set(mcp.flatMap(envRefs))].filter((n) => !process.env[n])
+    if (unset.length) {
+      this.say(
+        q.runId,
+        "system",
+        `not set on this machine: ${unset.join(", ")} — MCP servers that need ${unset.length === 1 ? "it" : "them"} will fail to connect`,
+      )
+    }
+
+    const opts = {
       cwd: worktree.path,
       prompt:
         (q.prompt ?? promptForRun(note, past, q.agent, (runId) => frames.get(runId) ?? [])) +
@@ -439,7 +468,24 @@ export class Runner {
       ...(ask ? { ask } : {}),
       ...(model ? { model } : {}),
       ...(prior ? { resume: prior } : {}),
-    })
+      ...(mcp.length ? { mcp } : {}),
+    }
+
+    // A capability the agent cannot be given is a reason to say so, not a
+    // reason to refuse the run.
+    let prepared: { paths: string[]; undo: () => Promise<void> } | undefined
+    if (a.prepare && mcp.length) {
+      try {
+        prepared = await a.prepare(opts)
+      } catch (err) {
+        this.say(q.runId, "error", `could not give ${agentId} this board's MCP servers: ${err instanceof Error ? err.message : err}`)
+      }
+    }
+
+    const spec = a.spawn(opts)
+    for (const d of spec.declined ?? []) {
+      this.say(q.runId, "system", `MCP server ${d.name} was not given to ${agentId}: ${d.reason}`)
+    }
 
     const child = spawn(spec.command, spec.args, {
       cwd: worktree.path,
@@ -459,6 +505,7 @@ export class Runner {
       worktree,
       repoPath: view.board.repoPath,
       ...(ask ? { ask } : {}),
+      ...(prepared ? { undo: prepared.undo } : {}),
     })
 
     this.emit(
@@ -706,6 +753,12 @@ export class Runner {
     let statText = ""
     let diff = ""
     if (l) {
+      // Before the commit, always. Whatever `prepare` wrote into the worktree
+      // is kandy's plumbing for this run, not the agent's work, and it must
+      // be gone before anything decides what the agent changed.
+      await l.undo?.().catch((err) => {
+        this.say(runId, "error", `could not tidy up after the run: ${err instanceof Error ? err.message : err}`)
+      })
       try {
         await commitLeftovers(l.worktree, this.commitMessage(l), this.trailersFor(l))
         ;[stat, statText, diff] = await Promise.all([

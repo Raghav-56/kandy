@@ -19,6 +19,8 @@ import type {
   UploadFile,
   StreamFrame,
   TranscriptFrame,
+  McpServer,
+  SkillInfo,
 } from "@kandy/core"
 import { EVENT_TYPES } from "@kandy/core"
 import { installEventSource } from "./sse.js"
@@ -162,6 +164,29 @@ export class KandyClient {
   }
   forge(boardId: string) {
     return this.req<Forge>("GET", `/boards/${boardId}/forge`)
+  }
+  /** Replace the board's MCP servers. The server refuses the whole list if one is malformed. */
+  setMcp(boardId: string, servers: McpServer[]) {
+    return this.req<{ seq: number; servers: McpServer[] }>("POST", `/boards/${boardId}/mcp`, { servers })
+  }
+  skills(boardId: string) {
+    return this.req<{ skills: SkillInfo[] }>("GET", `/boards/${boardId}/skills`)
+  }
+  addSkills(boardId: string, source: string, skill?: string) {
+    return this.req<{ skills: SkillInfo[] }>("POST", `/boards/${boardId}/skills`, {
+      source,
+      ...(skill ? { skill } : {}),
+    })
+  }
+  removeSkill(boardId: string, name: string) {
+    return this.req<{ skills: SkillInfo[] }>("POST", `/boards/${boardId}/skills/remove`, { name })
+  }
+  commitSkills(boardId: string) {
+    return this.req<{ committed: string[]; skills: SkillInfo[] }>(
+      "POST",
+      `/boards/${boardId}/skills/commit`,
+      {},
+    )
   }
   /** What opening a PR would say — the starting point for the dialog. */
   prPreview(noteId: string) {

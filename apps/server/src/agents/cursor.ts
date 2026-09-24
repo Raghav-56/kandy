@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import type { AgentAdapter, AgentEvent } from "./types.js"
+import { placeCursorMcp } from "../capabilities/cursor-file.js"
 
 /**
  * Cursor Agent adapter, written against real captured output from
@@ -65,6 +66,12 @@ export const cursor: AgentAdapter = {
       ],
     }
   },
+
+  mcp: true,
+
+  // No flag reaches Cursor's MCP config, so the worktree's project file is
+  // written for the run and restored after. See capabilities/cursor-file.ts.
+  prepare: ({ cwd, mcp }) => placeCursorMcp(cwd, mcp ?? []),
 
   parse(line, run) {
     const text = line.replace(/\r$/, "")
@@ -192,10 +199,30 @@ function fromToolCall(msg: Record<string, any>): AgentEvent[] {
   const key = Object.keys(call).find((k) => k.endsWith("ToolCall"))
   if (!key) return []
   const body = (call[key] ?? {}) as Record<string, any>
-  const tool = NAMES[key] ?? key.slice(0, -"ToolCall".length)
-
   const args = (body["args"] ?? {}) as Record<string, any>
-  const detail = summarize(args)
+
+  /*
+   * MCP calls, named the way Claude names them.
+   *
+   * Captured from a real run: Cursor looks a tool up with
+   * `getMcpToolsToolCall { server, toolName }` and then calls it with
+   * `mcpToolCall { providerIdentifier, toolName, args }`. Neither has the
+   * fields `summarize` knows, so both used to reach the transcript as a blank
+   * line. `mcp__server__tool` is Claude's spelling for the same thing, and one
+   * spelling means a handoff briefing reads the same whichever agent made the
+   * call.
+   */
+  let tool = NAMES[key] ?? key.slice(0, -"ToolCall".length)
+  let detail: string
+  if (key === "mcpToolCall") {
+    tool = `mcp__${args["providerIdentifier"] ?? "mcp"}__${args["toolName"] ?? "tool"}`
+    detail = JSON.stringify(args["args"] ?? {})
+  } else if (key === "getMcpToolsToolCall") {
+    tool = "mcp"
+    detail = `look up ${args["server"] ?? "?"}.${args["toolName"] ?? "?"}`
+  } else {
+    detail = summarize(args)
+  }
   // Cursor's call ids contain a literal newline — they are two ids joined —
   // and a request id is something we put in a log line and a UI label.
   const id = String(body["toolCallId"] ?? msg["call_id"] ?? "").replace(/\s+/g, " ").trim()

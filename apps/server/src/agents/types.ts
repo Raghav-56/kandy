@@ -1,4 +1,4 @@
-import type { AgentId, Policy } from "@kandy/core"
+import type { AgentId, McpServer, Policy } from "@kandy/core"
 
 /** What an adapter emits after parsing one line of its CLI's output. */
 export type AgentEvent =
@@ -45,6 +45,13 @@ export type SpawnOptions = {
    * full access asks nobody anything.
    */
   ask?: AskChannel | undefined
+  /**
+   * The board's MCP servers, resolved for this run and never cached, so a
+   * server added mid-session reaches the very next run with no restart.
+   * Each adapter spells them in its own agent's dialect; see
+   * `capabilities/mcp.ts`. Absent or empty means the agent's own config only.
+   */
+  mcp?: readonly McpServer[] | undefined
 }
 
 /** See `permission.ts`: the MCP sidecar an agent routes its prompts through. */
@@ -87,6 +94,12 @@ export type SpawnSpec = {
    * is the same channel steering messages travel on later.
    */
   stdin?: string
+  /**
+   * Board servers this agent's config cannot express without expanding a
+   * secret. Said to the user rather than dropped, so a server that silently
+   * failed to appear is never the explanation for a confused run.
+   */
+  declined?: { name: string; reason: string }[]
 }
 
 /**
@@ -129,4 +142,20 @@ export type AgentAdapter = {
    * the clients read.
    */
   asks?: boolean
+  /**
+   * Whether this CLI can be given MCP servers at all. Aider cannot; saying so
+   * on the transcript beats a board full of servers that quietly never arrive.
+   */
+  mcp?: boolean
+  /**
+   * Side effects a run needs in its worktree before the agent starts, undone
+   * when it ends.
+   *
+   * Only for an agent that offers no other route. Cursor reads MCP servers
+   * from `.cursor/mcp.json` and from a home-directory file, and has no flag, so
+   * the worktree's copy is the one place to put them that is not the user's
+   * own config. Returns the undo, and the paths it touched so the runner can
+   * keep them out of any commit it makes.
+   */
+  prepare?(opts: SpawnOptions): Promise<{ paths: string[]; undo: () => Promise<void> }>
 }

@@ -38,6 +38,10 @@ export const aider: AgentAdapter = {
     }
   },
 
+  // Aider has no MCP client. Saying so beats a board of servers that
+  // quietly never arrive.
+  mcp: false,
+
   parse(line) {
     const text = stripVTControlCharacters(line).replace(/\r$/, "")
     if (!text.trim()) return []

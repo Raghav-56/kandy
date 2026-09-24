@@ -1,3 +1,4 @@
+import { claudeMcpConfig } from "../capabilities/mcp.js"
 import { homedir } from "node:os"
 import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
@@ -40,7 +41,13 @@ export const claude: AgentAdapter = {
     path.join(homedir(), ".claude.json"),
   ],
 
-  spawn({ cwd, prompt, resume, policy, model, ask }) {
+  spawn({ cwd, prompt, resume, policy, model, ask, mcp }) {
+    // Claude accepts inline JSON as well as a path, so the board's servers
+    // need no file. `${NAME}` references go in as written: Claude expands them
+    // from its own environment, which is the point.
+    const boardMcp = mcp?.length ? [JSON.stringify(claudeMcpConfig(mcp))] : []
+    const askMcp = ask && policy !== "full" ? [ask.configPath] : []
+    const mcpConfigs = [...askMcp, ...boardMcp]
     return {
       command: "claude",
       args: [
@@ -63,15 +70,11 @@ export const claude: AgentAdapter = {
         // never asks anything, so wiring a prompt tool into it would be a
         // channel nothing ever travels down.
         ...(ask && policy !== "full"
-          ? [
-              "--permission-prompts",
-              "host",
-              "--permission-prompt-tool",
-              ask.toolName,
-              "--mcp-config",
-              ask.configPath,
-            ]
+          ? ["--permission-prompts", "host", "--permission-prompt-tool", ask.toolName]
           : []),
+        // One flag, every config after it. Additive: without
+        // `--strict-mcp-config` the user's own servers still load too.
+        ...(mcpConfigs.length ? ["--mcp-config", ...mcpConfigs] : []),
         ...(model ? ["--model", model] : []),
         ...(resume ? ["--resume", resume] : []),
       ],
@@ -83,6 +86,8 @@ export const claude: AgentAdapter = {
   live: { encode: userMessage },
 
   asks: true,
+
+  mcp: true,
 
   parse(line) {
     if (!line.trim()) return []

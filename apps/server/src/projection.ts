@@ -39,6 +39,8 @@ export class Projections {
           // Off unless a board.attribution event says otherwise — boards
           // created before this existed replay to silence, as they behaved.
           attribution: e.data.attribution ?? { ...NO_ATTRIBUTION },
+          // Nothing configured until a board.mcp event says so.
+          mcp: [],
           createdAt: e.ts,
         },
         columns: [],

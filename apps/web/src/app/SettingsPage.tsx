@@ -4,6 +4,7 @@ import type { AgentId, AgentInfo, BoardView, Policy } from "@kandy/core"
 import { Button, Confirm, Input, Separator, Switch } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { ModelSelect } from "@/features/agents/ModelSelect"
+import { Capabilities } from "@/features/boards/Capabilities"
 import type { Theme } from "@/hooks/useTheme"
 import { cn } from "@/lib/utils"
 
@@ -219,6 +220,13 @@ export function SettingsPage({
         >
           {saving === "workspace" ? "Saving…" : "Save workspace"}
         </Button>
+      </Section>
+
+      <Section
+        title="Capabilities"
+        body="What agents on this repo can reach beyond its files: skills they can load, and MCP servers they can call."
+      >
+        <Capabilities view={view} client={client} onSaved={onSaved} />
       </Section>
 
       <Section

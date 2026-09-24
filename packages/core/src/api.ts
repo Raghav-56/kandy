@@ -1,3 +1,4 @@
+import type { McpServer, SkillInfo } from "./capabilities.js"
 import type { AgentId, Attribution, Board, BoardView, Policy, PullRequest } from "./domain.js"
 import type { TranscriptFrame } from "./events.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
@@ -57,6 +58,13 @@ export type Commands = {
   "POST /notes/:id/escalate": { req: {}; res: { delivery: Delivery } }
   /** Turn commit trailers and the PR footer on or off, independently. */
   "POST /boards/:id/attribution": { req: { attribution: Partial<Attribution> }; res: {} }
+  /** Replace the board's MCP servers. Refused whole if any entry is malformed. */
+  "POST /boards/:id/mcp": { req: { servers: McpServer[] }; res: { servers: McpServer[] } }
+  /** Install with the `skills` CLI into the board's repository, for every agent. */
+  "POST /boards/:id/skills": { req: { source: string; skill?: string }; res: { skills: SkillInfo[] } }
+  "POST /boards/:id/skills/remove": { req: { name: string }; res: { skills: SkillInfo[] } }
+  /** Commit every skill git does not know about, so worktrees and teammates get it. */
+  "POST /boards/:id/skills/commit": { req: {}; res: { committed: string[]; skills: SkillInfo[] } }
   /** Push the note's branch and open a PR for it. */
   "POST /notes/:id/pr": { req: { draft?: boolean }; res: { pr: PullRequest } }
   "POST /notes/:id/delete": { req: {}; res: {} }
@@ -131,6 +139,8 @@ export type Queries = {
   "GET /repo/check": { res: RepoCheck }
   /** Whether this board's repo can open PRs at all, and where. */
   "GET /boards/:id/forge": { res: Forge }
+  /** Skills in the board's repository, and which of them git would carry. */
+  "GET /boards/:id/skills": { res: { skills: SkillInfo[] } }
   /** Directory listing, for choosing a repo without typing a path. */
   "GET /repo/browse": { res: Listing }
   /** Files waiting for this note's worktree. Empty once it has run. */

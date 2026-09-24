@@ -1,3 +1,4 @@
+import { opencodeMcpConfig } from "../capabilities/mcp.js"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
@@ -46,9 +47,15 @@ export const opencode: AgentAdapter = {
   readAuth: () => readOpencodeAuth(),
   credentials: [authFile()],
 
-  spawn({ prompt, resume, policy, model }) {
+  spawn({ prompt, resume, policy, model, mcp }) {
     return {
       command: "opencode",
+      // Inline config merges over the user's own files rather than replacing
+      // them. References are rewritten to `{env:NAME}`, which opencode
+      // expands itself — the secret never passes through here.
+      ...(mcp?.length
+        ? { env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(opencodeMcpConfig(mcp)) } }
+        : {}),
       args: [
         "run",
         "--format",
@@ -69,6 +76,8 @@ export const opencode: AgentAdapter = {
       ],
     }
   },
+
+  mcp: true,
 
   parse(line, run) {
     const text = line.replace(/\r$/, "")

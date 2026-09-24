@@ -1,3 +1,4 @@
+import { codexMcpArgs } from "../capabilities/mcp.js"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
@@ -33,8 +34,11 @@ export const codex: AgentAdapter = {
   readAuth: () => readCodexAuth(),
   credentials: [path.join(homedir(), ".codex", "auth.json")],
 
-  spawn({ cwd, prompt, resume, policy, model }) {
+  spawn({ cwd, prompt, resume, policy, model, mcp }) {
     const full = policy === "full"
+    // `-c` overrides merge with ~/.codex/config.toml rather than replace it,
+    // so the user's own servers still load. `exec resume` takes `-c` too.
+    const board = codexMcpArgs(mcp ?? [])
 
     // `exec` and `exec resume` do NOT take the same flags: resume accepts
     // neither -s nor -C, and passing them fails the run outright with
@@ -53,8 +57,10 @@ export const codex: AgentAdapter = {
             ? ["--dangerously-bypass-approvals-and-sandbox"]
             : ["-c", 'sandbox_mode="workspace-write"']),
           ...(model ? ["-m", model] : []),
+          ...board.args,
           prompt,
         ],
+        ...(board.declined.length ? { declined: board.declined } : {}),
       }
     }
 
@@ -70,10 +76,14 @@ export const codex: AgentAdapter = {
         "-C",
         cwd,
         ...(model ? ["-m", model] : []),
+        ...board.args,
         prompt,
       ],
+      ...(board.declined.length ? { declined: board.declined } : {}),
     }
   },
+
+  mcp: true,
 
   parse(line, run) {
     // The run carries the model it was spawned with, so `turn.completed` can
