@@ -7,10 +7,6 @@
 
 </div>
 
-<div align="center" >
-<h1>kandy</h1>
-</div>
-
 <br>
 
 Sticky notes are units of agent work. Write a note, assign it to an agent
