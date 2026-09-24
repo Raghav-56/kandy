@@ -564,7 +564,7 @@ export function App({ client, live, boards: initialBoards, boardId: initialBoard
   const now = Date.now()
   let body: ReactNode[]
   if (overlay?.kind === "pick") body = pickRows(overlay, width, bodyHeight, p)
-  else if (!boardId) body = messageRows(["No boards yet.", "Create one in the web app — this screen will pick it up."], width, p)
+  else if (!boardId) body = messageRows(["No boards yet.", "Run kandy inside a git repository and it becomes one — this screen picks it up."], width, p)
   else if (!view) body = messageRows([state.error ? `Couldn't load the board: ${state.error}` : "Loading board…"], width, p, state.error ? "berry" : "dim")
   else if (screen.kind === "board") body = boardBody()
   else if (screen.kind === "help") body = helpBody()

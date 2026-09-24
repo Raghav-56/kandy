@@ -17,7 +17,7 @@ import type { PrWatch } from "../prwatch.js"
 import { RemoteLog } from "../remote-log.js"
 import { RemoteWorkshop } from "../remote-workshop.js"
 import { explain, serve as tailscaleServe, tailscaleStatus, unserve } from "../tailscale.js"
-import { banner, dim, faint, lemon, mint } from "./banner.js"
+import { banner, bold, dim, faint, lemon, mint } from "./banner.js"
 
 /**
  * `kandy hub` and `kandy runner` — the two halves of `kandy serve`, apart.
@@ -146,9 +146,27 @@ export async function runHub(opts: {
     out(JSON.stringify({ role: "hub", url: reach, port: opts.port, tailscale: opts.tailscale, pid: process.pid }))
   } else {
     process.stdout.write(banner(reach))
-    out(`  ${faint("role")}   ${dim("hub — runs nothing itself; runners connect to it")}`)
-    out(`  ${faint("join")}   ${dim(`kandy runner --hub ${reach}${identity ? "" : " --token <token>"}`)}`)
-    if (identity) out(`  ${faint("who")}    ${dim("whoever Tailscale says; the first person to open it owns it")}`)
+    out(`  ${faint("role")}   ${dim("hub — keeps the board, runs nothing; each person's machine runs their notes")}`)
+    // The token is named by where it lives, never printed: stdout ends up in
+    // logs, and a hub's token is the whole of its lock. `serve --json` keeps
+    // it out of its output for the same reason.
+    const join = `kandy join ${reach}${identity ? "" : ` --token "$(cat ${TOKEN_PATH})"`}`
+    /*
+     * A hub nobody has opened yet is the moment someone needs to be told what
+     * to do, in order — so a fresh one says it as steps. After that the same
+     * three facts are all anyone needs from a restart.
+     */
+    const fresh = engine.head() === 0
+    if (fresh) {
+      out()
+      out(`  ${mint("New hub.")} ${faint("Three steps:")}`)
+      out(`    ${bold("1")}  open ${bold(reach)}${identity ? faint(" — the first person to open it owns it") : ""}`)
+      out(`    ${bold("2")}  on your laptop, and each teammate's:  ${bold(join)}`)
+      out(`    ${bold("3")}  ${identity ? "add people on the Team page, or: kandy invite <email>" : "share that command — a hub with no Tailscale has one person: whoever holds the token"}`)
+    } else {
+      out(`  ${faint("join")}   ${dim(join)}`)
+      if (identity) out(`  ${faint("who")}    ${dim("whoever Tailscale says; owners admit people on the Team page")}`)
+    }
     out()
   }
 

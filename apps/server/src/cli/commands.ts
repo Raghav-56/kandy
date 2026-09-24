@@ -44,7 +44,7 @@ export async function boardHere(port: number): Promise<{ board: Board; view: Boa
  * The alternative is telling someone to go to the web UI to do a thing the CLI
  * could obviously do itself — and the repo is already unambiguous from cwd.
  */
-async function adoptHere(port: number): Promise<{ board: Board; view: BoardView } | null> {
+export async function adoptHere(port: number): Promise<{ board: Board; view: BoardView } | null> {
   const api = client(port)
   const check = await api.checkRepo(process.cwd())
   if (!check.isRepo) {

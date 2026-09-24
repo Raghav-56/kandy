@@ -8,6 +8,8 @@ import { cmdMcp, cmdSkills } from "./cli/capabilities.js"
 import { runHub, runRunner } from "./cli/roles.js"
 import { joinedHub } from "./joined.js"
 import { cmdInvite, cmdJoin, cmdLeave } from "./cli/join.js"
+import { hasCommandHelp, printCommand, printHelp } from "./cli/help.js"
+import { needsSetup, runSetup } from "./cli/setup.js"
 import { LocalLog } from "./local-log.js"
 import { LocalWorkshop } from "./local-workshop.js"
 import { ASK_TIMEOUT_MS, Permissions } from "./permission.js"
@@ -22,6 +24,7 @@ import {
   cmdList,
   cmdNew,
   cmdOpen,
+  adoptHere,
   boardHere,
   cmdSkillInstall,
   cmdStats,
@@ -71,84 +74,6 @@ function positionals(args: string[], valued: string[], bare: string[]): string[]
   return out
 }
 
-function usage(): void {
-  const w = process.stdout.write.bind(process.stdout)
-  // Pad, but never let a long command swallow its own description.
-  const cmd = (c: string, desc: string) =>
-    c.length >= 32 ? `  ${bold(c)}\n  ${" ".repeat(32)}${faint(desc)}\n` : `  ${bold(c.padEnd(32))}${faint(desc)}\n`
-  const head = (t: string) => `\n  ${dim(t.toUpperCase())}\n`
-
-  w(banner())
-
-  w(`  ${faint("One note is one job. It runs in its own git worktree, on its own")}\n`)
-  w(`  ${faint("branch, and comes back as a diff you can read.")}\n`)
-
-  w(head("start here"))
-  w(cmd('kandy "fix the login flash"', "write a note here and run it"))
-  w(`  ${dim("Run it from inside a repository. kandy adopts the repo the first")}\n`)
-  w(`  ${dim("time it sees one, and starts its own daemon if it is not running.")}\n`)
-
-  w(head("writing"))
-  w(cmd("kandy <text>", "write a note and run it"))
-  w(cmd("kandy new <text>", "write it, don't run it"))
-  w(`\n  ${dim("The first line names the note; the rest is detail. Both are given")}\n`)
-  w(`  ${dim("to the agent, so put constraints and how to verify in the detail:")}\n\n`)
-  w(`  ${faint('kandy "Add a --json flag to kandy serve')}\n`)
-  w(`  ${faint("Print port, db path and slot count as JSON.")}\n`)
-  w(`  ${faint('Verify with: pnpm build && kandy serve --json"')}\n`)
-
-  w(head("looking"))
-  w(cmd("kandy", "the board, in this terminal (this repo's, if you're in one)"))
-  w(cmd("kandy status", "daemon or team, repos, agents"))
-  w(cmd("kandy ls [--all]", "what's open here; --all includes done"))
-  w(cmd("kandy stats", "what this board has actually done"))
-  w(cmd("kandy log [--verbose]", "tail what the board is doing, live"))
-  w(cmd("kandy open", "the board in a browser"))
-
-  w(head("setup"))
-  w(cmd("kandy serve [--port N]", "run the daemon in the foreground"))
-  w(cmd("kandy skill", "let other agents queue work onto a board"))
-
-  w(head("teams"))
-  w(cmd("kandy join <hub-url>", "put this machine on a team — once, then forget it"))
-  w(cmd("kandy invite <email>", "add someone, and get the message to send them"))
-  w(cmd("kandy leave", "back to one person, one machine"))
-  w(cmd("kandy hub --tailscale", "start a team's board; it runs nothing itself"))
-  w(`\n  ${dim("Everyone's notes run on their own machine, with their own agents and")}\n`)
-  w(`  ${dim("their own logins. The hub keeps the board and never runs anything.")}\n`)
-
-  w(head("capabilities"))
-  w(cmd("kandy skills", "skills in this repo, and which runs can see them"))
-  w(cmd("kandy skills add <owner/repo>", "install for every agent (the skills CLI)"))
-  w(cmd("kandy skills commit", "commit the ones no worktree can see yet"))
-  w(cmd("kandy mcp", "MCP servers every agent on this board gets"))
-  w(cmd("kandy mcp add <name> -- <cmd…>", "a local server"))
-  w(cmd("kandy mcp add <name> --url <u>", 'a remote one; --header "K: V" to add auth'))
-  w(`\n  ${dim("Write secrets as ${NAME}. Each machine fills them from its own")}\n`)
-  w(`  ${dim("environment, so the board never holds a token.")}\n`)
-  w(cmd("kandy gc [--dry-run]", "reclaim disk held by notes' checkouts"))
-  w(`\n  ${dim("Finished notes lose their checkout. Notes in review or failed keep it")}\n`)
-  w(`  ${dim("but lose node_modules and caches, which the next run reinstalls.")}\n`)
-  w(`  ${dim("Running notes are never touched, and every branch stays where it is.")}\n`)
-
-  w(head("flags"))
-  w(cmd("--agent claude|codex", "which agent runs it"))
-  w(cmd("--no-run", "write the note without starting it"))
-  w(cmd("--port N", "a daemon on a different port (default 4477)"))
-  w(cmd("--all", "include finished notes in `ls`"))
-  w(cmd("--verbose", "include agent chatter in `log`"))
-  w(cmd("--dry-run", "say what `gc` would reclaim, remove nothing"))
-  w(cmd("--force", "let `gc` remove unmerged or dirty worktrees"))
-  w(cmd("--json", "machine-readable output from `stats` and `serve`"))
-  w(cmd("--slots N", "how many agents may run at once (serve)"))
-
-  w(`\n  ${dim("Notes run with repo-only permissions by default: an agent can edit")}\n`)
-  w(`  ${dim("files but most shell commands are refused. Change that per note on")}\n`)
-  w(`  ${dim("the board — a worktree bounds what it can damage inside the repo,")}\n`)
-  w(`  ${dim("not what it can reach outside one.")}\n`)
-
-  w(`\n  ${faint("docs")}  ${dim("https://github.com/hiteshbandhu/kandy")}\n\n`)
-}
 
 /**
  * Who already has the port, if anyone.
@@ -337,7 +262,9 @@ async function main(): Promise<void> {
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
   // and reporting "nothing here" is worse than refusing it.
-  const KNOWN = [...VALUED, ...BARE, "--help", "-h", "--version", "-V"]
+  // `-help` too: people type it, and refusing it as a typo of `--help` is
+  // pedantry at the exact moment someone is asking for help.
+  const KNOWN = [...VALUED, ...BARE, "--help", "-h", "-help", "--version", "-V"]
 
   /*
    * `--version` before anything else, because the first thing anyone is asked
@@ -354,17 +281,22 @@ async function main(): Promise<void> {
     process.stderr.write(
       berry(`  unknown flag ${unknown}`) + (guess ? dim(`  did you mean ${guess}?`) : "") + "\n",
     )
-    usage()
+    process.stderr.write(dim("  kandy -h for help\n"))
     process.exit(1)
   }
 
   const rest = positionals(argv, VALUED, BARE)
   const first = rest[0]
 
-  if (argv.includes("--help") || argv.includes("-h")) return usage()
+  // `kandy -h`, and `kandy <command> -h` for that command's page.
+  if (argv.includes("--help") || argv.includes("-h") || argv.includes("-help")) {
+    process.exit(first && hasCommandHelp(first) ? printCommand(first) : await printHelp())
+  }
 
   switch (first) {
     case undefined:
+      // First run in a terminal: one question, once. See cli/setup.ts.
+      if (needsSetup() && !(await runSetup())) process.exit(0)
       /*
        * Bare `kandy` in a terminal is the board: where most people spend the
        * day, reached in five keystrokes. Piped, scripted or in CI there is no
@@ -478,7 +410,12 @@ async function main(): Promise<void> {
       break
     }
     case "help":
-      return usage()
+      process.exit(await printHelp(rest[1]))
+      break
+    case "setup":
+      if (await runSetup()) process.exit(await cmdBoard({ port }))
+      process.exit(0)
+      break
     default: {
       // Anything else is the shorthand: `kandy "do the thing"` writes a note
       // here and runs it. This is the path that should feel like nothing.
@@ -500,8 +437,23 @@ void main().catch((err: unknown) => {
  */
 async function cmdBoard(opts: { port: number }): Promise<number> {
   if (!(await ensureUp(opts.port))) return 1
-  const here = await boardHere(opts.port).catch(() => null)
+  /*
+   * Inside a repository with no board, make it one — the same thing
+   * `kandy "a task"` does the first time it sees a repo. Opening the board
+   * onto "No boards yet" while standing in a perfectly good repository was
+   * the first screen a new person saw.
+   */
+  let here = await boardHere(opts.port).catch(() => null)
+  if (!here && (await inRepo())) here = await adoptHere(opts.port).catch(() => null)
   const { runTui } = await import("./tui/index.js")
   await runTui({ client: client(opts.port), boardId: here?.board.id ?? null, hub: hubFor(opts.port) !== null })
   return 0
+}
+
+/** Whether the current directory is inside a git repository. */
+async function inRepo(): Promise<boolean> {
+  const { execFile } = await import("node:child_process")
+  return new Promise((resolve) => {
+    execFile("git", ["rev-parse", "--is-inside-work-tree"], (err, stdout) => resolve(!err && stdout.trim() === "true"))
+  })
 }
