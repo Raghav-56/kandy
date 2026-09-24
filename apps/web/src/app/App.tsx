@@ -207,6 +207,10 @@ export function App() {
         // other change — nothing to merge from the response.
         await act((c) => c.consent(noteId, accept, always))
       },
+      assign: async (noteId, runnerId) => {
+        // The move lands on the stream as note.placed / note.handed.
+        await act((c) => c.assign(noteId, { runner: runnerId }))
+      },
     }),
     [me, runners, readOnly, act],
   )

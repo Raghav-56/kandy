@@ -41,7 +41,7 @@ import { type Attached } from "@/features/notes/Attachments"
 import { PromptBox } from "@/features/notes/PromptBox"
 import { InlineEdit } from "@/features/notes/InlineEdit"
 import { PrBadge } from "@/features/notes/PrBadge"
-import { HeldCallout, RunnerChip, useTeam, VIEWER_HINT } from "@/features/team/team"
+import { GiveTo, HeldCallout, RunnerChip, useTeam, VIEWER_HINT } from "@/features/team/team"
 import { Markdown } from "@/features/stream/Markdown"
 import { LOOK } from "@/features/notes/status"
 import { Transcript } from "@/features/stream/Transcript"
@@ -259,6 +259,7 @@ export function NoteDetail(p: NoteDetailProps) {
                 </span>
               )}
               <RunnerChip note={p.note} />
+              <GiveTo note={p.note} />
             </div>
 
             <h2 className="mt-2.5 text-lede font-medium leading-snug tracking-[-0.015em]">

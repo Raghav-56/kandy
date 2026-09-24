@@ -1,7 +1,14 @@
 import { createContext, useContext, useState } from "react"
 import type { Note, Role, RunnerInfo } from "@kandy/core"
 import { can, normalEmail } from "@kandy/core"
-import { Button } from "@/ui"
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/ui"
 import { agentLabel } from "@/features/agents/AgentMark"
 import { cn } from "@/lib/utils"
 
@@ -25,6 +32,8 @@ export type Team = {
   /** True for a viewer on a hub. Never true on `kandy serve`, which has no roles. */
   readOnly: boolean
   consent: (noteId: string, accept: boolean, always?: boolean) => Promise<void>
+  /** Give a note to a machine. If it was worked on elsewhere, that machine pushes the branch first. */
+  assign: (noteId: string, runnerId: string) => Promise<void>
 }
 
 const TeamContext = createContext<Team>({
@@ -32,6 +41,7 @@ const TeamContext = createContext<Team>({
   runners: [],
   readOnly: false,
   consent: async () => {},
+  assign: async () => {},
 })
 
 /*
@@ -201,5 +211,68 @@ export function HeldCallout({ note, compact, className }: { note: Note; compact?
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Give this note to someone's machine.
+ *
+ * The one control the whole hub exists for. Lists the connected machines that
+ * have this repository checked out, named by whose they are — a person
+ * decides to hand work to Bob, not to `rnr_m39z…`. If the note was already
+ * worked on, the machine that has it pushes the branch and the receiver
+ * continues it with a briefing; the hub moves nothing but the record.
+ *
+ * Handing over does not run it. Whoever it now belongs to runs it, and if
+ * someone else asks, their machine's consent rule answers.
+ */
+export function GiveTo({ note, className }: { note: Note; className?: string }) {
+  const { me, runners, readOnly, assign } = useTeam()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  if (!me.hub || readOnly) return null
+  if (note.status === "running" || note.status === "queued") return null
+
+  const able = runners.filter((r) => r.online && r.boards.includes(note.boardId) && r.runnerId !== note.runner)
+  if (able.length === 0) return null
+
+  async function give(runnerId: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      await assign(note.id, runnerId)
+    } catch (err) {
+      // The server's words: "that machine does not have this repository" is
+      // only something it can know.
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <span className={cn("inline-flex items-center gap-2", className)}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="xs" disabled={busy}>
+            {busy ? "Handing over…" : "Give to…"}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-[220px]">
+          <DropdownMenuLabel className="text-meta text-muted-foreground">
+            {note.branch ? "Continues on their machine, from this branch" : "Runs on their machine"}
+          </DropdownMenuLabel>
+          {able.map((r) => (
+            <DropdownMenuItem key={r.runnerId} onSelect={() => void give(r.runnerId)}>
+              <span className="min-w-0 flex-1 truncate">
+                {r.owner ? (sameEmail(r.owner, me.email) ? "Me" : person(r.owner)) : r.name}
+              </span>
+              <span className="text-muted-foreground truncate text-meta">{r.owner ? r.name : r.os}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {error && <span className="text-berry text-meta">{error}</span>}
+    </span>
   )
 }
