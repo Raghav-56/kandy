@@ -17,7 +17,7 @@ Only one process holds state. Everything else is a renderer or a child.
   │  /src/cli  │            │             │           └───────┬───────┘
   └─────┬──────┘            └──────┬──────┘                   │
         │  ┌─────────────┐         │                          │
-        │  │ apps/tui    │─────────┤                          │
+        │  │ kandy tui   │─────────┤                          │
         │  └─────────────┘         │                          │
         │                          │                          │
         └──── HTTP POST ───────────┴───── GET /events (SSE) ───┘
@@ -217,7 +217,7 @@ leaves every branch exactly where it is.
         ├──────────────► packages/client   typed KandyClient + SSE decoder
         │                      │
         │                      ├──────► apps/web    React board
-        │                      ├──────► apps/tui    ANSI, read-only, same reducer
+        │                      ├──────► kandy (Ink) interactive, same reducer
         │                      └──────► apps/server CLI talks to its own daemon
         │
         └──────────────► apps/server       validates against it, serves it

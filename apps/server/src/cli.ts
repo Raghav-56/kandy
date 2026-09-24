@@ -22,12 +22,13 @@ import {
   cmdList,
   cmdNew,
   cmdOpen,
+  boardHere,
   cmdSkillInstall,
   cmdStats,
   cmdStatus,
 } from "./cli/commands.js"
 import { cmdLog } from "./cli/log.js"
-import { DEFAULT_PORT } from "./cli/daemon.js"
+import { client, DEFAULT_PORT, ensureUp, hubFor } from "./cli/daemon.js"
 
 const DEFAULT_SLOTS = 4
 
@@ -97,7 +98,8 @@ function usage(): void {
   w(`  ${faint('Verify with: pnpm build && kandy serve --json"')}\n`)
 
   w(head("looking"))
-  w(cmd("kandy", "status: daemon, repos, agents"))
+  w(cmd("kandy", "the board, in this terminal (this repo's, if you're in one)"))
+  w(cmd("kandy status", "daemon or team, repos, agents"))
   w(cmd("kandy ls [--all]", "what's open here; --all includes done"))
   w(cmd("kandy stats", "what this board has actually done"))
   w(cmd("kandy log [--verbose]", "tail what the board is doing, live"))
@@ -363,7 +365,19 @@ async function main(): Promise<void> {
 
   switch (first) {
     case undefined:
+      /*
+       * Bare `kandy` in a terminal is the board: where most people spend the
+       * day, reached in five keystrokes. Piped, scripted or in CI there is no
+       * one to press keys, so it is the status it always was.
+       */
+      if (process.stdin.isTTY && process.stdout.isTTY && !argv.includes("--json")) {
+        process.exit(await cmdBoard({ port }))
+      }
       process.exit(await cmdStatus({ port }))
+      break
+    case "board":
+    case "tui":
+      process.exit(await cmdBoard({ port }))
       break
     case "serve":
       return serve(argv)
@@ -477,3 +491,17 @@ void main().catch((err: unknown) => {
   process.stderr.write(berry(`  ${err instanceof Error ? err.message : String(err)}\n`))
   process.exit(1)
 })
+
+/**
+ * The terminal board, on this repository's board if there is one.
+ *
+ * Loaded only here: the terminal UI brings React and Ink with it, and no
+ * other command — least of all a hub — should pay to load them.
+ */
+async function cmdBoard(opts: { port: number }): Promise<number> {
+  if (!(await ensureUp(opts.port))) return 1
+  const here = await boardHere(opts.port).catch(() => null)
+  const { runTui } = await import("./tui/index.js")
+  await runTui({ client: client(opts.port), boardId: here?.board.id ?? null, hub: hubFor(opts.port) !== null })
+  return 0
+}

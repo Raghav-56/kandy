@@ -55,7 +55,7 @@ Clients are thin and interchangeable.
                │                       └─► …
    ┌───────────┴──────┬─────────────────┐
    │                  │                 │
- web (React)       tui (live)      desktop (later)
+ web (React)       terminal        desktop (later)
 ```
 
 Every state change is an append to an immutable log; views are projections.
@@ -68,7 +68,6 @@ Read [`docs/01-architecture.md`](docs/01-architecture.md) for the reasoning, and
 | --- | --- |
 | `apps/server` | The daemon. Owns state, runs agents, serves the API. |
 | `apps/web` | React board. The primary client. |
-| `apps/tui` | Terminal client. Live board view over the same SSE stream. |
 | `packages/core` | Domain types, event schemas, and the one reducer everything projects with. |
 | `packages/client` | Typed client for the server API. |
 | `apps/docs` | The documentation site (VitePress). `pnpm --filter @kandy/docs dev` |
@@ -90,7 +89,7 @@ Pass `--json` to print a single JSON object once the daemon is listening, with
 `{"port":4477,"dbPath":"/home/user/.local/state/kandy/kandy.db","slots":4}`.
 
 ```sh
-pnpm --filter @kandy/tui dev            # watch the same board from a terminal
+node apps/server/dist/cli.js            # the board, in this terminal
 pnpm --filter @kandy/web dev            # work ON the UI, with HMR, on :5477
 ```
 

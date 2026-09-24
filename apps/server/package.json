@@ -13,8 +13,10 @@
     "test": "tsc -p tsconfig.json && chmod +x dist/cli.js && node --test"
   },
   "dependencies": {
+    "@kandy/client": "workspace:*",
     "@kandy/core": "workspace:*",
-    "@kandy/client": "workspace:*"
+    "ink": "^7.1.1",
+    "react": "^19.2.0"
   },
   "description": "A board for coding agents. Each note is one job, run in its own git worktree.",
   "license": "MIT",
@@ -44,6 +46,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "@kandy/web": "workspace:*"
+    "@kandy/web": "workspace:*",
+    "@types/react": "^19.2.0"
   }
 }
