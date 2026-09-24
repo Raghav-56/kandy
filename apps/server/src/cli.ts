@@ -4,6 +4,7 @@ import { Engine } from "./engine.js"
 import { PrWatch } from "./prwatch.js"
 import { Runner } from "./runner.js"
 import { createHttpServer, parseHosts } from "./http.js"
+import { LocalLog } from "./local-log.js"
 import { ASK_TIMEOUT_MS, Permissions } from "./permission.js"
 import { loadToken } from "./auth.js"
 import { kandyVersion } from "./version.js"
@@ -188,7 +189,10 @@ async function serve(args: string[]): Promise<void> {
     (runId: string): { boardId: string; noteId: string } | null => runner.locate(runId),
   )
   const runner: Runner = new Runner(
-    engine,
+    // `kandy serve` is both halves in one process, so the log is right here.
+    // It still goes through the interface a remote runner will use, rather
+    // than keeping a shortcut that would let the two drift apart.
+    new LocalLog(engine),
     slots,
     (boardId, noteId) => {
       void prs.refresh(boardId, noteId).catch(() => {})

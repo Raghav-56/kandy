@@ -13,8 +13,10 @@ import {
   type CostSource,
   type Delivery,
   type DiffStat,
+  type Log,
+  type PendingEvent,
+  type TranscriptFrame,
 } from "@kandy/core"
-import type { Engine } from "./engine.js"
 import { priorRuns, promptForRun } from "./handoff.js"
 import { takeStripped } from "./gc.js"
 import { recordLimits } from "./limits.js"
@@ -90,7 +92,15 @@ export class Runner {
   private pending = new Map<string, { boardId: string; text: string }>()
 
   constructor(
-    private engine: Engine,
+    /**
+     * Where everything this runner learns goes.
+     *
+     * An interface rather than the `Engine` it used to be, so that the same
+     * runner works whether the log is in this process or on a hub across a
+     * network. See `packages/core/src/log.ts` — that swap is the whole of the
+     * hub/runner split.
+     */
+    private log: Log,
     private slots = 4,
     /** Called when a note's branch is ready to be looked up on the forge. */
     private onBranchReady?: (boardId: string, noteId: string) => void,
@@ -107,12 +117,12 @@ export class Runner {
     return l ? { boardId: l.boardId, noteId: l.noteId } : null
   }
 
-  private emit(pending: Parameters<Engine["emit"]>[0]): void {
-    this.engine.emit(pending)
+  private emit(pending: PendingEvent): void {
+    this.log.emit(pending)
   }
 
   private getView(boardId: string): BoardView | null {
-    return this.engine.view(boardId)
+    return this.log.view(boardId)
   }
 
   /**
@@ -185,7 +195,7 @@ export class Runner {
     } else {
       this.lastNotice.delete(runId)
     }
-    this.engine.say(runId, role, text, meta)
+    this.log.say(runId, role, text, meta)
   }
 
   request(boardId: string, noteId: string, agent: AgentId): string {
@@ -343,12 +353,12 @@ export class Runner {
     const reinstall = !fresh && takeStripped(q.noteId)
 
     if ((fresh || reinstall) && view.board.setup) {
-      this.engine.activity(q.runId, "setup", view.board.setup)
+      this.log.activity(q.runId, "setup", view.board.setup)
       this.say(q.runId, "system", `preparing workspace: ${view.board.setup}`)
 
       const started = Date.now()
       const result = await runSetup(worktree.path, view.board.setup, (line) => {
-        this.engine.activity(q.runId, "setup", line)
+        this.log.activity(q.runId, "setup", line)
       })
       const secs = ((Date.now() - started) / 1000).toFixed(1)
 
@@ -404,13 +414,27 @@ export class Runner {
     // model stashed by one run's spawn() was read by the next run's parse().
     const model = note.model ?? view.board.models?.[agentId]
 
+    /*
+     * Transcripts are fetched only for a handover, and only then.
+     *
+     * `promptForRun` takes a lookup rather than the frames themselves so that
+     * an ordinary run — the overwhelming majority — reads no transcripts at
+     * all. That laziness used to come free from a synchronous store; now the
+     * log may be across a network, so the decision `promptForRun` would have
+     * made is made once out here and the frames are pulled in before the call
+     * rather than during it.
+     */
+    const briefing = handedOver && !q.prompt
+    const frames = new Map<string, TranscriptFrame[]>()
+    if (briefing) {
+      for (const run of past) frames.set(run.id, await this.log.history(run.id))
+    }
+
     const spec = a.spawn({
       cwd: worktree.path,
       prompt:
-        (q.prompt ??
-          promptForRun(note, past, q.agent, (runId) =>
-            this.engine.store.transcriptSince(runId, 0, 5000),
-          )) + describeAttachments(attached),
+        (q.prompt ?? promptForRun(note, past, q.agent, (runId) => frames.get(runId) ?? [])) +
+        describeAttachments(attached),
       policy,
       ...(ask ? { ask } : {}),
       ...(model ? { model } : {}),
@@ -505,7 +529,7 @@ export class Runner {
           parsed = parse(line)
         } catch (err) {
           // A parser bug must not kill a run that is otherwise working.
-          this.engine.store.appendOutput(runId, "stdout", line)
+          this.log.output(runId, "stdout", line)
           this.say(runId, "error", `adapter failed to parse output: ${String(err)}`)
           return
         }
@@ -526,7 +550,7 @@ export class Runner {
                 this.say(runId, "tool", ev.detail, ev.tool)
                 // Also push it as live activity so every card on the board can
                 // show what its agent is doing without opening the note.
-                this.engine.activity(runId, ev.tool, ev.detail)
+                this.log.activity(runId, ev.tool, ev.detail)
               }
               if (ev.status !== "started") {
                 this.emit(event("run.tool", { runId, tool: ev.tool, status: ev.status }))
@@ -601,7 +625,7 @@ export class Runner {
         // Raw stderr is kept for debugging but stays out of the transcript —
         // agent CLIs write progress spinners and deprecation notices there,
         // and a transcript full of noise is a transcript nobody reads.
-        this.engine.store.appendOutput(runId, "stderr", line)
+        this.log.output(runId, "stderr", line)
         /*
          * Watched anyway, for one thing.
          *
@@ -703,7 +727,7 @@ export class Runner {
     if (status === "succeeded" && l) {
       // Snapshot before announcing: deciding the review removes the worktree,
       // and a review that can no longer show its own diff is not a review.
-      this.engine.store.saveDiff(noteId, {
+      this.log.saveDiff(noteId, {
         runId,
         branch: l.worktree.branch,
         stat: statText,

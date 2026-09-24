@@ -1,6 +1,19 @@
 import { DatabaseSync } from "node:sqlite"
-import type { KandyEvent, PendingEvent, TranscriptFrame, TranscriptRole } from "@kandy/core"
+import type { ActorId, KandyEvent, PendingEvent, TranscriptFrame, TranscriptRole } from "@kandy/core"
 import { DB_PATH } from "./paths.js"
+
+type Row = { seq: number; ts: number; type: string; data: string; actor: string | null }
+
+/**
+ * A row back into an event.
+ *
+ * Shared by both readers because they had drifted into two copies of the same
+ * five lines, and a column added to one of them is a column missing from the
+ * other.
+ */
+function hydrate(r: Row): KandyEvent {
+  return { seq: r.seq, ts: r.ts, type: r.type, data: JSON.parse(r.data), actor: r.actor } as KandyEvent
+}
 
 /**
  * Append-only event log. Single writer (this process), so a monotonic integer
@@ -26,7 +39,8 @@ export class Store {
         seq   INTEGER PRIMARY KEY AUTOINCREMENT,
         ts    INTEGER NOT NULL,
         type  TEXT    NOT NULL,
-        data  TEXT    NOT NULL
+        data  TEXT    NOT NULL,
+        actor TEXT
       );
       CREATE INDEX IF NOT EXISTS events_type ON events(type);
 
@@ -70,13 +84,27 @@ export class Store {
       );
       CREATE INDEX IF NOT EXISTS shared_seq ON shared(seq);
     `)
+
+    // `CREATE TABLE IF NOT EXISTS` does nothing to a table that already
+    // exists, so a column added after someone has been using kandy has to be
+    // asked for separately. Every event already in the log stays unattributed,
+    // which is honest: nobody recorded who, and inventing an answer now would
+    // be worse than the null.
+    this.addColumn("events", "actor", "TEXT")
   }
 
-  append(pending: PendingEvent, ts: number = Date.now()): KandyEvent {
+  /** Add a column unless it is already there. Idempotent, like the DDL above. */
+  private addColumn(table: string, column: string, type: string): void {
+    const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+    if (cols.some((c) => c.name === column)) return
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+  }
+
+  append(pending: PendingEvent, ts: number = Date.now(), actor: ActorId | null = null): KandyEvent {
     const row = this.db
-      .prepare("INSERT INTO events (ts, type, data) VALUES (?, ?, ?) RETURNING seq")
-      .get(ts, pending.type, JSON.stringify(pending.data)) as { seq: number }
-    return { ...pending, seq: row.seq, ts } as KandyEvent
+      .prepare("INSERT INTO events (ts, type, data, actor) VALUES (?, ?, ?, ?) RETURNING seq")
+      .get(ts, pending.type, JSON.stringify(pending.data), actor) as { seq: number }
+    return { ...pending, seq: row.seq, ts, actor } as KandyEvent
   }
 
   /**
@@ -87,9 +115,17 @@ export class Store {
    * Returns null if this (origin, oseq) was already folded in — pulling twice,
    * or pulling a file that overlaps what we already have, must be free.
    */
-  appendShared(pending: PendingEvent, origin: string, oseq: number, ts: number): KandyEvent | null {
+  appendShared(
+    pending: PendingEvent,
+    origin: string,
+    oseq: number,
+    ts: number,
+    actor: ActorId | null = null,
+  ): KandyEvent | null {
     if (this.isShared(origin, oseq)) return null
-    const e = this.append(pending, ts)
+    // The teammate who did the thing, not whoever pulled it — the same reason
+    // the origin timestamp is preserved a few lines above.
+    const e = this.append(pending, ts, actor)
     this.db.prepare("INSERT INTO shared (origin, oseq, seq) VALUES (?, ?, ?)").run(origin, oseq, e.seq)
     return e
   }
@@ -111,30 +147,20 @@ export class Store {
   locallyAuthored(after = 0, limit = 100_000): KandyEvent[] {
     const rows = this.db
       .prepare(
-        `SELECT e.seq, e.ts, e.type, e.data FROM events e
+        `SELECT e.seq, e.ts, e.type, e.data, e.actor FROM events e
          LEFT JOIN shared s ON s.seq = e.seq
          WHERE e.seq > ? AND s.seq IS NULL ORDER BY e.seq LIMIT ?`,
       )
-      .all(after, limit) as { seq: number; ts: number; type: string; data: string }[]
-    return rows.map((r) => ({
-      seq: r.seq,
-      ts: r.ts,
-      type: r.type,
-      data: JSON.parse(r.data),
-    })) as KandyEvent[]
+      .all(after, limit) as Row[]
+    return rows.map(hydrate)
   }
 
   /** Events strictly after `seq`. The basis of both projection and SSE replay. */
   since(seq: number, limit = 10_000): KandyEvent[] {
     const rows = this.db
-      .prepare("SELECT seq, ts, type, data FROM events WHERE seq > ? ORDER BY seq LIMIT ?")
-      .all(seq, limit) as { seq: number; ts: number; type: string; data: string }[]
-    return rows.map((r) => ({
-      seq: r.seq,
-      ts: r.ts,
-      type: r.type,
-      data: JSON.parse(r.data),
-    })) as KandyEvent[]
+      .prepare("SELECT seq, ts, type, data, actor FROM events WHERE seq > ? ORDER BY seq LIMIT ?")
+      .all(seq, limit) as Row[]
+    return rows.map(hydrate)
   }
 
   head(): number {

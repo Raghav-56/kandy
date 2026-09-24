@@ -1,4 +1,5 @@
 import type {
+  ActorId,
   BoardView,
   KandyEvent,
   PendingEvent,
@@ -27,8 +28,17 @@ export class Engine {
     this.projections = new Projections(store)
   }
 
-  emit(pending: PendingEvent): KandyEvent {
-    const e = this.store.append(pending)
+  /**
+   * `actor` is who asked for this, where that is known.
+   *
+   * Stamped here rather than carried on the pending event, for the same
+   * reason `seq` is: once a runner on someone else's machine can append to a
+   * hub's log, an actor inside the payload would be one the sender chose for
+   * themselves. The caller reads it off an authenticated connection and
+   * passes it in; nothing trusts a claim in the message.
+   */
+  emit(pending: PendingEvent, actor: ActorId | null = null): KandyEvent {
+    const e = this.store.append(pending, Date.now(), actor)
     this.projections.apply(e)
     this.bus.publish(e)
     return e

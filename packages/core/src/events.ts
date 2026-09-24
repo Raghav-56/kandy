@@ -12,10 +12,29 @@ import type {
 import type { PermissionRule } from "./permission.js"
 import type { BoardId, ColumnId, NoteId, RunId } from "./id.js"
 
-/** Envelope fields the server stamps on every event. */
+/**
+ * Who did a thing.
+ *
+ * An email where a hub knows one, and `null` on a single-player daemon, which
+ * has nobody to distinguish from anybody. `null` means "not recorded" and
+ * never "the system" — an event nobody can be attributed to should read as
+ * unattributed rather than as the work of a fictitious robot.
+ */
+export type ActorId = string
+
+/**
+ * Envelope fields the server stamps on every event.
+ *
+ * `actor` is stamped, not submitted, for the same reason `seq` is. Once a
+ * runner on someone else's machine can append to a hub's log, an actor taken
+ * from the payload would be an actor the sender chose for themselves — the
+ * hub reads it off the authenticated connection instead, and a claim inside
+ * the message is ignored.
+ */
 export type EventMeta = {
   seq: number
   ts: number
+  actor: ActorId | null
 }
 
 export type KandyEventMap = {
