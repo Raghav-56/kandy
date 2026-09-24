@@ -3,7 +3,7 @@ import type { AgentId } from "@kandy/core"
 import { Engine } from "./engine.js"
 import { PrWatch } from "./prwatch.js"
 import { Runner } from "./runner.js"
-import { createHttpServer } from "./http.js"
+import { createHttpServer, parseHosts } from "./http.js"
 import { ASK_TIMEOUT_MS, Permissions } from "./permission.js"
 import { loadToken } from "./auth.js"
 import { kandyVersion } from "./version.js"
@@ -200,7 +200,14 @@ async function serve(args: string[]): Promise<void> {
   // Fetched once a day and cached; failing is silent, since pricing a turn
   // must never be able to stop an agent from running.
   void warmPrices()
-  const server = createHttpServer({ engine, runner, prs, token, permissions })
+  const server = createHttpServer({
+    engine,
+    runner,
+    prs,
+    token,
+    permissions,
+    hosts: parseHosts(process.env["KANDY_HOSTS"]),
+  })
   // A permission prompt is held open for as long as the question is on the
   // board, which is minutes. Node's 5-minute default would sever that
   // connection under us and the agent would be told kandy was unreachable —

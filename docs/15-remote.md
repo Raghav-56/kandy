@@ -92,7 +92,7 @@ own hub connection. So the two had to change together, and did:
 
 **Done.** One gate in `http.ts`, ahead of all routing, default deny:
 
-1. ✅ **Reads require a credential once the request did not arrive on loopback.** `GET /boards`,
+1. ✅ **Reads require a credential once the request did not come from this machine.** `GET /boards`,
    `/events`, `/repo/browse` and `/agents` now 401 with `WWW-Authenticate: Bearer` from any peer
    that is not this machine. On loopback nothing changed — that is the single-player daemon, and
    the token is handed to any same-origin fetch there anyway, so demanding it back is ceremony.
@@ -104,6 +104,16 @@ own hub connection. So the two had to change together, and did:
 4. ✅ **The bundle stays open**, but only files that really exist in the build. `serveStatic`
    could not be asked — its index.html fallback answers yes to everything by design, which would
    have reopened every API path it has never heard of. `isBundleAsset` is the narrow question.
+5. ✅ **"From this machine" is not a question the socket can answer.** A reverse proxy dials the
+   backend from the backend's own host, so with `tailscale serve` in front, every request on the
+   tailnet arrives from `127.0.0.1` — the entire tailnet reading every transcript, through the
+   gate rather than around it. Tailscale's identity headers do not rescue it either: [they are
+   populated for users and not for tagged devices](https://tailscale.com/docs/concepts/tailscale-identity),
+   so a tagged node is indistinguishable from localhost by header as well. What does survive a
+   proxy is the name the caller asked for, so **both must agree** — the peer is this machine and
+   it was addressed as this machine. A request that arrived as `laptop.tailnet.ts.net` is remote,
+   however local its socket looks. This is the same mistake [others have shipped and had
+   reported](https://github.com/projectmushroom/gravedecay/issues/149).
 
 Two things deliberately left:
 

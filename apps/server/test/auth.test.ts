@@ -4,7 +4,7 @@ import { mkdtempSync, statSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { loadToken } from "../dist/auth.js"
-import { createHttpServer } from "../dist/http.js"
+import { createHttpServer, parseHosts } from "../dist/http.js"
 import { KandyClient } from "@kandy/client"
 
 test("token persists with owner-only permissions", () => {
@@ -28,6 +28,8 @@ test("HTTP authentication gates writes and protects browser bootstrap", async ()
     engine: { head: () => 0, projections: { boards: () => [] } },
     runner: { cancel: () => { cancellations++; return true } },
     prs: {},
+    // What `KANDY_HOSTS=laptop.tailnet.ts.net` configures on a real daemon.
+    hosts: parseHosts("laptop.tailnet.ts.net"),
   })
   const base = "http://127.0.0.1:4477"
   // Exercise the actual HTTP request listener without binding a port, so this
@@ -129,6 +131,33 @@ test("HTTP authentication gates writes and protects browser bootstrap", async ()
       headers: { "x-test-remote": "::ffff:127.0.0.1" },
     })).status, 200)
     assert.equal((await fetch(base + "/boards")).status, 200)
+
+    /*
+     * A reverse proxy in front is the case the socket cannot answer.
+     *
+     * `tailscale serve` dials the backend from the backend's own machine, so
+     * every request on the tailnet arrives from 127.0.0.1. Trusting the peer
+     * address alone would hand the whole tailnet every transcript — the exact
+     * hole this gate exists to close. Tailscale's identity headers are no
+     * help: they are populated for users and not for tagged devices, so a
+     * tagged node looks like localhost by header too.
+     *
+     * The name the caller asked for does survive the proxy, so both must
+     * agree before a request counts as local.
+     */
+    const served = {
+      host: "laptop.tailnet.ts.net",
+      "tailscale-user-login": "someone@example.com",
+    }
+    assert.equal((await fetch(base + "/boards", { headers: served })).status, 401)
+    assert.equal((await fetch(base + "/auth/token", {
+      headers: { ...headers, ...served, "sec-fetch-site": "same-origin" },
+    })).status, 403)
+    // With the token it is a perfectly good request — the point is that it
+    // has to bring one.
+    assert.equal((await fetch(base + "/boards", {
+      headers: { ...served, authorization: `Bearer ${token}` },
+    })).status, 200)
   } finally {
     globalThis.fetch = originalFetch
   }

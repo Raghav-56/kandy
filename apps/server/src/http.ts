@@ -64,26 +64,36 @@ const STARTED = Date.now()
  * must stop doing is deciding, as a side effect, that remote access is
  * impossible.
  *
- * Read once: it is deployment, not state, and re-reading it per request would
- * let an edit to the environment of a running daemon go unnoticed.
+ * Parsed here and passed in by the CLI rather than read from the environment
+ * where it is used: a module-level `process.env` read happens once at import,
+ * which no test can arrange after the fact, and the rule it decides is one
+ * that badly wants testing.
  */
-const EXTRA_HOSTS = new Set(
-  (process.env["KANDY_HOSTS"] ?? "")
-    .split(",")
-    .map((h) => h.trim().toLowerCase())
-    .filter(Boolean),
-)
+export function parseHosts(spec: string | undefined): Set<string> {
+  return new Set(
+    (spec ?? "")
+      .split(",")
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean),
+  )
+}
 
-/** Host must match a loopback name on our port, or be named in `KANDY_HOSTS`. */
-export function allowedHost(host: string, port: number | undefined, extra = EXTRA_HOSTS): boolean {
+/** Whether the Host header names this machine, rather than a route to it. */
+export function isLoopbackHost(host: string, port: number | undefined): boolean {
   const h = host.toLowerCase()
-  // A configured host may be given with or without its port; comparing both
-  // ways keeps `KANDY_HOSTS=hub.example.com` working behind a proxy on 443.
-  if (extra.has(h) || extra.has(h.replace(/:\d+$/, ""))) return true
   for (const name of ["127.0.0.1", "localhost", "[::1]"]) {
     if (h === `${name}:${port}` || h === `${name}:5477`) return true
   }
   return false
+}
+
+/** Host must match a loopback name on our port, or be named in `KANDY_HOSTS`. */
+export function allowedHost(host: string, port: number | undefined, extra: ReadonlySet<string>): boolean {
+  const h = host.toLowerCase()
+  // A configured host may be given with or without its port; comparing both
+  // ways keeps `KANDY_HOSTS=hub.example.com` working behind a proxy on 443.
+  if (extra.has(h) || extra.has(h.replace(/:\d+$/, ""))) return true
+  return isLoopbackHost(h, port)
 }
 
 /**
@@ -107,7 +117,11 @@ export type ServerDeps = {
   token: string
   /** Absent when the daemon was built without a way to ask. */
   permissions?: Permissions
+  /** Extra Host names to answer to, from `KANDY_HOSTS`. */
+  hosts?: ReadonlySet<string>
 }
+
+const EMPTY: ReadonlySet<string> = new Set()
 
 export function createHttpServer(deps: ServerDeps) {
   return createServer((req, res) => {
@@ -137,7 +151,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   const port = req.socket.localPort
   const host = req.headers.host ?? ""
   const origin = req.headers.origin
-  if (!allowedHost(host, port) || (origin !== undefined && origin !== `http://${host}`)) {
+  if (!allowedHost(host, port, deps.hosts ?? EMPTY) || (origin !== undefined && origin !== `http://${host}`)) {
     return send(res, 403, { ok: false, error: { code: "forbidden", message: "Untrusted origin or host" } })
   }
   if (req.method === "OPTIONS") return void res.writeHead(204).end()
@@ -157,8 +171,22 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
    * single-player daemon, and the token is handed to any same-origin fetch on
    * this machine anyway, so demanding it back would be ceremony. Off loopback
    * the default is deny, for reads as much as writes.
+   *
+   * The socket alone cannot answer this, and that is the whole subtlety. A
+   * reverse proxy dials the backend from the backend's own machine, so with
+   * `tailscale serve` in front every request on the tailnet arrives from
+   * 127.0.0.1 and would be waved through — the entire tailnet reading every
+   * transcript, which is exactly the hole this gate was opened to close.
+   * Tailscale's own identity headers do not save us either: they are
+   * populated for users and not for tagged devices, so a tagged node is
+   * indistinguishable from localhost by header as well.
+   *
+   * What a proxy does carry through is the name the caller asked for. So both
+   * have to agree: the peer is this machine *and* it was addressed as this
+   * machine. A request that arrived as `laptop.tailnet.ts.net` is remote,
+   * however local its socket looks.
    */
-  const local = isLoopback(req.socket.remoteAddress)
+  const local = isLoopback(req.socket.remoteAddress) && isLoopbackHost(host, port)
 
   if (req.method === "GET" && routed === "/auth/token") {
     // Never off-machine: this is the credential itself, and a caller that
