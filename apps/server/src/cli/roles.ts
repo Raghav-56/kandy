@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { hostname, platform } from "node:os"
 import path from "node:path"
 import { event, id, RUNNER_PROTOCOL, type BoardView, type Hello } from "@kandy/core"
@@ -147,12 +147,14 @@ function mine(view: BoardView, me: string): BoardView {
   return { ...view, notes, runs: view.runs.filter((r) => ids.has(r.noteId)) }
 }
 
-export async function runRunner(opts: { hub: string; token: string; slots: number; json: boolean }) {
+export async function runRunner(opts: { hub: string; token: string; slots: number; json: boolean; repos: string[] }) {
   // Imported here, not at the top: a hub process loads this file for `runHub`
   // and must never pull the runner — and with it every agent adapter — in.
   const { Runner } = await import("../runner.js")
   const { LocalWorkshop } = await import("../local-workshop.js")
   const { detectAll } = await import("../agents/index.js")
+  const { originOf } = await import("../worktree.js")
+  const { repos: nearby } = await import("../browse.js")
 
   const hub = opts.hub.replace(/\/+$/, "")
   const me = runnerId()
@@ -167,12 +169,51 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
   const runner = new Runner(log, opts.slots, undefined, { url: hub, token: opts.token })
   const workshop = new LocalWorkshop(runner)
 
+  /*
+   * Where this machine keeps each board's repository.
+   *
+   * By remote, not by path: a path in the log is where the repository is on
+   * whoever made the board, and a teammate's clone of it is somewhere else.
+   * Clones named with `--repo` come first and, when given, are the only ones
+   * this runner serves — that is how a person says "this checkout, not that
+   * one". Without them the recorded path is used if it is here and is the
+   * same repository, and failing that a clone of it is looked for in the
+   * usual places code lives.
+   */
+  const explicit = await Promise.all(
+    // Resolved through symlinks: on macOS /var is /private/var, and a path
+    // that differs only by a link is the same checkout.
+    opts.repos.map(async (p) => {
+      const real = realpathSync(path.resolve(p))
+      return { path: real, remote: await originOf(real).catch(() => null) }
+    }),
+  )
+  let found: { path: string; remote: string | null }[] | null = null
+  const discover = async () =>
+    (found ??= await Promise.all(
+      nearby(80).map(async (e) => ({ path: e.path, remote: await originOf(e.path).catch(() => null) })),
+    ))
+  const where = new Map<string, string>()
+
+  async function locate(): Promise<void> {
+    for (const b of log.replica.boards()) {
+      if (where.has(b.id)) continue
+      const hit =
+        explicit.find((r) => (b.remote && r.remote === b.remote) || r.path === b.repoPath)?.path ??
+        (explicit.length
+          ? null
+          : existsSync(path.join(b.repoPath, ".git")) && (!b.remote || (await originOf(b.repoPath)) === b.remote)
+            ? b.repoPath
+            : b.remote
+              ? (await discover()).find((r) => r.remote === b.remote)?.path ?? null
+              : null)
+      if (hit) where.set(b.id, hit)
+    }
+  }
+  log.localPath = (b) => where.get(b.id) ?? null
+
   /** Boards whose repository is on this machine. The only ones it can be asked to work on. */
-  const boards = () =>
-    log.replica
-      .boards()
-      .filter((b) => existsSync(path.join(b.repoPath, ".git")))
-      .map((b) => b.id)
+  const boards = () => log.replica.boards().filter((b) => where.has(b.id)).map((b) => b.id)
 
   let agents = await detectAll()
   const hello = (): Hello => ({
@@ -202,6 +243,20 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
    * The note shows the request on the board, with the requester's name, for
    * this machine's owner to answer.
    */
+  /*
+   * Commands from the hub name repositories by the path recorded in the log.
+   * Every argument that is one of those paths becomes this machine's own
+   * before the workshop sees it.
+   */
+  const toLocal = (a: unknown) => {
+    if (typeof a !== "string") return a
+    const b = log.replica.boards().find((x) => x.repoPath === a)
+    return b ? (where.get(b.id) ?? a) : a
+  }
+  for (const [k, fn] of Object.entries(handlers)) {
+    handlers[k] = ((...args: unknown[]) => (fn as (...a: unknown[]) => Promise<unknown>)(...args.map(toLocal))) as never
+  }
+
   handlers["request"] = (async (boardId: string, noteId: string, agent: string, requestedBy: string | null) => {
     if (consent.decide(requestedBy, link!.owner) === "hold") {
       log.emit(event("note.held", { noteId, runnerId: me, requestedBy, agent: agent as never }))
@@ -237,7 +292,9 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
   void link.start()
   await link.ready
 
-  // Now the replica is true, say hello again with the boards it shows.
+  // Now the replica is true, find this machine's clones and say hello again
+  // with the boards they make it able to serve.
+  await locate()
   await announce()
   for (const b of log.replica.boards()) {
     const view = log.view(b.id)
@@ -247,7 +304,7 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
   // restart. Boards are announced the moment their creation arrives, because
   // a note on a new board cannot run until some runner says it has the repo.
   log.onEvent((e) => {
-    if (e.type === "board.created" || e.type === "board.removed") void announce()
+    if (e.type === "board.created" || e.type === "board.removed") void locate().then(announce)
   })
   const again = setInterval(() => void refresh(), 60_000)
 

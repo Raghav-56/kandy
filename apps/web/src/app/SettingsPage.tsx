@@ -380,7 +380,7 @@ function Toggle({
   )
 }
 
-function Section({
+export function Section({
   title,
   body,
   children,

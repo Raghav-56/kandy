@@ -1,13 +1,35 @@
 import { daemonToken } from "@/lib/daemon-token"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { KandyClient } from "@kandy/client"
-import { reduce, type ActivityFrame, type BoardView, type TranscriptFrame } from "@kandy/core"
+import {
+  reduce,
+  type ActivityFrame,
+  type BoardView,
+  type KandyEvent,
+  type TranscriptFrame,
+} from "@kandy/core"
+
+/** How many attributed events the Team page's activity list keeps. */
+const RECENT = 50
+
+/**
+ * How far back to replay on a hub, so the activity list opens with history.
+ *
+ * There is no "recent events" endpoint, but the stream already replays
+ * everything after the seq it is given — so asking from a little before the
+ * snapshot backfills the list for the cost of a few hundred small frames. The
+ * view is not refolded from them: anything at or below the snapshot's seq is
+ * skipped exactly as before. Off a hub every actor is null, so this is 0 and
+ * the stream starts where it always did.
+ */
+const BACKFILL = 400
 
 /**
  * Snapshot, then stream. The reducer is the one in @kandy/core — the same code
  * the server projects with and the TUI will render with.
  */
-export function useBoard(boardId: string | null) {
+export function useBoard(boardId: string | null, opts: { hub?: boolean } = {}) {
+  const hub = opts.hub ?? false
   const client = useMemo(() => new KandyClient({ baseUrl: "/api", token: daemonToken }), [])
   const [view, setView] = useState<BoardView | null>(null)
   const [connected, setConnected] = useState(false)
@@ -16,6 +38,13 @@ export function useBoard(boardId: string | null) {
   const [transcript, setTranscript] = useState<Record<string, TranscriptFrame[]>>({})
   /** What each run is doing right now. Live-only; empty after a reconnect. */
   const [activity, setActivity] = useState<Record<string, ActivityFrame>>({})
+  /**
+   * The last few events someone can be named for, newest first.
+   *
+   * A ring rather than the whole log: the Team page shows thirty lines, and
+   * the stream never ends.
+   */
+  const [recent, setRecent] = useState<KandyEvent[]>([])
 
   // The stream must not be torn down and rebuilt every time the view updates,
   // so the live seq lives in a ref rather than the effect's dependencies.
@@ -28,6 +57,7 @@ export function useBoard(boardId: string | null) {
 
     setTranscript({})
     setActivity({})
+    setRecent([])
     fetched.current.clear()
     client
       .view(boardId)
@@ -37,8 +67,12 @@ export function useBoard(boardId: string | null) {
         seq.current = snapshot.seq
         setError(null)
 
-        close = client.events(snapshot.seq, {
+        close = client.events(hub ? Math.max(0, snapshot.seq - BACKFILL) : snapshot.seq, {
           onEvent: (e) => {
+            if (e.actor)
+              setRecent((r) =>
+                r.some((x) => x.seq === e.seq) ? r : [e, ...r].sort((a, b) => b.seq - a.seq).slice(0, RECENT),
+              )
             // Skip anything already folded into the snapshot.
             if (e.seq <= seq.current) return
             seq.current = e.seq
@@ -64,7 +98,7 @@ export function useBoard(boardId: string | null) {
       cancelled = true
       close?.()
     }
-  }, [boardId, client])
+  }, [boardId, client, hub])
 
   /**
    * Backfill a run's transcript from disk when its note is opened.
@@ -119,6 +153,7 @@ export function useBoard(boardId: string | null) {
     act,
     transcript,
     activity,
+    recent,
     loadTranscript,
     clearError: () => setError(null),
   }

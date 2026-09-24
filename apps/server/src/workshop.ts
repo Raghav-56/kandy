@@ -97,6 +97,12 @@ export interface Workshop {
 
   /** The live diff, or null when there is no checkout to read one from. */
   diff(noteId: string): Promise<LiveDiff | null>
+  /**
+   * Let go of a note so another machine can continue it: commit anything the
+   * agent left, push the branch, and say which branch that is. Refuses while
+   * the note is running — the work is not finished being written.
+   */
+  handoff(repoPath: string, noteId: string): Promise<{ branch: string }>
 
   /**
    * Land or drop a note's checkout, as a review decided.

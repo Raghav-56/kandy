@@ -1,9 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { createInterface } from "node:readline"
 import {
+  AGENT_NAMES,
   between,
   event,
   id,
+  promptFor,
   INTERRUPTED,
   isAuthFailure,
   laneColumn,
@@ -41,6 +43,7 @@ import {
   isDirty,
   runSetup,
   type Worktree,
+  continueBranch,
 } from "./worktree.js"
 
 /**
@@ -345,9 +348,31 @@ export class Runner {
     const note = view?.notes.find((n) => n.id === q.noteId)
     if (!view || !note) throw new Error(`note ${q.noteId} not found`)
 
+    /*
+     * Where this run works: its own checkout if it has one, the branch it was
+     * handed if someone else started it, a new one otherwise.
+     *
+     * A handed-over note must continue the branch it came with. Starting a
+     * fresh one would put this machine's agent beside the work instead of on
+     * top of it, and the next review would show half the note.
+     */
     const fresh = !q.worktree
-    const worktree = q.worktree ?? (await createWorktree(view.board.repoPath, q.noteId, note.title))
+    const handedFrom = !q.worktree && note.handoff ? note.handoff : null
+    const lastBase = priorRuns(view.runs, q.noteId, q.runId).at(-1)?.baseRef ?? null
+    const worktree =
+      q.worktree ??
+      (handedFrom ? await continueBranch(view.board.repoPath, q.noteId, handedFrom.branch, lastBase) : null) ??
+      (await createWorktree(view.board.repoPath, q.noteId, note.title))
     this.worktrees.set(q.noteId, worktree)
+    if (handedFrom) {
+      this.say(
+        q.runId,
+        "system",
+        worktree.branch === handedFrom.branch
+          ? `picked up ${worktree.branch}${handedFrom.by ? `, handed over by ${handedFrom.by}` : ""}`
+          : `could not find ${handedFrom.branch} on the remote — starting fresh`,
+      )
+    }
 
     if (!fresh) {
       this.say(q.runId, "system", `continuing in ${worktree.branch}`)
@@ -399,7 +424,10 @@ export class Runner {
     // Everything before this run — `run.requested` fires at queue time, so the
     // view already holds the run being started. See priorRuns.
     const past = priorRuns(view.runs, q.noteId, q.runId)
-    const handedOver = past.length > 0 && past.at(-1)!.agent !== q.agent
+    // A different agent cannot resume another's session, and nor can the same
+    // agent on a different machine: the session is on someone else's laptop.
+    // Either way the work arrives as a briefing.
+    const handedOver = past.length > 0 && (past.at(-1)!.agent !== q.agent || handedFrom !== null)
     const prior =
       q.worktree && !handedOver
         ? past.filter((r) => r.agentSessionId).at(-1)?.agentSessionId
@@ -472,11 +500,20 @@ export class Runner {
       )
     }
 
+    const task = q.prompt ?? promptForRun(note, past, q.agent, (runId) => frames.get(runId) ?? [])
+    /*
+     * Said, not just done. An agent that does not echo its prompt — Cursor,
+     * Codex — would otherwise leave no trace that it was briefed at all, and
+     * "why did it start by reading the diff?" deserves an answer on the page.
+     */
+    if (briefing && task !== promptFor(note)) {
+      const who = [...new Set(past.map((r) => AGENT_NAMES[r.agent] ?? r.agent))].join(" and ")
+      this.say(q.runId, "system", `briefed on ${past.length} earlier run${past.length === 1 ? "" : "s"} by ${who}`)
+    }
+
     const opts = {
       cwd: worktree.path,
-      prompt:
-        (q.prompt ?? promptForRun(note, past, q.agent, (runId) => frames.get(runId) ?? [])) +
-        describeAttachments(attached),
+      prompt: task + describeAttachments(attached),
       policy,
       ...(ask ? { ask } : {}),
       ...(model ? { model } : {}),
@@ -879,6 +916,11 @@ export class Runner {
   }
 
   /** Where a note's work lives, for diffing and review. */
+  /** Whether this note has a run here now, or one waiting for a slot. */
+  isRunning(noteId: string): boolean {
+    return [...this.live.values()].some((l) => l.noteId === noteId) || this.queue.some((q) => q.noteId === noteId)
+  }
+
   worktreeOf(noteId: string): Worktree | undefined {
     return this.worktrees.get(noteId)
   }

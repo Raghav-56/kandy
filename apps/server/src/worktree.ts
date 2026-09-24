@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process"
 import { promisify } from "node:util"
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs"
 import path from "node:path"
 import type { DiffStat } from "@kandy/core"
 import { withTrailers } from "./attribution.js"
@@ -311,6 +311,126 @@ function guessSetup(root: string): string | null {
   return null
 }
 
+/**
+ * One spelling for a repository's address.
+ *
+ * `git@github.com:acme/app.git`, `https://github.com/acme/app` and
+ * `ssh://git@github.com/acme/app.git` are one repository, cloned three ways
+ * by three people. Matching a teammate's clone to a board has to see through
+ * that, or a handoff fails for someone who simply prefers ssh.
+ */
+export function normalizeRemote(url: string): string | null {
+  const u = url.trim()
+  if (!u) return null
+  // A remote on disk — a shared drive, or a bare repository beside the clones
+  // in a test. Resolved through symlinks, because two people naming the same
+  // directory through different links are naming one repository.
+  if (u.startsWith("/") || u.startsWith("file://")) {
+    const p = u.replace(/^file:\/\//, "")
+    try {
+      return `file:${realpathSync(p).replace(/\/+$/, "").replace(/\.git$/, "")}`
+    } catch {
+      return `file:${p.replace(/\/+$/, "").replace(/\.git$/, "")}`
+    }
+  }
+  const scp = /^(?:[^@/]+@)?([^:/]+):(?!\/)(.+)$/.exec(u)
+  let host: string, rest: string
+  if (scp && !u.includes("://")) {
+    host = scp[1]!
+    rest = scp[2]!
+  } else {
+    try {
+      const parsed = new URL(u)
+      host = parsed.hostname
+      rest = parsed.pathname
+    } catch {
+      return null
+    }
+  }
+  rest = rest.replace(/^\/+/, "").replace(/\/+$/, "").replace(/\.git$/, "")
+  return rest ? `${host.toLowerCase()}/${rest}` : null
+}
+
+/** This repository's origin, normalised; the first remote if it has no `origin`. */
+export async function originOf(repoPath: string): Promise<string | null> {
+  const remotes = (await git(repoPath, "remote").catch(() => "")).split("\n").map((r) => r.trim()).filter(Boolean)
+  const name = remotes.includes("origin") ? "origin" : remotes[0]
+  if (!name) return null
+  return normalizeRemote(await git(repoPath, "remote", "get-url", name).catch(() => ""))
+}
+
+async function remoteName(repoPath: string): Promise<string | null> {
+  const remotes = (await git(repoPath, "remote").catch(() => "")).split("\n").map((r) => r.trim()).filter(Boolean)
+  return remotes.includes("origin") ? "origin" : (remotes[0] ?? null)
+}
+
+/**
+ * Send a note's branch to the remote, so another machine can pick it up.
+ *
+ * From the machine that has it, with its owner's own credentials — the hub
+ * never holds a forge token. A repository with no remote cannot hand work to
+ * anyone, and says so, rather than pretending the other side will find it.
+ */
+export async function pushBranch(repoPath: string, branch: string): Promise<{ remote: string }> {
+  const remote = await remoteName(repoPath)
+  if (!remote) throw new Error("this repository has no remote, so there is nowhere to send the branch for someone else to pick up")
+  try {
+    await git(repoPath, "push", "--quiet", "-u", remote, branch)
+  } catch (err) {
+    throw new Error(`could not push ${branch} to ${remote}: ${err instanceof Error ? err.message.split("\n")[0] : err}`)
+  }
+  return { remote }
+}
+
+/**
+ * A checkout of a branch someone else started, for this machine to continue.
+ *
+ * The branch is fetched from the remote and checked out as a local branch of
+ * the same name, so a commit here goes on top of theirs and a push later
+ * goes back to the same place. If this machine already has the branch — the
+ * same person on the same machine, picking a note back up — it is used, and
+ * fast-forwarded to whatever the remote has since. Null when the branch is
+ * nowhere to be found; the caller starts fresh rather than failing the run.
+ *
+ * The base is the commit the work started from, which the previous run
+ * recorded, so the diff this machine shows is the whole of the note's work
+ * and not merely what was added here.
+ */
+export async function continueBranch(
+  repoPath: string,
+  noteId: string,
+  branch: string,
+  baseRef: string | null,
+): Promise<Worktree | null> {
+  const remote = await remoteName(repoPath)
+  if (remote) await git(repoPath, "fetch", "--quiet", remote, branch).catch(() => {})
+
+  const local = await git(repoPath, "rev-parse", "--verify", "--quiet", `refs/heads/${branch}`).catch(() => "")
+  const tracked = remote
+    ? await git(repoPath, "rev-parse", "--verify", "--quiet", `refs/remotes/${remote}/${branch}`).catch(() => "")
+    : ""
+  if (!local && !tracked) return null
+
+  ensureExcluded(repoPath)
+  const root = worktreeRoot(repoPath)
+  mkdirSync(root, { recursive: true })
+  const dir = path.join(root, noteId)
+
+  if (local) {
+    await git(repoPath, "worktree", "add", dir, branch)
+    if (tracked) await git(dir, "merge", "--ff-only", "--quiet", `${remote}/${branch}`).catch(() => {})
+  } else {
+    await git(repoPath, "worktree", "add", "--track", "-b", branch, dir, `${remote}/${branch}`)
+  }
+
+  const baseBranch = await git(repoPath, "rev-parse", "--abbrev-ref", "HEAD")
+    .then((b) => (b && b !== "HEAD" ? b : null))
+    .catch(() => null)
+  const known = baseRef ? await git(repoPath, "cat-file", "-e", `${baseRef}^{commit}`).then(() => true).catch(() => false) : false
+  const base = known ? baseRef! : await git(dir, "merge-base", "HEAD", baseBranch ?? "HEAD").catch(() => "HEAD")
+  return { path: dir, branch, baseRef: base, baseBranch }
+}
+
 /** Inspect a path before offering to make a board of it. */
 export async function checkRepo(p: string): Promise<{
   path: string
@@ -322,6 +442,7 @@ export async function checkRepo(p: string): Promise<{
   name: string | null
   suggestedSetup: string | null
   suggestedCarry: string[]
+  remote: string | null
   error: string | null
 }> {
   const base = {
@@ -334,6 +455,7 @@ export async function checkRepo(p: string): Promise<{
     name: null,
     suggestedSetup: null,
     suggestedCarry: [],
+    remote: null,
     error: null,
   }
   if (!p.startsWith("/")) return { ...base, error: "path must be absolute" }
@@ -358,6 +480,7 @@ export async function checkRepo(p: string): Promise<{
       name: path.basename(root),
       suggestedSetup: guessSetup(root),
       suggestedCarry: guessCarry(root),
+      remote: await originOf(root),
       error: null,
     }
   } catch {

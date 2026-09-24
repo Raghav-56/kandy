@@ -91,9 +91,23 @@ export class RemoteLog implements Log {
 
   // ── reads ───────────────────────────────────────────────────────────────
 
+  /**
+   * The board as this machine sees it.
+   *
+   * `repoPath` is replaced with this machine's own clone, because the path in
+   * the log is where the repository is on whoever made the board. A
+   * teammate's laptop has it somewhere else, and a runner that trusted the
+   * recorded path would make worktrees in a directory that does not exist.
+   */
   view(boardId: string): BoardView | null {
-    return this.replica.view(boardId)
+    const v = this.replica.view(boardId)
+    if (!v) return null
+    const local = this.localPath?.(v.board)
+    return local && local !== v.board.repoPath ? { ...v, board: { ...v.board, repoPath: local } } : v
   }
+
+  /** Set by the runner once it knows where its clones are. */
+  localPath?: (board: BoardView["board"]) => string | null
 
   history(runId: string): Promise<TranscriptFrame[]> {
     return this.fetchHistory(runId)

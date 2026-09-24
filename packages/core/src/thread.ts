@@ -177,8 +177,8 @@ export function buildThread(note: Note, history: readonly RunFrames[]): Thread {
   }
 }
 
-/** How an agent is named to another agent. */
-const NAMES: Record<string, string> = {
+/** How an agent is named to another agent, and on a transcript. */
+export const AGENT_NAMES: Record<string, string> = {
   claude: "Claude Code",
   codex: "Codex",
   cursor: "Cursor",
@@ -211,7 +211,7 @@ export function renderBriefing(thread: Thread, to: AgentId): string {
   if (thread.note.body.trim()) out.push(thread.note.body.trim())
 
   if (prior.length > 0) {
-    const who = prior.map((a) => NAMES[a] ?? a).join(" and ")
+    const who = prior.map((a) => AGENT_NAMES[a] ?? a).join(" and ")
     const turns = thread.runs.reduce((n, r) => n + (r.turns ?? 0), 0)
     out.push(
       `## Before you\n\nThis work was started by ${who}${turns > 0 ? `, over ${turns} turns` : ""}. ` +
@@ -244,7 +244,7 @@ export function renderBriefing(thread: Thread, to: AgentId): string {
   if (settled.length > 0) {
     out.push(
       `## What they established\n\n` +
-        settled.map((b) => `**${NAMES[b.agent ?? ""] ?? b.agent}:** ${demote(b.text)}`).join("\n\n"),
+        settled.map((b) => `**${AGENT_NAMES[b.agent ?? ""] ?? b.agent}:** ${demote(b.text)}`).join("\n\n"),
     )
   }
 

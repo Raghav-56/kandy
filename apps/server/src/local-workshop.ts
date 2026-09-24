@@ -41,6 +41,8 @@ import {
   removeWorktree,
   retireWorktree,
   trackedPaths,
+  commitLeftovers,
+  pushBranch,
 } from "./worktree.js"
 
 /**
@@ -126,6 +128,19 @@ export class LocalWorkshop implements Workshop {
       return { mention: describe(saveAttachments(wt.path, screened.accepted)), rejected: screened.rejected }
     }
     return { mention: "", rejected: stageAttachments(noteId, files).rejected }
+  }
+
+  async handoff(repoPath: string, noteId: string): Promise<{ branch: string }> {
+    if (this.runner.isRunning(noteId)) {
+      throw Object.assign(new Error("it is still running here — wait for it to finish, or stop it"), { status: 409 })
+    }
+    const wt = this.runner.worktreeOf(noteId)
+    if (!wt) throw Object.assign(new Error("there is no checkout of this note on this machine to hand over"), { status: 409 })
+    // Anything uncommitted would stay behind on this laptop. It goes with the
+    // branch, so the next person has all of it.
+    await commitLeftovers(wt, "Work in progress, handed over")
+    await pushBranch(repoPath, wt.branch)
+    return { branch: wt.branch }
   }
 
   async diff(noteId: string): Promise<LiveDiff | null> {

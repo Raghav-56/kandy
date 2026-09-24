@@ -99,6 +99,7 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         outcome: null,
         runner: null,
         held: null,
+        handoff: null,
         createdAt: e.ts,
         updatedAt: e.ts,
       }
@@ -116,6 +117,16 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
 
     case "note.released":
       return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, held: null }))
+
+    case "note.handed":
+      return patchNote(view, e.data.noteId, e.ts, (n) => ({
+        ...n,
+        runner: e.data.to,
+        // The old checkout is on the machine it came from. The note has none
+        // here until the receiver's runner makes one from the branch.
+        worktree: null,
+        handoff: { branch: e.data.branch, from: e.data.from, by: e.actor, at: e.ts },
+      }))
 
     // Hub-wide. A board has no members of its own.
     case "member.added":
@@ -213,6 +224,8 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
         status: "running",
         branch: e.data.branch,
         worktree: e.data.worktree,
+        // Picked up. A handoff is a fact about the moment between machines.
+        handoff: null,
       }))
     }
 

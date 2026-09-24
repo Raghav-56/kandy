@@ -47,6 +47,9 @@ export class Projections {
           attribution: e.data.attribution ?? { ...NO_ATTRIBUTION },
           // Nothing configured until a board.mcp event says so.
           mcp: [],
+          // Boards made before this was recorded have none, and are found by
+          // path — which is right for them: they were never on another machine.
+          remote: e.data.remote ?? null,
           createdAt: e.ts,
         },
         columns: [],

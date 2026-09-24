@@ -4,6 +4,7 @@ import type { ActivityFrame, Note, Run } from "@kandy/core"
 import { ActivityLine, Button, CopyLink, Hint, StatusPill } from "@/ui"
 import { AgentMark } from "@/features/agents/AgentMark"
 import { PrBadge } from "@/features/notes/PrBadge"
+import { HeldCallout, RunnerChip } from "@/features/team/team"
 import { LOOK } from "@/features/notes/status"
 import { cn, cost, duration } from "@/lib/utils"
 import { useTick } from "@/hooks/useTick"
@@ -52,7 +53,10 @@ export const NoteRow = memo(function NoteRow({
        is itself a <button>, and a button nested in a button is invalid markup
        that browsers resolve by dropping the inner one. Overlaying it also
        means a click on delete never reaches the row's own onClick. */
-    <div className="group/row relative" data-flip={note.id}>
+    <div className="group/row" data-flip={note.id}>
+    {/* Its own positioning box, so the delete control centres on the row and
+        not on the row plus a held callout beneath it. */}
+    <div className="relative">
     <button
       onClick={() => onSelect(note.id)}
       data-note={note.id}
@@ -124,6 +128,8 @@ export const NoteRow = memo(function NoteRow({
 
             {note.pr && <PrBadge pr={note.pr} onDark />}
 
+            <RunnerChip note={note} />
+
             {/* Which model actually did the work — the harnesses tell us, and
                 it is the first thing you want when a result looks off. */}
             {run?.model && (
@@ -170,6 +176,11 @@ export const NoteRow = memo(function NoteRow({
           </Button>
         </Hint>
       </span>
+    </div>
+
+    {/* Outside the row's <button>, because it has buttons of its own. Indented
+        to the title so it reads as part of this note, not the next. */}
+    <HeldCallout note={note} compact className="mb-1.5 ml-[39px] mr-3" />
     </div>
   )
 })

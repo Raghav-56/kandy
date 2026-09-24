@@ -20,6 +20,9 @@ import type {
   StreamFrame,
   TranscriptFrame,
   McpServer,
+  Member,
+  Role,
+  RunnerInfo,
   SkillInfo,
 } from "@kandy/core"
 import { EVENT_TYPES } from "@kandy/core"
@@ -165,6 +168,35 @@ export class KandyClient {
   forge(boardId: string) {
     return this.req<Forge>("GET", `/boards/${boardId}/forge`)
   }
+  /** Who this request is, and whether the daemon is a hub. Answers on every daemon. */
+  me() {
+    return this.req<{ hub: boolean; email: string | null; role: Role | null }>("GET", "/me")
+  }
+  /** Every machine that has connected to this hub, and whether it is here now. */
+  runners() {
+    return this.req<{ runners: RunnerInfo[] }>("GET", "/runners")
+  }
+  members() {
+    return this.req<{ members: Member[]; identity: boolean }>("GET", "/members")
+  }
+  /** Admit, change or remove someone. `role: null` removes. Owners only. */
+  setMember(email: string, role: Role | null) {
+    return this.req<{ seq: number; members: Member[] }>("POST", "/members", { email, role })
+  }
+  /**
+   * Answer a request to run a note on your machine. Only the machine's owner
+   * may; `always` also approves the requester for every note after this one.
+   */
+  consent(noteId: string, accept: boolean, always = false) {
+    return this.req<{ seq: number; runId: string | null }>("POST", `/notes/${noteId}/consent`, { accept, always })
+  }
+  /**
+   * Give a note to someone's machine — `to` a person, or `runner` a machine.
+   * If it was worked on elsewhere, that machine pushes the branch first.
+   */
+  assign(noteId: string, target: { to: string } | { runner: string }) {
+    return this.req<{ seq: number; runner: string; branch?: string }>("POST", `/notes/${noteId}/assign`, target)
+  }
   /** Replace the board's MCP servers. The server refuses the whole list if one is malformed. */
   setMcp(boardId: string, servers: McpServer[]) {
     return this.req<{ seq: number; servers: McpServer[] }>("POST", `/boards/${boardId}/mcp`, { servers })
@@ -226,8 +258,12 @@ export class KandyClient {
   deleteNote(noteId: string) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/delete`, {})
   }
+  /**
+   * Run a note. On a hub whose target machine has not said yes to the person
+   * asking, the answer is `held: true` and no run id: accepted, not started.
+   */
   runNote(noteId: string, agent?: AgentId) {
-    return this.req<{ runId: string; seq: number }>("POST", `/notes/${noteId}/run`, { agent })
+    return this.req<{ runId: string | null; seq: number; held?: boolean }>("POST", `/notes/${noteId}/run`, { agent })
   }
   reviewNote(noteId: string, decision: "merge" | "discard" | "revise", comment?: string) {
     return this.req<{ seq: number }>("POST", `/notes/${noteId}/review`, { decision, comment })

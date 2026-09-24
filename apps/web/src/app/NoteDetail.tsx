@@ -41,6 +41,7 @@ import { type Attached } from "@/features/notes/Attachments"
 import { PromptBox } from "@/features/notes/PromptBox"
 import { InlineEdit } from "@/features/notes/InlineEdit"
 import { PrBadge } from "@/features/notes/PrBadge"
+import { HeldCallout, RunnerChip, useTeam, VIEWER_HINT } from "@/features/team/team"
 import { Markdown } from "@/features/stream/Markdown"
 import { LOOK } from "@/features/notes/status"
 import { Transcript } from "@/features/stream/Transcript"
@@ -115,6 +116,7 @@ export function NoteDetail(p: NoteDetailProps) {
   const [busy, setBusy] = useState(false)
 
   const run = p.view.runs.find((r) => r.id === p.note.runId)
+  const { readOnly } = useTeam()
 
   /*
    * The daemon stopped this, not the agent.
@@ -256,6 +258,7 @@ export function NoteDetail(p: NoteDetailProps) {
                   {agentLabel(p.note.agent)}
                 </span>
               )}
+              <RunnerChip note={p.note} />
             </div>
 
             <h2 className="mt-2.5 text-lede font-medium leading-snug tracking-[-0.015em]">
@@ -372,7 +375,14 @@ export function NoteDetail(p: NoteDetailProps) {
           <PolicyToggle value={policy} onChange={p.onPolicy} disabled={live} askable={askable} />
 
           {!live && !reviewable && (
-            <Button variant="default" onClick={() => p.onRun()} disabled={!p.note.agent}>
+            <Button
+              variant="default"
+              onClick={() => p.onRun()}
+              /* Held means already asked: a second press would only ask the
+                 same owner the same question again. */
+              disabled={!p.note.agent || readOnly || !!p.note.held}
+              title={readOnly ? VIEWER_HINT : undefined}
+            >
               {interrupted ? "Resume" : p.note.status === "failed" ? "Retry" : "Run"}
             </Button>
           )}
@@ -415,6 +425,8 @@ export function NoteDetail(p: NoteDetailProps) {
           )}
         </div>
       </header>
+
+      <HeldCallout note={p.note} className="mx-4 mb-3" />
 
       {interrupted && (
         <div className="border-hairline bg-lemon-bg/40 border-y px-4 py-2.5">

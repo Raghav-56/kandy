@@ -111,6 +111,15 @@ export type Board = {
    * all of them, and travels with the board. See `capabilities.ts`.
    */
   mcp: McpServer[]
+  /**
+   * The repository's `origin`, normalised, when it has one.
+   *
+   * A path is only true on the machine that recorded it. A teammate's clone
+   * of the same repository is somewhere else on their disk, so a runner finds
+   * its own copy of a board by this instead — and git has already decided
+   * who may clone it.
+   */
+  remote: string | null
   createdAt: number
 }
 
@@ -200,6 +209,13 @@ export type Note = {
    * yes. The run has not started and will not until they do.
    */
   held: { runnerId: string; requestedBy: string | null; agent: AgentId; at: number } | null
+  /**
+   * Handed to another machine and not yet picked up there. The receiving
+   * runner continues this branch rather than starting a fresh one, and briefs
+   * its agent, because the previous agent's session is on someone else's
+   * laptop and cannot be resumed.
+   */
+  handoff: { branch: string; from: string; by: string | null; at: number } | null
   createdAt: number
   updatedAt: number
 }

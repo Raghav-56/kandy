@@ -292,9 +292,16 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     return send(res, 200, { runners: deps.runners?.list() ?? [] })
   }
 
+  // A hub with no identity has nobody to tell apart: whoever holds its token
+  // is the one person. Said as an answer, not a missing route.
+  if (routed === "/members" && deps.runners && !deps.members) {
+    if (req.method === "GET") return send(res, 200, { members: [], identity: false })
+    return fail(res, 400, "bad_request", "this hub has no identity to add people by — start it with `kandy hub --tailscale`")
+  }
+
   // GET /members, POST /members — who is on this hub.
   if (routed === "/members" && deps.members) {
-    if (req.method === "GET") return send(res, 200, { members: deps.members.list() })
+    if (req.method === "GET") return send(res, 200, { members: deps.members.list(), identity: true })
     if (req.method === "POST") {
       const b = await json<{ email?: string; role?: Role | null }>(req)
       if (typeof b?.email !== "string") return fail(res, 400, "bad_request", "email is required")
@@ -309,6 +316,58 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
       }
       return send(res, 200, { ok: true, seq: deps.engine.head(), members: deps.members.list() })
     }
+  }
+
+  /*
+   * POST /notes/:id/assign — give a note to another machine.
+   *
+   * `to` names a person, and the note goes to their machine; `runner` names a
+   * machine directly, for a hub with no identity to name people by. If the
+   * note has already been worked on somewhere else, that machine commits
+   * what it has and pushes the branch first — with its owner's own git
+   * credentials, because the hub has none — and the receiver continues that
+   * branch with a briefing. The hub moves nothing but the record of where
+   * the work is.
+   *
+   * Assigning does not run it. Whoever it now belongs to runs it, or someone
+   * asks them to — and their machine's consent rule answers that.
+   */
+  if (req.method === "POST" && parts[0] === "notes" && parts[2] === "assign" && deps.runners) {
+    const noteId = parts[1]!
+    const view = deps.engine.boardOf(noteId)
+    const note = view?.notes.find((n) => n.id === noteId)
+    if (!view || !note) return fail(res, 404, "note_not_found", "no such note")
+    if (deps.members && !deps.members.allows(deps.actor ?? null, "run:assign")) {
+      return fail(res, 403, "forbidden", "only members can give work to someone")
+    }
+    if (note.status === "running" || note.status === "queued") {
+      return fail(res, 409, "invalid_transition", "it is running — hand it over once it stops")
+    }
+    const b = await json<{ to?: string; runner?: string }>(req)
+    const target = b?.runner
+      ? deps.runners.get(b.runner)
+      : typeof b?.to === "string"
+        ? deps.runners.pick(view.board.id, b.to.trim().toLowerCase())
+        : null
+    if (!target || !target.online) {
+      return fail(res, 409, "invalid_transition", b?.to ? `${b.to} has no machine connected with this repository` : "that machine is not connected")
+    }
+    if (!target.boards.includes(view.board.id)) {
+      return fail(res, 409, "invalid_transition", `${target.name} does not have this repository checked out`)
+    }
+
+    const from = deps.runners.placement(noteId)
+    if (from === target.runnerId) return send(res, 200, { ok: true, seq: deps.engine.head(), runner: target.runnerId })
+
+    // Never worked on anywhere: nothing to carry, only a place to be.
+    if (!from || !note.branch) {
+      deps.runners.place(noteId, target.runnerId, deps.actor ?? null)
+      return send(res, 200, { ok: true, seq: deps.engine.head(), runner: target.runnerId })
+    }
+
+    const { branch } = await deps.runners.call<{ branch: string }>(from, "handoff", [view.board.repoPath, noteId])
+    const e = emit(deps, event("note.handed", { noteId, from, to: target.runnerId, branch }))
+    return send(res, 200, { ok: true, seq: e.seq, runner: target.runnerId, branch })
   }
 
   /*
@@ -462,6 +521,8 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
         // A new repo is repo-only until someone looks at it and decides
         // otherwise. Full access is never something we pick for you.
         defaultPolicy: body.defaultPolicy ?? "repo",
+        // How a teammate's runner will recognise its own clone of this repo.
+        remote: check.remote ?? null,
       }),
     )
     // Seed the lifecycle lanes. Each declares the lane it represents, so the

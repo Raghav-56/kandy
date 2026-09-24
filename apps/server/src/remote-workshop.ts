@@ -144,6 +144,10 @@ export class RemoteWorkshop implements Workshop {
     return this.call<Awaited<ReturnType<Workshop["messageFiles"]>>>(this.placed(noteId), "messageFiles", [noteId, files])
   }
 
+  handoff(repoPath: string, noteId: string) {
+    return this.call<{ branch: string }>(this.placed(noteId), "handoff", [repoPath, noteId])
+  }
+
   async diff(noteId: string) {
     // No place, no checkout, no live diff: the hub's saved snapshot answers.
     const runnerId = this.runners.placement(noteId)

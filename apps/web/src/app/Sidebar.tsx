@@ -8,6 +8,7 @@ import {
   Plus,
   Settings2,
   Sun,
+  Users,
 } from "lucide-react"
 import type { AgentInfo, Board, BoardView } from "@kandy/core"
 import {
@@ -37,6 +38,7 @@ import { Logo } from "@/brand/Logo"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { authState } from "@/features/agents/authState"
 import { Limits, limitTone, tightest } from "@/features/agents/Limits"
+import { initialsOf, person, VIEWER_HINT, type Me } from "@/features/team/team"
 import type { Theme } from "@/hooks/useTheme"
 import { cn, money } from "@/lib/utils"
 
@@ -46,13 +48,7 @@ import { cn, money } from "@/lib/utils"
    four separate things rather than one block, which is what it is. */
 const ROW = "h-9 text-ui"
 
-/** kandy has no accounts. The name is whoever owns this machine. */
-function initials(name: string): string {
-  const parts = name.trim().split(/[\s._-]+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?"
-}
-
-export type View = "board" | "usage" | "settings"
+export type View = "board" | "usage" | "settings" | "team"
 
 /**
  * Standing context and navigation.
@@ -85,6 +81,8 @@ export function Sidebar({
   onNewBoard,
   onNewNote,
   user,
+  me,
+  readOnly,
 }: {
   boards: Board[]
   boardId: string | null
@@ -98,7 +96,14 @@ export function Sidebar({
   onNewBoard: () => void
   onNewNote: () => void
   user: string
+  /** Off a hub this is `SOLO`, and the sidebar is exactly what it always was. */
+  me: Me
+  /** A viewer on a hub: writing a note is shown but not offered. */
+  readOnly: boolean
 }) {
+  /* On a hub there *are* accounts, and the footer is you rather than the
+     machine — the name the hub knows you by and what it lets you do. */
+  const name = me.hub && me.email ? me.email : user
   const notes = view?.notes ?? []
   const n = (f: (s: string) => boolean) => notes.filter((x) => f(x.status)).length
   const attention = n((s) => s === "blocked" || s === "failed")
@@ -218,7 +223,16 @@ export function Sidebar({
             <SidebarMenu>
               {/* Writing a note leads, because it is what you came to do. */}
               <SidebarMenuItem>
-                <SidebarMenuButton onClick={onNewNote} tooltip="New note" className={ROW}>
+                <SidebarMenuButton
+                  onClick={onNewNote}
+                  tooltip={readOnly ? VIEWER_HINT : "New note"}
+                  title={readOnly ? VIEWER_HINT : undefined}
+                  /* aria-disabled rather than disabled: a disabled button
+                     swallows the hover that would explain why. App ignores
+                     the click. */
+                  aria-disabled={readOnly}
+                  className={cn(ROW, readOnly && "opacity-50")}
+                >
                   <Plus />
                   <span>New note</span>
                 </SidebarMenuButton>
@@ -267,6 +281,22 @@ export function Sidebar({
                 )}
               </SidebarMenuItem>
 
+              {/* Only a hub has a team. `kandy serve` has one person and one
+                  machine, and a page listing both would be a mirror. */}
+              {me.hub && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    className={ROW}
+                    isActive={page === "team"}
+                    onClick={() => onPage("team")}
+                    tooltip="Team"
+                  >
+                    <Users />
+                    <span>Team</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
               <SidebarMenuItem>
                 <SidebarMenuButton
                   className={ROW}
@@ -290,14 +320,16 @@ export function Sidebar({
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton
                   size="lg"
-                  tooltip="You and this machine"
+                  tooltip={me.hub ? "You, on this hub" : "You and this machine"}
                   className="data-[state=open]:bg-sidebar-accent"
                 >
                   <span className="bg-grape/15 text-grape grid size-7 shrink-0 place-items-center rounded-full text-meta font-semibold">
-                    {initials(user)}
+                    {initialsOf(me.hub && me.email ? person(me.email) : user)}
                   </span>
                   <div className="grid flex-1 text-left leading-tight">
-                    <span className="truncate text-aux font-medium">{user}</span>
+                    <span className="truncate text-aux font-medium" title={name}>
+                      {name}
+                    </span>
                     <span
                       className={cn(
                         "truncate text-meta",
@@ -308,6 +340,10 @@ export function Sidebar({
                           : "text-muted-foreground",
                       )}
                     >
+                      {/* The role leads because it changes what you can do
+                          here; the agents still follow because they are
+                          what will run your notes. */}
+                      {me.hub && me.role ? `${me.role} · ` : ""}
                       {stale.length === 0 && pressure && limitTone(pressure.used) !== "ok"
                         ? `${pressure.label} limit ${Math.round(pressure.used * 100)}%`
                         : stale.length > 0

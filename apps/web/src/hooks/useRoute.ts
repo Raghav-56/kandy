@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
-export type Page = "board" | "usage" | "settings"
+export type Page = "board" | "usage" | "settings" | "team"
 
 /** Everything about where you are, and nothing about what is loaded there. */
 export type Route = {
@@ -16,7 +16,7 @@ export type Route = {
  * index.html for anything that is not the API — so a deep link survives a
  * reload without a second server.
  *
- * The shape is `/b/<board>/n/<note>`, with `/usage` and `/settings` hanging off
+ * The shape is `/b/<board>/n/<note>`, with `/usage`, `/settings` and `/team` hanging off
  * the board. The `/b` and `/n` segments are not decoration: they keep note ids
  * from ever being mistaken for a page name, and they keep the whole scheme
  * clear of the daemon's own top-level routes. The daemon answers `boards`,
@@ -24,7 +24,7 @@ export type Route = {
  * for the CLI's benefit, and a browser route colliding with one of those would
  * be served JSON instead of the app.
  */
-const PAGES: Page[] = ["usage", "settings"]
+const PAGES: Page[] = ["usage", "settings", "team"]
 
 export function parseRoute(pathname: string): Route {
   const parts = pathname.split("/").filter(Boolean)

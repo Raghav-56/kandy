@@ -49,6 +49,7 @@ export type KandyEventMap = {
     models?: Partial<Record<AgentId, string>>
     defaultPolicy?: Policy
     attribution?: Attribution
+    remote?: string | null
   }
   "board.setup": { boardId: BoardId; setup: string | null; carry?: string[] }
   /** Removes the board from kandy. The repository itself is never touched. */
@@ -95,6 +96,11 @@ export type KandyEventMap = {
    */
   "note.held": { noteId: NoteId; runnerId: string; requestedBy: string | null; agent: AgentId }
   "note.released": { noteId: NoteId; accepted: boolean }
+  /**
+   * Work moved from one machine to another. The branch was pushed first, from
+   * the machine that had it, with its owner's own git credentials.
+   */
+  "note.handed": { noteId: NoteId; from: string; to: string; branch: string }
 
   /**
    * Who is on this hub, and what they may do.
@@ -227,6 +233,7 @@ export const EVENT_TYPES = [
   "note.placed",
   "note.held",
   "note.released",
+  "note.handed",
   "member.added",
   "member.role",
   "member.removed",

@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { KandyClient } from "@kandy/client"
 import { usePanelRef } from "react-resizable-panels"
-import type { AgentId, AgentInfo, Board, Forge } from "@kandy/core"
+import type { AgentId, AgentInfo, Board, Forge, RunnerInfo } from "@kandy/core"
 import {
   Button,
   Empty,
@@ -19,12 +19,14 @@ import { Composer } from "@/features/notes/Composer"
 import { BoardComposer } from "@/features/notes/BoardComposer"
 import { FirstRun } from "@/features/onboarding/FirstRun"
 import { NewBoardDialog } from "@/features/boards/NewBoardDialog"
+import { readOnlyFor, SOLO, TeamProvider, type Me, type Team } from "@/features/team/team"
 import { useBoard } from "@/hooks/useBoard"
 import { useTheme } from "@/hooks/useTheme"
 import { useRoute } from "@/hooks/useRoute"
 import { TooltipProvider } from "@/ui"
 import { CommandPalette } from "./CommandPalette"
 import { SettingsPage } from "./SettingsPage"
+import { TeamPage } from "./TeamPage"
 import { UsagePage } from "./UsagePage"
 import { NoteDetail } from "./NoteDetail"
 import { Sidebar, type View } from "./Sidebar"
@@ -82,6 +84,16 @@ export function App() {
    */
   const [notice, setNotice] = useState<string | null>(null)
   const { theme, setTheme } = useTheme()
+
+  /*
+   * Who this is, asked once. `kandy serve` answers `{ hub: false }` and every
+   * team affordance below keys off that — so single-player is not a mode the
+   * UI switches into, it is simply what renders when there is no team.
+   */
+  const [me, setMe] = useState<Me>(SOLO)
+  /** The hub's machines, for naming where a note runs. Empty off a hub. */
+  const [runners, setRunners] = useState<RunnerInfo[]>([])
+  const readOnly = readOnlyFor(me)
 
   /*
    * Where you are lives in the URL rather than in three useStates, so a
@@ -149,8 +161,8 @@ export function App() {
     [go],
   )
 
-  const { view, connected, error, act, transcript, activity, loadTranscript, clearError } =
-    useBoard(boardId)
+  const { view, connected, error, act, transcript, activity, recent, loadTranscript, clearError } =
+    useBoard(boardId, { hub: me.hub })
 
   useEffect(() => {
     void client.boards().then((r) => {
@@ -158,7 +170,67 @@ export function App() {
       setBoardId((id) => id ?? r.boards[0]?.id ?? null, true)
     })
     void client.agents().then((r) => setAgents(r.agents))
+    // An older daemon has no /me; that is a single-player daemon by definition.
+    void client.me().then(setMe).catch(() => setMe(SOLO))
   }, [client])
+
+  /*
+   * Runner names, fetched when a note mentions a machine we cannot name.
+   *
+   * Keyed on the set of unknown ids rather than on the view, so the stream
+   * ticking does not turn into a request per event — and a placement on a
+   * machine that joined after the page loaded still gets its name. The Team
+   * page polls on its own while it is open.
+   */
+  const unknownRunners = useMemo(() => {
+    if (!me.hub || !view) return ""
+    const known = new Set(runners.map((r) => r.runnerId))
+    const ids = new Set<string>()
+    for (const n of view.notes) {
+      if (n.runner && !known.has(n.runner)) ids.add(n.runner)
+      if (n.held && !known.has(n.held.runnerId)) ids.add(n.held.runnerId)
+    }
+    return [...ids].sort().join(",")
+  }, [me.hub, view, runners])
+  useEffect(() => {
+    if (!me.hub) return
+    void client.runners().then((r) => setRunners(r.runners)).catch(() => {})
+  }, [client, me.hub, unknownRunners])
+
+  const team = useMemo<Team>(
+    () => ({
+      me,
+      runners,
+      readOnly,
+      consent: async (noteId, accept, always) => {
+        // The answer lands on the stream as note.released / run.*, like every
+        // other change — nothing to merge from the response.
+        await act((c) => c.consent(noteId, accept, always))
+      },
+    }),
+    [me, runners, readOnly, act],
+  )
+
+  /*
+   * Start a note.
+   *
+   * On a hub the answer may be 202 `{ held: true, runId: null }`: the note was
+   * sent to someone else's machine and is waiting on its owner. Nothing here
+   * reads the runId — the run, if there is one, arrives on the stream — so a
+   * held answer needs no handling beyond not pretending otherwise. The note's
+   * own `held` field is what the card shows.
+   */
+  const runNote = useCallback(
+    (noteId: string, agent?: AgentId) =>
+      act(async (c) => {
+        const res: { runId: string | null; seq: number; held?: boolean } = await c.runNote(noteId, agent)
+        return res
+      }),
+    [act],
+  )
+  const compose = useCallback(() => {
+    if (!readOnly) setComposing(true)
+  }, [readOnly])
 
   useEffect(() => {
     setForge(null)
@@ -232,14 +304,14 @@ export function App() {
       }
       if (e.key === "j") move(1)
       if (e.key === "k") move(-1)
-      if (e.key === "c") {
+      if (e.key === "c" && !readOnly) {
         e.preventDefault()
         setComposing(true)
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [composing, selected, move, ordered])
+  }, [composing, selected, move, ordered, readOnly])
 
   async function refreshBoards(nextId?: string) {
     const r = await client.boards()
@@ -253,6 +325,7 @@ export function App() {
   }
 
   return (
+    <TeamProvider value={team}>
     <TooltipProvider delayDuration={250}>
     {/* The provider owns the collapsed/expanded state, remembers it, and binds
         ⌘B. It lays out as a flex row, so it replaces the wrapper that was
@@ -267,6 +340,8 @@ export function App() {
            read off the repo path. A footer that says "Account" and means
            nothing is worse than one that says your name. */
         user={boards[0]?.repoPath.match(/^\/(?:Users|home)\/([^/]+)/)?.[1] ?? "this machine"}
+        me={me}
+        readOnly={readOnly}
         view={view}
         agents={agents}
         page={page}
@@ -279,6 +354,7 @@ export function App() {
         }}
         onNewBoard={() => setNewBoard(true)}
         onNewNote={() => {
+          if (readOnly) return
           if (!boardId) return void setNewBoard(true)
           setPage("board")
           setComposing(true)
@@ -316,7 +392,16 @@ export function App() {
             page === "board" && "fade-under-composer",
           )}
         >
-          {page === "usage" ? (
+          {page === "team" && me.hub ? (
+            <TeamPage
+              client={client}
+              view={view}
+              me={me}
+              runners={runners}
+              recent={recent}
+              onRunners={setRunners}
+            />
+          ) : page === "usage" ? (
             <UsagePage view={view} client={client} />
           ) : page === "settings" ? (
             <SettingsPage
@@ -339,7 +424,7 @@ export function App() {
               activity={activity}
               selectedId={selected}
               onSelect={setSelected}
-              onCompose={() => setComposing(true)}
+              onCompose={compose}
               onDelete={(id) => {
                 // Close the detail pane if it is showing the note being removed.
                 setSelected((cur) => (cur === id ? null : cur))
@@ -353,7 +438,8 @@ export function App() {
           )}
         </div>
 
-        {page === "board" && view && boards.length > 0 && (
+        {/* A viewer has nothing to write with, so the bar is not offered. */}
+        {page === "board" && view && boards.length > 0 && !readOnly && (
           <BoardComposer
             agents={agents}
             defaultAgent={defaultAgent}
@@ -380,7 +466,7 @@ export function App() {
               if (agent) await act((c) => c.assignNote(created.noteId, agent))
               if (model) await act((c) => c.setModel(created.noteId, model))
               // A one-liner with an agent picked is meant to go, not to sit.
-              if (agent) await act((c) => c.runNote(created.noteId, agent))
+              if (agent) await runNote(created.noteId, agent)
             }}
           />
         )}
@@ -420,7 +506,7 @@ export function App() {
           paths={paths}
           prompts={view.prompts.filter((q) => q.noteId === note.id)}
           onClose={() => setSelected(null)}
-          onRun={(agent) => void act((c) => c.runNote(note.id, agent))}
+          onRun={(agent) => void runNote(note.id, agent)}
           onCancel={(runId) => void act((c) => c.cancelRun(runId))}
           onAssign={(agent) => void act((c) => c.assignNote(note.id, agent))}
           onPolicy={(policy) => void act((c) => c.setPolicy(note.id, policy))}
@@ -502,7 +588,7 @@ export function App() {
             if (created.rejected?.length) setNotice(created.rejected.map((r) => r.reason).join("; "))
             if (agent) await act((c) => c.assignNote(created.noteId, agent))
             if (model) await act((c) => c.setModel(created.noteId, model))
-            if (run && agent) await act((c) => c.runNote(created.noteId, agent))
+            if (run && agent) await runNote(created.noteId, agent)
             setSelected(created.noteId)
           }}
         />
@@ -523,7 +609,7 @@ export function App() {
         boards={boards}
         agents={agents}
         onSelectNote={setSelected}
-        onCompose={() => setComposing(true)}
+        onCompose={compose}
         onNewBoard={() => setNewBoard(true)}
         onBoardChange={(id) => {
           setBoardId(id)
@@ -531,13 +617,17 @@ export function App() {
         }}
         onRunNote={(noteId, agent) => {
           setSelected(noteId)
-          void act(async (c) => {
-            await c.assignNote(noteId, agent)
-            return c.runNote(noteId, agent)
-          })
+          if (readOnly) return
+          void (async () => {
+            // A failed assign has already said so; running anyway would run
+            // whatever agent the note had before.
+            if ((await act((c) => c.assignNote(noteId, agent))) === undefined) return
+            await runNote(noteId, agent)
+          })()
         }}
       />
     </SidebarProvider>
     </TooltipProvider>
+    </TeamProvider>
   )
 }

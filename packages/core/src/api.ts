@@ -254,6 +254,8 @@ export type RepoCheck = {
   isRepo: boolean
   /** Uncommitted changes — notes branch from HEAD and won't see them. */
   dirty: boolean
+  /** `origin`, normalised, so a teammate's clone elsewhere on their disk is recognisably the same repository. */
+  remote?: string | null
   head: string | null
   branch: string | null
   name: string | null

@@ -325,7 +325,7 @@ async function main(): Promise<void> {
   const port = intFlag(argv, "--port", DEFAULT_PORT)
   const agent = strFlag(argv, "--agent") as AgentId | undefined
   const noRun = argv.includes("--no-run")
-  const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env", "--hub", "--token", "--https-port"]
+  const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env", "--hub", "--token", "--https-port", "--repo"]
   const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json", "--tailscale"]
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
@@ -382,6 +382,7 @@ async function main(): Promise<void> {
         token: strFlag(argv, "--token") ?? process.env["KANDY_HUB_TOKEN"] ?? "",
         slots: intFlag(argv, "--slots", 4),
         json: argv.includes("--json"),
+        repos: allFlags(argv, "--repo"),
       })
     }
     case "new":
