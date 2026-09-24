@@ -25,7 +25,7 @@ test("HTTP authentication gates writes and protects browser bootstrap", async ()
   let cancellations = 0
   const server = createHttpServer({
     token,
-    engine: { head: () => 0 },
+    engine: { head: () => 0, projections: { boards: () => [] } },
     runner: { cancel: () => { cancellations++; return true } },
     prs: {},
   })
@@ -51,11 +51,16 @@ test("HTTP authentication gates writes and protects browser bootstrap", async ()
           resolve(new Response(body ?? null, { status, headers: responseHeaders }))
         },
       }
+      // Which interface the request arrived on is now part of the policy, so
+      // the harness has to be able to lie about it. Loopback unless a test
+      // says otherwise, which is what every real single-player request is.
+      const remoteAddress = headers.get("x-test-remote") ?? "127.0.0.1"
+      headers.delete("x-test-remote")
       server.emit("request", {
         url: url.pathname + url.search,
         method: init.method ?? "GET",
         headers: Object.fromEntries(headers),
-        socket: { localPort: 4477 },
+        socket: { localPort: 4477, remoteAddress },
       }, res)
     })
   }
@@ -94,6 +99,36 @@ test("HTTP authentication gates writes and protects browser bootstrap", async ()
     assert.equal((await fetch(base + "/auth/token", { headers: { ...headers, "sec-fetch-site": "cross-site" } })).status, 403)
     const preflight = await fetch(base + "/runs/x/cancel", { method: "OPTIONS", headers: { origin: "https://evil.example", "access-control-request-headers": "authorization" } })
     assert.equal(preflight.status, 403)
+
+    /*
+     * Off-machine, reads are reads no longer.
+     *
+     * `GET /boards`, `GET /events` and `GET /repo/browse` each used to answer
+     * an anonymous caller in full — every board, the live transcript stream,
+     * and the name of every repository on the disk — because the gate asked
+     * only about the method. The Host allowlist was doing the actual work,
+     * and `KANDY_HOSTS` exists to open it.
+     */
+    const remote = { "x-test-remote": "203.0.113.9" }
+    for (const route of ["/boards", "/events", "/repo/browse", "/agents"]) {
+      const res = await fetch(base + route, { headers: remote })
+      assert.equal(res.status, 401, `${route} must not answer an anonymous stranger`)
+      assert.equal(res.headers.get("www-authenticate"), "Bearer")
+    }
+    // The credential itself never leaves the machine, however well-formed the
+    // request looks — this is the one route a token cannot buy.
+    assert.equal((await fetch(base + "/auth/token", {
+      headers: { ...headers, ...remote, "sec-fetch-site": "same-origin" },
+    })).status, 403)
+    // The bundle still bootstraps: it is a public build artifact, and the UI
+    // it loads is what then authenticates.
+    assert.equal((await fetch(base + "/health", { headers: remote })).status, 200)
+    // An IPv4 peer on a dual-stack listener is still this machine, so the
+    // single-player daemon is untouched by any of the above.
+    assert.equal((await fetch(base + "/boards", {
+      headers: { "x-test-remote": "::ffff:127.0.0.1" },
+    })).status, 200)
+    assert.equal((await fetch(base + "/boards")).status, 200)
   } finally {
     globalThis.fetch = originalFetch
   }

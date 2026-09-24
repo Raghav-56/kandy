@@ -74,7 +74,9 @@ Verified, September 2026, against primary docs:
 ## Phase 0 — close the daemon
 
 Required whichever way the rest goes, and worth doing alone. Measured against the running
-process rather than read off the source:
+process rather than read off the source.
+
+**Before.** Writes checked the bearer; **reads checked nothing**:
 
 | Request, no `Authorization` | Result |
 | --- | --- |
@@ -84,14 +86,35 @@ process rather than read off the source:
 | `POST /notes` | 401 |
 | `GET /boards` with `Host: laptop.tailnet.ts.net` | 403 |
 
-Writes check the bearer. **Reads check nothing.** What stands between an unauthenticated caller
-and every transcript is that the socket is on loopback and the Host header must say `localhost`
-— and that same allowlist would 403 our own hub connection. Both change together:
+All that stood between an unauthenticated caller and every transcript was the socket being on
+loopback and the Host header having to say `localhost` — and that same allowlist would 403 our
+own hub connection. So the two had to change together, and did:
 
-1. Reads require a credential once the request did not arrive on loopback.
-2. A `grants` table — scope, role, expiry, revoked-at, last-used — beside the existing `shared`.
-3. The Host allowlist becomes configuration rather than a constant.
-4. One enforcement point, default deny.
+**Done.** One gate in `http.ts`, ahead of all routing, default deny:
+
+1. ✅ **Reads require a credential once the request did not arrive on loopback.** `GET /boards`,
+   `/events`, `/repo/browse` and `/agents` now 401 with `WWW-Authenticate: Bearer` from any peer
+   that is not this machine. On loopback nothing changed — that is the single-player daemon, and
+   the token is handed to any same-origin fetch there anyway, so demanding it back is ceremony.
+2. ✅ **`/auth/token` never leaves the machine**, whatever else the request gets right. It is the
+   credential itself, so no token can buy it.
+3. ✅ **The Host allowlist is configuration**, `KANDY_HOSTS=hub.example.com`, with or without a
+   port. Verified: that Host answers 200, `evil.example` still 403s. It defeats DNS rebinding as
+   before; what it has stopped doing is deciding, as a side effect, that remote is impossible.
+4. ✅ **The bundle stays open**, but only files that really exist in the build. `serveStatic`
+   could not be asked — its index.html fallback answers yes to everything by design, which would
+   have reopened every API path it has never heard of. `isBundleAsset` is the narrow question.
+
+Two things deliberately left:
+
+- **A `grants` table** — scope, role, expiry, revoked-at, last-used — beside the existing
+  `shared`. Nothing yet issues a credential that is not the daemon token, so there is nothing to
+  scope. It arrives with step 3 below.
+- **SSE off-machine.** A browser's `EventSource` cannot set a header, so a remote board will need
+  the token in a cookie or the query string. Not built, because there is no remote board to need
+  it: the daemon still binds `127.0.0.1` only, confirmed with `lsof`. A deep link into a
+  client-side route is 401 from off-machine for the same reason — making it work would mean
+  making it indistinguishable from `GET /boards`, which is the thing being protected.
 
 ## What a hub may never do
 
@@ -138,9 +161,9 @@ the body on the branch forever. **"Delete" will not mean what a user assumes it 
 
 ## Order
 
-1. **The translation layer**, single-player — [`16-threads.md`](16-threads.md). Continue a note
+1. ✅ **The translation layer**, single-player — [`16-threads.md`](16-threads.md). Continue a note
    with a different agent on one machine. The hard part, testable today, useful alone.
-2. **Close the daemon** — phase 0 above. Ships by itself.
+2. ✅ **Close the daemon** — phase 0 above. Shipped by itself, as intended.
 3. **Split hub from runner.** The runner dials out and claims notes; the hub stops spawning
    anything. Localhost first, so the split is proven before a network is added.
 4. **Hand a note to another person's runner.** The thread from step 1 crossing the boundary from

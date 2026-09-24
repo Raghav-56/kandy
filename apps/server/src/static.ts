@@ -81,6 +81,30 @@ export function hasWebBuild(): boolean {
 }
 
 /**
+ * Whether this path is a real file in the build, rather than the fallback.
+ *
+ * The gate in `http.ts` needs to answer "may an unauthenticated stranger have
+ * this?" before any routing happens, and the answer for the bundle is yes —
+ * it is a public build artifact, and the UI it loads is what then
+ * authenticates. `serveStatic` cannot be asked, because it answers yes to
+ * everything by design: its index.html fallback exists so client-side routes
+ * work, and using it here would reopen every API path it has never heard of.
+ *
+ * So: the entry point, and files that actually exist. A deep link into a
+ * client-side route is deliberately not included — it would have to be
+ * indistinguishable from `/boards`, which is the thing being protected.
+ */
+export function isBundleAsset(pathname: string): boolean {
+  if (!hasWebBuild()) return false
+  if (pathname === "/" || pathname === "/index.html") return true
+
+  const root = webRoot()
+  const file = path.join(root, pathname.replace(/^\/+/, ""))
+  if (!file.startsWith(root + path.sep)) return false
+  return existsSync(file) && statSync(file).isFile()
+}
+
+/**
  * Serve `pathname` from the build, falling back to index.html so client-side
  * routes work. Returns false when there is no build to serve at all.
  */

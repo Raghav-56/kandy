@@ -18,7 +18,7 @@ import type { Runner } from "./runner.js"
 import type { PrWatch } from "./prwatch.js"
 import type { Permissions } from "./permission.js"
 import { detectForge, openPr } from "./forge.js"
-import { serveStatic } from "./static.js"
+import { isBundleAsset, serveStatic } from "./static.js"
 import { kandyVersion } from "./version.js"
 import { limitsFor } from "./limits.js"
 import {
@@ -53,6 +53,52 @@ import { authorized } from "./auth.js"
 
 const VERSION = kandyVersion()
 const STARTED = Date.now()
+
+/**
+ * Hosts this daemon will answer to, beyond its own loopback names.
+ *
+ * Configuration rather than a constant, because every way of reaching kandy
+ * from somewhere else arrives under a name that is not `localhost` — a
+ * tailnet's `laptop.tailnet.ts.net`, a tunnel's hostname, a hub. The
+ * allowlist was written to defeat DNS rebinding and it still does; what it
+ * must stop doing is deciding, as a side effect, that remote access is
+ * impossible.
+ *
+ * Read once: it is deployment, not state, and re-reading it per request would
+ * let an edit to the environment of a running daemon go unnoticed.
+ */
+const EXTRA_HOSTS = new Set(
+  (process.env["KANDY_HOSTS"] ?? "")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean),
+)
+
+/** Host must match a loopback name on our port, or be named in `KANDY_HOSTS`. */
+export function allowedHost(host: string, port: number | undefined, extra = EXTRA_HOSTS): boolean {
+  const h = host.toLowerCase()
+  // A configured host may be given with or without its port; comparing both
+  // ways keeps `KANDY_HOSTS=hub.example.com` working behind a proxy on 443.
+  if (extra.has(h) || extra.has(h.replace(/:\d+$/, ""))) return true
+  for (const name of ["127.0.0.1", "localhost", "[::1]"]) {
+    if (h === `${name}:${port}` || h === `${name}:5477`) return true
+  }
+  return false
+}
+
+/**
+ * Whether the socket's peer is this machine.
+ *
+ * Node reports an IPv4 peer on a dual-stack listener as `::ffff:127.0.0.1`,
+ * so the mapped form has to be understood or every request looks remote. An
+ * address we cannot read at all is treated as remote: the failure that costs
+ * a token is better than the one that skips the check.
+ */
+export function isLoopback(address: string | undefined): boolean {
+  if (!address) return false
+  const a = address.startsWith("::ffff:") ? address.slice(7) : address
+  return a === "::1" || a === "127.0.0.1" || a.startsWith("127.")
+}
 
 export type ServerDeps = {
   engine: Engine
@@ -89,20 +135,36 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   // No cross-origin API access. The development UI uses Vite's /api proxy.
   // Validate Host too: a rebound attacker hostname must not expose the token.
   const port = req.socket.localPort
-  const hosts = new Set([
-    `127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`,
-    "127.0.0.1:5477", "localhost:5477", "[::1]:5477",
-  ])
   const host = req.headers.host ?? ""
   const origin = req.headers.origin
-  if (!hosts.has(host) || (origin !== undefined && origin !== `http://${host}`)) {
+  if (!allowedHost(host, port) || (origin !== undefined && origin !== `http://${host}`)) {
     return send(res, 403, { ok: false, error: { code: "forbidden", message: "Untrusted origin or host" } })
   }
   if (req.method === "OPTIONS") return void res.writeHead(204).end()
 
+  /*
+   * Where the request came in, which decides what it may do without a token.
+   *
+   * Until now the answer was "anything, as long as it only reads": writes
+   * checked the bearer and reads checked nothing, so `GET /boards`,
+   * `GET /events` and `GET /repo/browse` each answered an anonymous caller in
+   * full — every board, the live transcript stream, and the name of every
+   * repository on the disk. What stood between that and the network was the
+   * Host allowlist above, and the whole point of `KANDY_HOSTS` is that a hub
+   * or a tunnel will one day need it opened.
+   *
+   * So the two change together. On loopback nothing here is new — that is the
+   * single-player daemon, and the token is handed to any same-origin fetch on
+   * this machine anyway, so demanding it back would be ceremony. Off loopback
+   * the default is deny, for reads as much as writes.
+   */
+  const local = isLoopback(req.socket.remoteAddress)
+
   if (req.method === "GET" && routed === "/auth/token") {
+    // Never off-machine: this is the credential itself, and a caller that
+    // reached us from elsewhere has no claim on it.
     // Custom headers require preflight cross-origin, which we never allow.
-    if (req.headers["x-kandy-client"] !== "web" ||
+    if (!local || req.headers["x-kandy-client"] !== "web" ||
         (req.headers["sec-fetch-site"] !== undefined && req.headers["sec-fetch-site"] !== "same-origin")) {
       return send(res, 403, { ok: false, error: { code: "forbidden", message: "Same-origin client required" } })
     }
@@ -110,7 +172,13 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
     return send(res, 200, { token: deps.token })
   }
 
-  if (req.method !== "GET" && req.method !== "HEAD" && !authorized(req.headers.authorization, deps.token)) {
+  // The bundle bootstraps the UI that then authenticates, so it is served to
+  // anyone the Host allowlist let through. It is a public build artifact; the
+  // data behind it is what this gate protects.
+  const reading = req.method === "GET" || req.method === "HEAD"
+  const open = reading && (routed === "/health" || (apiPath === null && isBundleAsset(url.pathname)))
+
+  if (!open && !(local && reading) && !authorized(req.headers.authorization, deps.token)) {
     res.setHeader("WWW-Authenticate", "Bearer")
     return send(res, 401, { ok: false, error: { code: "unauthorized", message: "Valid bearer token required" } })
   }

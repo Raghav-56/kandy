@@ -18,6 +18,7 @@ import type { Engine } from "./engine.js"
 import { priorRuns, promptForRun } from "./handoff.js"
 import { takeStripped } from "./gc.js"
 import { recordLimits } from "./limits.js"
+import { authFailures, clearAuthFailure, recordAuthFailure } from "./auth-failures.js"
 import type { AskChannel } from "./agents/types.js"
 import { closeAskChannel, openAskChannel, type Permissions } from "./permission.js"
 import { adapter } from "./agents/index.js"
@@ -144,22 +145,20 @@ export class Runner {
   private lastNotice = new Map<string, string>()
 
   /**
-   * Agents whose last run could not authenticate, and when.
+   * Agents whose last run could not authenticate.
    *
    * A credential file is a guess — Claude Code's local init succeeds on cached
    * credentials, so the certain signal that a sign-in is dead is a run failing
-   * to use it. Held in memory rather than the log: it is an observation about
-   * this machine right now, not a fact about the board, and a restart should
-   * re-learn it rather than repeat a stale warning.
+   * to use it. Kept beside the daemon rather than in the log: it is an
+   * observation about this machine, not a fact about the board. It used to be
+   * kept in memory, which meant a restart reported a revoked token as ready;
+   * `auth-failures.ts` says how it now expires instead.
    *
    * Cleared the moment that agent completes a run, because whatever was wrong
    * plainly is not any more.
    */
-  private readonly authFailed = new Map<AgentId, number>()
-
-  /** Agents that failed to authenticate since the daemon started. */
   agentsFailingAuth(): { agent: AgentId; at: number }[] {
-    return [...this.authFailed.entries()].map(([agent, at]) => ({ agent, at }))
+    return authFailures()
   }
 
   private say(
@@ -176,7 +175,7 @@ export class Runner {
       // Noticed here rather than at exit, so it is caught whichever path the
       // failure takes out of a run.
       const agent = this.live.get(runId)?.agent
-      if (agent && isAuthFailure(text)) this.authFailed.set(agent, Date.now())
+      if (agent && isAuthFailure(text)) recordAuthFailure(agent)
     }
 
     if (role === "system" || role === "error") {
@@ -614,7 +613,7 @@ export class Runner {
          */
         if (isAuthFailure(line)) {
           const agent = this.live.get(runId)?.agent
-          if (agent) this.authFailed.set(agent, Date.now())
+          if (agent) recordAuthFailure(agent)
         }
       }
     })
@@ -698,7 +697,7 @@ export class Runner {
 
     const status = signal ? "cancelled" : code === 0 ? "succeeded" : "failed"
     // Whatever was wrong with this agent's sign-in, it plainly is not now.
-    if (status === "succeeded" && l) this.authFailed.delete(l.agent)
+    if (status === "succeeded" && l) clearAuthFailure(l.agent)
     this.emit(event("run.finished", { runId, noteId, status, exitCode: code, error }))
 
     if (status === "succeeded" && l) {
