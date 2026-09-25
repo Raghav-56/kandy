@@ -687,7 +687,11 @@ export function App({ client, live, boards: initialBoards, boardId: initialBoard
       width={width}
       p={p}
       left={[
-        { text: " kandy ", tone: "mint", bold: true },
+        // The mark in one line — the logo's three bars, in its three colours.
+        { text: " ▮", tone: "berry" },
+        { text: "▮", tone: "lemon" },
+        { text: "▮ ", tone: "mint" },
+        { text: "kandy  ", tone: "dim" },
         { text: view.board.name, tone: "plain", bold: true },
         { text: "  " + truncateStart(tildify(view.board.repoPath), Math.max(12, Math.floor(width / 3))), tone: "dim" },
         ...(filter ? [{ text: `  /${filter}`, tone: "lemon" as Tone }] : []),
@@ -695,8 +699,11 @@ export function App({ client, live, boards: initialBoards, boardId: initialBoard
       right={statusSegs(view, state.connected)}
     />
   ) : (
-    <Text bold {...toneProps(p, "mint")}>
-      {" kandy"}
+    <Text>
+      <Text {...toneProps(p, "berry")}>{" ▮"}</Text>
+      <Text {...toneProps(p, "lemon")}>{"▮"}</Text>
+      <Text {...toneProps(p, "mint")}>{"▮ "}</Text>
+      <Text bold>kandy</Text>
     </Text>
   )
 
