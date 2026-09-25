@@ -1,9 +1,9 @@
 # A kandy hub on your tailnet, with nothing exposed to the internet.
 #
-#   1. Make an auth key: https://login.tailscale.com/admin/settings/keys
-#      (reusable is fine; tag it only if you know tagged devices send no
-#      identity — the hub will then refuse them, which is the point).
-#   2. TS_AUTHKEY=tskey-auth-… KANDY_TAILNET_HOST=kandy-hub.<your-tailnet>.ts.net docker compose up -d
+#   1. Either make an auth key (https://login.tailscale.com/admin/settings/keys)
+#      or skip it: without one the sidecar logs a one-time login link to open.
+#   2. KANDY_TAILNET_HOST=kandy-hub.<your-tailnet>.ts.net docker compose up -d
+#      (deploy/try-hub.sh does this, and finds the link for you)
 #   3. Open https://kandy-hub.<your-tailnet>.ts.net — the first person in owns it.
 #   4. On each laptop: kandy runner --hub https://kandy-hub.<your-tailnet>.ts.net
 #
@@ -16,7 +16,9 @@ services:
     image: tailscale/tailscale:latest
     hostname: kandy-hub
     environment:
-      TS_AUTHKEY: ${TS_AUTHKEY:?make an auth key at https://login.tailscale.com/admin/settings/keys}
+      # Optional. Without one, the sidecar prints a one-time login link and
+      # the hub joins as the person who opens it — no key to revoke later.
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
       TS_STATE_DIR: /var/lib/tailscale
       TS_SERVE_CONFIG: /config/serve.json
       TS_USERSPACE: "true"

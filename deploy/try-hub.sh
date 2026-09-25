@@ -2,6 +2,7 @@
 #
 # Start a kandy hub on your tailnet, in Docker, to try the team setup for real.
 #
+#   deploy/try-hub.sh                      (prints a login link to approve)
 #   TS_AUTHKEY=tskey-auth-… deploy/try-hub.sh
 #
 # The hub runs in a container with its own Tailscale sidecar, so it is a
@@ -33,12 +34,14 @@ suffix="$(field MagicDNSSuffix)"
 [ -n "$suffix" ] ||
   fail "MagicDNS is off for your tailnet. Turn it on: https://login.tailscale.com/admin/dns"
 
-[ -n "${TS_AUTHKEY:-}" ] ||
-  fail "Needs an auth key so the container can join your tailnet.
-  Make one at https://login.tailscale.com/admin/settings/keys (reusable is fine), then:
-    TS_AUTHKEY=tskey-auth-… deploy/try-hub.sh"
+# HTTPS certificates are what give the hub its https://…ts.net address.
+python3 -c "import json,sys; d=json.load(sys.stdin); s=d.get('Self') or {}; sys.exit(0 if (d.get('CertDomains') or s.get('CertDomains')) else 1)" <<<"$status" ||
+  fail "HTTPS certificates are off for your tailnet, and the hub's https address needs them.
+  Turn them on: https://login.tailscale.com/admin/dns  (the HTTPS section)"
 
-export TS_AUTHKEY
+# No auth key is fine: the sidecar prints a one-time login link, and the
+# hub joins as whoever opens it. Nothing to revoke afterwards.
+export TS_AUTHKEY="${TS_AUTHKEY:-}"
 export KANDY_TAILNET_HOST="kandy-hub.${suffix}"
 url="https://${KANDY_TAILNET_HOST}"
 
@@ -47,9 +50,27 @@ say "hub      ${url}"
 say "starting the hub and its Tailscale sidecar…"
 docker compose up -d --build >/dev/null
 
+if [ -z "${TS_AUTHKEY}" ]; then
+  # Wait for the sidecar to ask for a login, and hand the link over.
+  link=""
+  for _ in $(seq 1 30); do
+    link="$(docker compose logs tailscale 2>/dev/null | grep -Eo 'https://login\.tailscale\.com/a/[A-Za-z0-9]+' | tail -1 || true)"
+    [ -n "$link" ] && break
+    # Already logged in from a previous run: no link will come.
+    docker compose exec -T tailscale tailscale status --json 2>/dev/null | grep -q '"BackendState": "Running"' && break
+    sleep 2
+  done
+  if [ -n "$link" ]; then
+    echo
+    say "Approve the hub on your tailnet — open this, signed in as you:"
+    say "  $link"
+    echo
+  fi
+fi
+
 # The first HTTPS request makes Tailscale fetch a certificate, which can take
 # a little while; a tailnet without HTTPS certificates never answers at all.
-for _ in $(seq 1 60); do
+for _ in $(seq 1 100); do
   if curl -sf --max-time 5 "${url}/health" >/dev/null 2>&1; then
     printf '\n  \033[38;5;115mThe hub is up.\033[0m\n\n'
     say "1  open ${url}  — the first person to open it owns it"
