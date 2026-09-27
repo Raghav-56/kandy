@@ -70,6 +70,7 @@ const MODES = [
   <div class="kh">
     <!-- ── hero ─────────────────────────────────────────────────────────── -->
     <section class="kh-hero">
+      <img class="kh-mark" src="/logo.svg" alt="" width="56" height="56" />
       <a class="kh-pill" href="/status">
         <span class="kh-pill-dot" />0.2 alpha — extremely experimental<span class="kh-arrow">→</span>
       </a>
@@ -275,6 +276,13 @@ html:not(.dark) .only-dark { display: none; }
 
 /* ── hero ── */
 .kh-hero { max-width: 760px; margin: 0 auto; padding: 88px 0 0; text-align: center; }
+
+/* The app's own icon — the same one in the dock, the tab and the terminal. */
+.kh-mark {
+  display: block; width: 56px; height: 56px; margin: 0 auto 28px;
+  border-radius: 13px;
+  box-shadow: 0 12px 28px -12px rgb(34 20 40 / 0.45);
+}
 
 .kh-pill {
   display: inline-flex; align-items: center; gap: 8px;

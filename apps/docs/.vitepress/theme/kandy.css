@@ -87,3 +87,6 @@
 html:not(.dark) .only-dark { display: none; }
 .vp-doc .k-shot img { border: 1px solid var(--vp-c-divider); border-radius: 12px; margin: 20px 0 4px; }
 .vp-doc .k-shot img[src*="pane-"] { max-width: 420px; max-height: 520px; object-fit: cover; object-position: top; }
+
+/* The mark in the top bar: the app icon, at the size of the wordmark beside it. */
+.VPNavBarTitle .logo { height: 22px; width: 22px; margin-right: 8px; border-radius: 5px; }

@@ -75,6 +75,8 @@ export default defineConfig({
         ],
       },
     ],
+    // The same mark as the app's favicon and the terminal banner.
+    logo: { src: "/logo.svg", alt: "" },
     socialLinks: [{ icon: "github", link: "https://github.com/hiteshbandhu/kandy" }],
     search: { provider: "local" },
     outline: [2, 3],
