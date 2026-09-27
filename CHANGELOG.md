@@ -2,38 +2,23 @@
 
 ## Unreleased
 
-- **A quiet agent is warned about, not killed.** alpha.6 stopped any agent that
-  printed nothing for 2 minutes — which could stop a model that was slow to
-  start. Now 2 minutes of silence only turns the card yellow — *no output 3m* —
-  with **Stop** beside it, and clears when the agent speaks. kandy stops a run
-  itself only after **10 minutes** of complete silence (30 while a tool is
-  running, and never while it waits on your answer), then offers **Retry**.
-  → [Troubleshooting](https://hiteshbandhu.github.io/kandy/guide/troubleshooting)
-- **Setup is picked with the arrow keys** — ↑ ↓ and Enter, with the numbers
-  still working as shortcuts.
-- **The install script updates.** Run it where kandy is already installed and
-  it says so, updates, and reports *0.2.0-alpha.5 → 0.2.0-alpha.6* (or that
-  you're already on the newest) — without asking the setup questions again.
-
-## 0.2.0-alpha.6 — opencode with no subscription
-
-September 2026. **Extremely experimental** — see [Status](https://github.com/hiteshbandhu/kandy/tree/main/apps/docs/status.md). Install or
-update:
-
-```sh
-curl -fsSL https://hiteshbandhu.github.io/kandy/install.sh | sh
-```
-
-- **An agent that never answers is stopped after 2 minutes.** A run that
-  prints nothing at all — a rate-limited free model, say — used to sit
-  *running* forever. Now the note fails with the reason and a **Retry** (`r` in
-  the terminal). Any output at all counts as working, and is left alone.
-  → [Troubleshooting](https://hiteshbandhu.github.io/kandy/guide/troubleshooting)
 - **opencode works with no subscription.** It runs its own free models without
   an account, but kandy called it *signed out* unless you'd logged in to a
   provider. Installed is now ready, and the model menu lists what
   `opencode models` says this machine can run — the free models included.
   → [opencode](https://hiteshbandhu.github.io/kandy/agents/opencode)
+- **An agent that goes quiet is flagged, not left hanging.** A run that prints
+  nothing for 2 minutes turns its card yellow — *no output 3m* — with **Stop**
+  beside it, and clears when the agent speaks; a slow build is left to work.
+  Only after **10 minutes** of complete silence (30 while a tool is running,
+  never while it waits on your answer) does kandy stop it, failing the note
+  with the reason and a **Retry** (`r` in the terminal).
+  → [Troubleshooting](https://hiteshbandhu.github.io/kandy/guide/troubleshooting)
+- **Setup is picked with the arrow keys** — ↑ ↓ and Enter, with the numbers
+  still working as shortcuts.
+- **The install script updates.** Run it where kandy is already installed and
+  it says so, updates, and reports *0.2.0-alpha.5 → 0.2.0-alpha.7* (or that
+  you're already on the newest) — without asking the setup questions again.
 
 ## 0.2.0-alpha.5 — a one-line install
 
