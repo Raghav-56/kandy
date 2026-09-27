@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import { withBase } from "vitepress"
 import stats from "../../data/stats.json"
 
 /**
@@ -36,7 +37,10 @@ const taken = computed(() =>
   new Date(stats.takenAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
 )
 
-const shot = (name: string) => ({ light: `/shots/site/${name}-light.webp`, dark: `/shots/site/${name}-dark.webp` })
+const shot = (name: string) => ({
+  light: withBase(`/shots/site/${name}-light.webp`),
+  dark: withBase(`/shots/site/${name}-dark.webp`),
+})
 
 const MACHINES = [
   { who: "Your laptop", notes: "your notes, your logins", agent: "Claude Code", color: "#d97757" },
@@ -70,8 +74,8 @@ const MODES = [
   <div class="kh">
     <!-- ── hero ─────────────────────────────────────────────────────────── -->
     <section class="kh-hero">
-      <img class="kh-mark" src="/logo.svg" alt="" width="56" height="56" />
-      <a class="kh-pill" href="/status">
+      <img class="kh-mark" :src="withBase('/logo.svg')" alt="" width="56" height="56" />
+      <a class="kh-pill" :href="withBase('/status')">
         <span class="kh-pill-dot" />0.2 alpha — extremely experimental<span class="kh-arrow">→</span>
       </a>
 
@@ -93,8 +97,8 @@ const MODES = [
       </p>
 
       <div class="kh-actions">
-        <a class="kh-btn kh-btn-primary" href="/guide/getting-started">Get started</a>
-        <a class="kh-btn" href="/guide/how-it-works">How it works</a>
+        <a class="kh-btn kh-btn-primary" :href="withBase('/guide/getting-started')">Get started</a>
+        <a class="kh-btn" :href="withBase('/guide/how-it-works')">How it works</a>
         <a class="kh-btn kh-btn-ghost" href="https://github.com/hiteshbandhu/kandy">GitHub</a>
       </div>
     </section>
@@ -165,7 +169,7 @@ const MODES = [
             checked, what it didn't — with the time, tokens and cost of the run beside it.
           </p>
           <p>
-            Switch agents mid-note and the next one gets a <a href="/concepts/briefings">briefing</a>
+            Switch agents mid-note and the next one gets a <a :href="withBase('/concepts/briefings')">briefing</a>
             of what was done and decided, not a transcript to wade through.
           </p>
         </div>
@@ -183,10 +187,10 @@ const MODES = [
             <code>kandy</code> opens the board in your terminal. Run, steer, read the diff, merge,
             answer an agent — all from the keyboard, against the same notes as the browser.
           </p>
-          <p><a href="/guide/terminal">The terminal board →</a></p>
+          <p><a :href="withBase('/guide/terminal')">The terminal board →</a></p>
         </div>
         <div class="kh-frame kh-frame-term">
-          <img src="/shots/site/terminal-note.webp" alt="kandy in a terminal: a finished note with the agent's summary, and keys to diff, merge or revise" />
+          <img :src="withBase('/shots/site/terminal-note.webp')" alt="kandy in a terminal: a finished note with the agent's summary, and keys to diff, merge or revise" />
         </div>
       </div>
 
@@ -199,7 +203,7 @@ const MODES = [
             laptop of the person it belongs to, with their agents and their logins — a hub runs
             nothing, and nothing runs on yours until you say yes.
           </p>
-          <p><a href="/modes/">The three modes →</a></p>
+          <p><a :href="withBase('/modes/')">The three modes →</a></p>
         </div>
         <!-- A diagram, not a screenshot: what matters here is where work runs,
              and no single screen shows that. -->
@@ -228,7 +232,7 @@ const MODES = [
         <h2>One program. Start alone; add people when you want to.</h2>
       </header>
       <div class="kh-modes">
-        <a v-for="m in MODES" :key="m.name" class="kh-mode" :href="m.href">
+        <a v-for="m in MODES" :key="m.name" class="kh-mode" :href="withBase(m.href)">
           <h3>{{ m.name }}</h3>
           <code>{{ m.cmd }}</code>
           <p>{{ m.text }}</p>
@@ -261,7 +265,7 @@ const MODES = [
       <p class="kh-warn">
         <strong>Extremely experimental.</strong> It changes daily, and a board may need wiping. Your
         code isn't at risk — every note works on its own branch.
-        <a href="/status">What that means →</a>
+        <a :href="withBase('/status')">What that means →</a>
       </p>
     </section>
   </div>

@@ -9,17 +9,23 @@ import llmstxt from "vitepress-plugin-llms"
  * for someone deciding whether the architecture is right; the guide is written
  * for someone with a repo and ten minutes.
  */
+const base = process.env.DOCS_BASE ?? "/"
+
 export default defineConfig({
   title: "kandy",
   description: "A board for coding agents. Each note is one job, in its own worktree — alone, or as a team where everyone's work runs on their own machine.",
   lang: "en-GB",
   cleanUrls: true,
-  head: [["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }]],
+  // "/" locally; "/kandy/" on GitHub Pages, where the site lives under the
+  // repository's name. Set by the deploy workflow.
+  base,
+  head: [["link", { rel: "icon", type: "image/svg+xml", href: `${base}favicon.svg` }]],
   lastUpdated: true,
   // /llms.txt, /llms-full.txt and a .md copy of every page — so an agent can
   // read these docs as easily as a person. kandy's users include agents.
   vite: { plugins: [llmstxt()] },
-  // Private for now, so no sitemap and no analytics.
+  // Public on GitHub Pages, so a sitemap there for search engines. No analytics.
+  ...(process.env.DOCS_BASE ? { sitemap: { hostname: "https://hiteshbandhu.github.io/kandy/" } } : {}),
   themeConfig: {
     nav: [
       { text: "Get started", link: "/guide/getting-started" },

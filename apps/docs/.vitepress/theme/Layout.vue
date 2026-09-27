@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DefaultTheme from "vitepress/theme"
+import { withBase } from "vitepress"
 import Backdrop from "./Backdrop.vue"
 import Home from "./Home.vue"
 
@@ -15,7 +16,7 @@ const { Layout } = DefaultTheme
       <div class="k-banner">
         <strong>Extremely experimental.</strong>
         <span class="k-banner-more">kandy changes daily — expect breaking changes, rough edges, and boards you may have to wipe.</span>
-        <a href="/status">What that means →</a>
+        <a :href="withBase('/status')">What that means →</a>
       </div>
     </template>
     <!-- The whole home page is ours: VitePress's `hero` frontmatter is unset,

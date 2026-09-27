@@ -288,10 +288,10 @@ the only copy.
 ## 10. Where next
 
 <div class="k-cards">
-  <a href="/guide/first-note"><strong>Write better notes</strong><span>What to put in one so the agent gets it right the first time.</span></a>
-  <a href="/guide/terminal"><strong>The terminal board</strong><span>Every key, and how to work from the keyboard all day.</span></a>
-  <a href="/agents/"><strong>Agents</strong><span>Set up Claude Code, Codex, Cursor, opencode or aider — and what each can do.</span></a>
-  <a href="/modes/"><strong>Work as a team</strong><span>Share a board; everyone's notes still run on their own machine.</span></a>
-  <a href="/guide/settings"><strong>Board settings</strong><span>Setup commands, access, models, skills and MCP servers.</span></a>
-  <a href="/guide/troubleshooting"><strong>Troubleshooting</strong><span>When something doesn't work, and what to do about it.</span></a>
+  <a href="./first-note"><strong>Write better notes</strong><span>What to put in one so the agent gets it right the first time.</span></a>
+  <a href="./terminal"><strong>The terminal board</strong><span>Every key, and how to work from the keyboard all day.</span></a>
+  <a href="../agents/"><strong>Agents</strong><span>Set up Claude Code, Codex, Cursor, opencode or aider — and what each can do.</span></a>
+  <a href="../modes/"><strong>Work as a team</strong><span>Share a board; everyone's notes still run on their own machine.</span></a>
+  <a href="./settings"><strong>Board settings</strong><span>Setup commands, access, models, skills and MCP servers.</span></a>
+  <a href="./troubleshooting"><strong>Troubleshooting</strong><span>When something doesn't work, and what to do about it.</span></a>
 </div>
