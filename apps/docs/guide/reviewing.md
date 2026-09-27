@@ -20,14 +20,17 @@ said it did next to what it actually did is the real review motion.
 There are exactly two destinations and a bin, so "merge" never means two
 different things:
 
-**Merge here** (<kbd>M</kbd> in the terminal) merges the branch into the base
-branch on this machine. Your own working tree is not touched. The note's
-checkout is then tidied away — unless something in it is uncommitted, in which
-case it is kept, because it may be the only copy.
+**Merge** (<kbd>M</kbd> in the terminal, **Merge into main** in the browser)
+merges the branch into the branch your checkout is on, on this machine. Nothing
+is pushed, and your working tree is not touched. The note's checkout is then
+tidied away — unless something in it is uncommitted, in which case it is kept,
+because it may be the only copy. In the browser, Merge is offered when there's
+nowhere to open a pull request; in a GitHub repo, work leaves through a PR.
 
 **Open a PR** pushes the branch and opens a pull request. This is the first
-thing kandy does that leaves your machine. The note lands here automatically
-once the PR is merged on the forge.
+thing kandy does that leaves your machine. It needs the
+[`gh` CLI](https://cli.github.com), signed in. The note lands here
+automatically once the PR is merged on GitHub.
 
 **Discard** (<kbd>X</kbd>) deletes the branch and its worktree. The note stays,
 so you can run it again.

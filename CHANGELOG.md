@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **`kandy stop`** stops kandy on this machine; any command starts it again.
+  Restarting used to mean finding a process id by hand.
+- **A clear message on an old Node.** kandy needs Node 22; on anything older it
+  now says so, instead of failing with `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`.
+- **Short paths in transcripts.** Tool lines inside a note's checkout read
+  `src/app.js`, not the full worktree path — in the terminal and the browser.
+- **The terminal's merge prompt names the branch** — *Merge … into main?*
+- **Docs:** a step-by-step getting started from a real run, troubleshooting, a
+  page per agent, a board settings reference, and `/llms.txt` for agents.
+
 ## 0.2.0-alpha.1 — teams, capabilities, the terminal
 
 September 2026. **Extremely experimental** — see [Status](https://github.com/hiteshbandhu/kandy/tree/main/apps/docs/status.md).

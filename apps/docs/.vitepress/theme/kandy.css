@@ -90,3 +90,17 @@ html:not(.dark) .only-dark { display: none; }
 
 /* The mark in the top bar: the app icon, at the size of the wordmark beside it. */
 .VPNavBarTitle .logo { height: 22px; width: 22px; margin-right: 8px; border-radius: 5px; }
+
+/* "Where next" cards at the end of a guide. */
+.vp-doc .k-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px; margin: 20px 0;
+}
+.vp-doc .k-cards a {
+  display: block; padding: 16px 18px;
+  border: 1px solid var(--vp-c-divider); border-radius: 12px;
+  text-decoration: none; transition: border-color 0.15s;
+}
+.vp-doc .k-cards a:hover { border-color: var(--vp-c-brand-1); }
+.vp-doc .k-cards strong { display: block; color: var(--vp-c-text-1); font-size: 15px; }
+.vp-doc .k-cards span { display: block; margin-top: 4px; color: var(--vp-c-text-2); font-size: 13.5px; line-height: 1.5; }

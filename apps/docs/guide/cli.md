@@ -52,6 +52,7 @@ See [Skills and MCP servers](/guide/capabilities).
 
 ```sh
 kandy status [--json]            # daemon or team, repos, which agents are signed in
+kandy stop [--port N]            # stop kandy here; any command starts it again
 kandy setup                      # the first-run question, again
 kandy gc [--dry-run] [--force]   # reclaim disk from finished notes
 kandy serve [--port N] [--slots N] [--json]   # the daemon, in the foreground
@@ -67,11 +68,16 @@ instead. If it has never seen the repository, it makes it a board.
 
 Run it from inside the repository the work belongs to.
 
-## Starting things
+## Starting and stopping
 
-You don't. Every command starts the daemon if it isn't running — or, on a team,
-this machine's runner — detached, so the shell that ran the command isn't what
-keeps your agents alive.
+You don't start it. Every command starts the daemon if it isn't running — or, on
+a team, this machine's runner — detached, so the shell that ran the command
+isn't what keeps your agents alive.
+
+To stop it, `kandy stop`. Notes that were running show as **interrupted**, and
+**Resume** carries on where they stopped — the worktree and the agent's session
+are kept. `kandy stop` then any command is how you restart kandy, for instance
+after updating it.
 
 ## Environment
 

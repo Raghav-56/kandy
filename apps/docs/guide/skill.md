@@ -32,3 +32,10 @@ The skill is deliberate about its limits, and says so to the agent using it:
 - It cannot report whether a run succeeded — the work happens in another
   process, so the calling agent never sees it finish. It points you at
   `kandy ls` instead of guessing.
+
+## These docs, for an agent
+
+Every page here is also plain markdown: add `.md` to its address
+(`/guide/getting-started.md`). [`/llms.txt`](/llms.txt) lists them all, and
+[`/llms-full.txt`](/llms-full.txt) is the whole site in one file — hand either
+to an agent that needs to know how kandy works.

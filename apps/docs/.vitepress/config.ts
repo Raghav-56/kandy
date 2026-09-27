@@ -1,4 +1,5 @@
 import { defineConfig } from "vitepress"
+import llmstxt from "vitepress-plugin-llms"
 
 /**
  * kandy's docs.
@@ -15,11 +16,15 @@ export default defineConfig({
   cleanUrls: true,
   head: [["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }]],
   lastUpdated: true,
+  // /llms.txt, /llms-full.txt and a .md copy of every page — so an agent can
+  // read these docs as easily as a person. kandy's users include agents.
+  vite: { plugins: [llmstxt()] },
   // Private for now, so no sitemap and no analytics.
   themeConfig: {
     nav: [
       { text: "Get started", link: "/guide/getting-started" },
       { text: "Modes", link: "/modes/" },
+      { text: "Agents", link: "/agents/" },
       { text: "CLI", link: "/guide/cli" },
       { text: "Concepts", link: "/concepts/notes" },
       { text: "Status", link: "/status" },
@@ -29,9 +34,10 @@ export default defineConfig({
         text: "Start here",
         items: [
           { text: "How kandy works", link: "/guide/how-it-works" },
-          { text: "Install and first run", link: "/guide/getting-started" },
+          { text: "Get started", link: "/guide/getting-started" },
           { text: "Your first note", link: "/guide/first-note" },
           { text: "Reviewing work", link: "/guide/reviewing" },
+          { text: "Troubleshooting", link: "/guide/troubleshooting" },
         ],
       },
       {
@@ -46,10 +52,21 @@ export default defineConfig({
         ],
       },
       {
+        text: "Agents",
+        items: [
+          { text: "Choosing and models", link: "/agents/" },
+          { text: "Claude Code", link: "/agents/claude-code" },
+          { text: "Codex", link: "/agents/codex" },
+          { text: "Cursor", link: "/agents/cursor" },
+          { text: "opencode", link: "/agents/opencode" },
+          { text: "aider", link: "/agents/aider" },
+        ],
+      },
+      {
         text: "Using it",
         items: [
           { text: "The terminal board", link: "/guide/terminal" },
-          { text: "Agents and models", link: "/guide/agents" },
+          { text: "Board settings", link: "/guide/settings" },
           { text: "Skills and MCP servers", link: "/guide/capabilities" },
           { text: "Cost", link: "/guide/cost" },
           { text: "From another agent", link: "/guide/skill" },
