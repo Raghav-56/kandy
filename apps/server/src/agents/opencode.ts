@@ -46,7 +46,9 @@ export const opencode: AgentAdapter = {
   id: "opencode",
   bin: "opencode",
   readAuth: () => readOpencodeAuth(),
-  credentials: [authFile()],
+  // None required: opencode runs its own free models with no sign-in at all,
+  // so installed is ready. auth.json, when there is one, only adds providers.
+  credentials: [],
 
   spawn({ prompt, resume, policy, model, mcp }) {
     return {
@@ -254,36 +256,19 @@ function configFile(): string {
 }
 
 /**
- * What opencode's stored credentials say about themselves.
+ * Which providers opencode is signed in to, for the plan line — or that it's
+ * on its free models alone.
  *
- * `auth.json` maps a provider id to one of three shapes — an OAuth grant with
- * an `expires`, a bare `api` key, or a `wellknown` token. Only the metadata is
- * read; the keys and tokens themselves are never touched.
- *
- * opencode is provider-agnostic on purpose, so "expired" has to mean *every*
- * way in is expired. Reporting the earliest expiry would declare the whole
- * agent dead because one of four providers lapsed, which is how a working
- * setup gets sent to re-login for nothing. An API key carries no expiry and so
- * keeps the answer at null — "it did not say", never "it is fine".
+ * Never a reason to call it signed out: opencode's free models need no
+ * account, so an expired OAuth grant, or no auth.json at all, still leaves it
+ * able to run. Only the provider ids are read; keys and tokens never are.
  */
-function readOpencodeAuth(): { expiresAt: number | null; plan: string | null } | null {
+function readOpencodeAuth(): { expiresAt: number | null; plan: string | null } {
   try {
-    const all = JSON.parse(readFileSync(authFile(), "utf8")) as Record<string, any>
-    const providers = Object.keys(all)
-    if (providers.length === 0) return null
-
-    let latest: number | null = null
-    for (const id of providers) {
-      const entry = all[id]
-      if (entry?.["type"] !== "oauth") return { expiresAt: null, plan: providers.join(", ") }
-      const exp = entry["expires"]
-      if (typeof exp !== "number") return { expiresAt: null, plan: providers.join(", ") }
-      latest = latest === null ? exp : Math.max(latest, exp)
-    }
-
-    return { expiresAt: latest, plan: providers.join(", ") }
+    const providers = Object.keys(JSON.parse(readFileSync(authFile(), "utf8")) as Record<string, unknown>)
+    return { expiresAt: null, plan: providers.length ? providers.join(", ") : "free models" }
   } catch {
-    return null
+    return { expiresAt: null, plan: "free models" }
   }
 }
 

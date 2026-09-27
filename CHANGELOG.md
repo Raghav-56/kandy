@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **opencode works with no subscription.** It runs its own free models without
+  an account, but kandy called it *signed out* unless you'd logged in to a
+  provider. Installed is now ready, and the model menu lists what
+  `opencode models` says this machine can run — the free models included.
+  → [opencode](https://hiteshbandhu.github.io/kandy/agents/opencode)
+
 ## 0.2.0-alpha.5 — a one-line install
 
 September 2026. **Extremely experimental** — see [Status](https://github.com/hiteshbandhu/kandy/tree/main/apps/docs/status.md). Install or

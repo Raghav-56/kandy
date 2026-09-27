@@ -33,9 +33,10 @@ the login it already has.
 | Claude Code | `npm i -g @anthropic-ai/claude-code` | `claude`, then `/login` | [Claude Code](/agents/claude-code) |
 | Codex | `npm i -g @openai/codex` | `codex login` | [Codex](/agents/codex) |
 | Cursor | `curl https://cursor.com/install -fsS \| bash` | `cursor-agent login` | [Cursor](/agents/cursor) |
-| opencode | `npm i -g opencode-ai` | `opencode auth login` | [opencode](/agents/opencode) |
+| opencode | `npm i -g opencode-ai` | none for its free models; `opencode auth login` for your own | [opencode](/agents/opencode) |
 | aider | `python -m pip install aider-install && aider-install` | its own provider keys | [aider](/agents/aider) |
 
+No subscription? **opencode** runs free models with no sign-in.
 If you're not sure which to pick, start with **Claude Code**: it's the one kandy
 is built and tested against every day, and the only one that can stop and ask
 you before running a command ([why that matters](#_7-answer-its-question)).

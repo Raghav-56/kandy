@@ -14,15 +14,21 @@ npm i -g opencode-ai
 Or `brew install sst/tap/opencode`, or see [opencode.ai](https://opencode.ai).
 kandy needs the `opencode` command on your `PATH`.
 
-## Sign in
+## Sign in — or don't
+
+opencode runs its own **free models** with no account at all, so kandy counts
+it ready as soon as it's installed. The model menu lists exactly what this
+machine can run — asked of `opencode models` — which with no sign-in is those
+free models (`opencode/…-free`).
+
+For your own providers (Anthropic, OpenAI, OpenRouter, …):
 
 ```sh
 opencode auth login
 ```
 
-and pick a provider. kandy checks opencode's own auth file
-(`~/.local/share/opencode/auth.json`) for which providers you've signed in to,
-and nothing more.
+kandy reads opencode's auth file (`~/.local/share/opencode/auth.json`) only for
+which providers you're signed in to, shown as its plan — never the keys.
 
 ## Check it's ready
 
@@ -58,11 +64,13 @@ choose one in the model menu or in **Settings → Models**.
 - **Cost** — opencode prices runs itself, which kandy uses. A run on a
   subscription or a local model reports $0, which kandy treats as *unpriced*
   rather than free.
-- **Models** — add the `provider/model` ids you use to the model menu.
+- **Models** — the menu is what `opencode models` lists, refreshed hourly. Add
+  any other `provider/model` id yourself. With none picked, opencode chooses.
 
 ## When it doesn't work
 
-- **`signed out`** — `opencode auth login`.
+- **A model says it needs a key** — sign in to that provider with
+  `opencode auth login`, or pick a free one.
 - **Blocked** — something your permission config marks `ask`. Grant full access
   for the note, or change your opencode rules.
 

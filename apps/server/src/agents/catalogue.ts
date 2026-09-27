@@ -42,9 +42,9 @@ const INFLIGHT = new Map<string, Promise<void>>()
 /**
  * How each CLI is asked, and how its answer is read.
  *
- * One entry today. The shape is here because opencode has the same problem —
- * a provider-agnostic catalogue no table can predict — and will want the same
- * treatment once it is installed anywhere to test against.
+ * opencode is asked too: `opencode models` lists what this machine can run,
+ * which with no sign-in at all is opencode's own free models — the menu
+ * someone without a subscription needs, and one no table could predict.
  */
 type Asker = { ask: () => Promise<string[]> }
 
@@ -107,6 +107,12 @@ function askCodex(): Promise<string[]> {
 
 const ASK: Record<string, Asker> = {
   codex: { ask: askCodex },
+  opencode: {
+    ask: async () => {
+      const { stdout } = await run_("opencode", ["models"], { timeout: 15_000 })
+      return parseOpencodeModels(stdout)
+    },
+  },
   cursor: {
     ask: async () => {
       const { stdout } = await run_("cursor-agent", ["models"], { timeout: 15_000 })
@@ -131,6 +137,17 @@ export function parseCursorModels(out: string): string[] {
     .split("\n")
     .map((l) => /^(\S+) - \S/.exec(l.trim())?.[1])
     .filter((id): id is string => Boolean(id))
+}
+
+/**
+ * opencode's: one `provider/model` per line, the form `-m` takes. Anything
+ * else — a log line, a warning — is not a model.
+ */
+export function parseOpencodeModels(out: string): string[] {
+  return out
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^[\w.-]+\/\S+$/.test(l))
 }
 
 /** Ask the CLI, at most once an hour, and never twice at the same time. */

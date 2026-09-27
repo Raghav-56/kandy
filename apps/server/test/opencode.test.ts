@@ -2,6 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 
 import { opencode, configuredModel } from "../dist/agents/opencode.js"
+import { parseOpencodeModels } from "../dist/agents/catalogue.js"
 
 /**
  * Shapes taken from opencode's own `run` command — the `emit()` helper in
@@ -207,4 +208,30 @@ test("spawn does not pin a model onto later parses", () => {
   assert.ok(before?.kind === "usage" && after?.kind === "usage")
   assert.equal(after.model, before.model)
   assert.notEqual(after.model, "definitely-not-the-default")
+})
+
+test("opencode needs no sign-in: its free models run without an account", () => {
+  // Installed is ready. A credential path here made kandy call it signed out
+  // for everyone on free models, who have no auth.json at all.
+  assert.deepEqual(opencode.credentials, [])
+  const auth = opencode.readAuth!()
+  assert.equal(auth?.expiresAt, null, "an expired provider grant never makes it signed out")
+  assert.equal(typeof auth?.plan, "string")
+})
+
+test("the model menu is what `opencode models` lists", () => {
+  const out = [
+    "opencode/big-pickle",
+    "opencode/muse-spark-1.3-contributor-free",
+    "anthropic/claude-sonnet-5",
+    "",
+    "INFO  2026-09-27 service=models refreshing",
+    "  openrouter/qwen/qwen3-coder  ",
+  ].join("\n")
+  assert.deepEqual(parseOpencodeModels(out), [
+    "opencode/big-pickle",
+    "opencode/muse-spark-1.3-contributor-free",
+    "anthropic/claude-sonnet-5",
+    "openrouter/qwen/qwen3-coder",
+  ])
 })
