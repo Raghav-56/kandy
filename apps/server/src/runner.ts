@@ -69,7 +69,18 @@ type Live = {
   ask?: AskChannel
   /** Reverses whatever the adapter's `prepare` put in the worktree. */
   undo?: () => Promise<void>
+  /** Stopped for never saying anything; see SILENT_MS. */
+  silent?: boolean
 }
+
+/**
+ * How long an agent may say nothing at all — not one byte, on stdout or
+ * stderr — before it's taken for stuck. Only a run that never started
+ * talking: any output is a sign of work, and a long quiet stretch after it
+ * (a slow build, a model thinking) is left alone. A free model that is
+ * rate-limited can hang like this forever, and the note sat "running".
+ */
+export const SILENT_MS = Number(process.env["KANDY_SILENT_MS"]) || 120_000
 
 type Queued = {
   runId: string
@@ -609,7 +620,26 @@ export class Runner {
     child.on("error", (err) => {
       this.say(q.runId, "error", err.message)
     })
+
+    const heard = () => clearTimeout(silence)
+    const silence = setTimeout(() => {
+      const l = this.live.get(q.runId)
+      if (!l || l.child !== child) return
+      l.silent = true
+      this.say(
+        q.runId,
+        "error",
+        `${agentId} said nothing for ${SILENT_MS >= 60_000 ? `${Math.round(SILENT_MS / 60_000)} min` : `${Math.round(SILENT_MS / 1000)}s`}, so kandy stopped it — ` +
+          `often a model that's rate-limited or unreachable. Retry, or pick another model.`,
+      )
+      child.kill("SIGTERM")
+    }, SILENT_MS)
+    silence.unref?.()
+    child.stdout?.once("data", heard)
+    child.stderr?.once("data", heard)
+
     child.on("exit", (code, signal) => {
+      clearTimeout(silence)
       void this.finish(q.runId, q.noteId, code, signal)
     })
   }
@@ -831,7 +861,9 @@ export class Runner {
       }
     }
 
-    const status = signal ? "cancelled" : code === 0 ? "succeeded" : "failed"
+    // Stopped for silence is a failure, not something the user cancelled.
+    const status = l?.silent ? "failed" : signal ? "cancelled" : code === 0 ? "succeeded" : "failed"
+    if (l?.silent && !error) error = `${l.agent} gave no output`
     // Whatever was wrong with this agent's sign-in, it plainly is not now.
     if (status === "succeeded" && l) clearAuthFailure(l.agent)
     this.emit(event("run.finished", { runId, noteId, status, exitCode: code, error }))

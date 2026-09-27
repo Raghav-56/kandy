@@ -74,7 +74,7 @@ Check it:
 kandy --version
 ```
 ```
-0.2.0-alpha.5
+0.2.0-alpha.6
 ```
 
 To **update**, run the install command again — the script stops a running

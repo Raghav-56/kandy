@@ -287,6 +287,12 @@ test("hints: contextual, urgent first, '?' survives narrow widths", () => {
   assert.deepEqual(asked.slice(0, 3), ["a", "A", "D"])
   const review = hints(ctx({ screen: "note", stage: "review" })).map((h: { key: string }) => h.key)
   assert.ok(review.includes("M") && review.includes("X") && review.includes("R"))
+  // A failed note offers the retry up front, on its card and in the note.
+  for (const screen of ["board", "note"]) {
+    const failed = hints(ctx({ screen, note: true, stage: "review", failed: true }))
+    assert.equal(failed.find((h: { key: string }) => h.key === "r")?.label, "retry", screen)
+  }
+  assert.deepEqual(keyAction(ctx({ note: true, stage: "review", failed: true }), "r", {}), { type: "run" })
   const fitted = fitHints(hints(ctx()), 30)
   assert.equal(fitted[fitted.length - 1].key, "?")
   assert.ok(1 + fitted.reduce((n: number, h: { key: string; label: string }) => n + h.key.length + h.label.length + 3, 0) <= 30)

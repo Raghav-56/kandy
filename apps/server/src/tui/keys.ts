@@ -64,6 +64,8 @@ export type KeyCtx = {
    * the footer's space. Keys still work outside it; the server has the last word.
    */
   stage: Stage | null
+  /** The focused note's last run failed, so running it again is a retry. */
+  failed?: boolean
   /** The board is drawn as columns side by side (not the one-column list). */
   kanban?: boolean
   /** Team screen: the viewer can admit people and change roles. */
@@ -154,6 +156,7 @@ const BOARD: Binding[] = [
   { label: "n", hint: "new", help: "New note and run it with the board's last agent", match: ch("n"), action: () => ({ type: "new", run: true }) },
   { label: "N", help: "New note without running it", match: ch("N"), action: () => ({ type: "new", run: false }) },
   { label: "r", hint: "run", help: "Run the note (asks which agent if it has none)", match: ch("r"), action: () => ({ type: "run" }), when: (c) => c.note, show: at("idle") },
+  { label: "r", hint: "retry", help: "Run a failed note again", match: ch("r"), action: () => ({ type: "run" }), when: (c) => c.note && c.failed === true },
   { label: "x", hint: "cancel", help: "Cancel the note's run", match: ch("x"), action: () => ({ type: "cancel" }), when: (c) => c.note, show: at("live") },
   { label: "m", hint: "message", help: "Message the agent (while it runs, or to send it back)", match: ch("m"), action: () => ({ type: "message" }), when: (c) => c.note, show: at("live") },
   { label: "d", hint: "diff", help: "Diff of the note", match: ch("d"), action: () => ({ type: "diff" }), when: (c) => c.note, show: at("review") },
@@ -190,6 +193,7 @@ const NOTE: Binding[] = [
   { label: "Y", hint: "always allow", help: "Held on your machine: always allow this person", match: ch("Y"), action: () => ({ type: "consent", accept: true, always: true }), urgent: true, when: (c) => c.heldMine },
   { label: "n", hint: "decline", help: "Held on your machine: decline", match: ch("n"), action: () => ({ type: "consent", accept: false, always: false }), urgent: true, when: (c) => c.heldMine },
   { label: "r", hint: "run", help: "Run (asks which agent if it has none)", match: ch("r"), action: () => ({ type: "run" }), show: at("idle") },
+  { label: "r", hint: "retry", help: "Run a failed note again", match: ch("r"), action: () => ({ type: "run" }), when: (c) => c.failed === true },
   { label: "m", hint: "message", help: "Message / steer the agent", match: ch("m"), action: () => ({ type: "message" }), show: at("live", "review") },
   { label: "d", hint: "diff", help: "Diff", match: ch("d"), action: () => ({ type: "diff" }), show: at("live", "review", "done") },
   { label: "x", hint: "cancel", help: "Cancel the run", match: ch("x"), action: () => ({ type: "cancel" }), show: at("live") },

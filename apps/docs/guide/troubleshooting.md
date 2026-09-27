@@ -22,12 +22,6 @@ Older versions of kandy printed
 `Error [ERR_UNKNOWN_BUILTIN_MODULE]: No such built-in module: node:sqlite`
 instead. It means the same thing.
 
-### The first-run questions didn't appear
-
-They're asked once, by the install script, in a terminal. Installed by hand
-with `npm i -g`, from a script, or answered already? Run `kandy setup` to be
-asked (again).
-
 ### The install fails with `EACCES: permission denied`
 
 npm is trying to write to a system directory. Don't use `sudo`; point npm at
@@ -96,11 +90,12 @@ A repository needs at least one commit — a note's branch starts from it.
 one hasn't got one yet. Run `kandy` here, or write a note with `kandy "…"`,
 and it's created.
 
-### The first-run question never appeared — or I picked the wrong answer
+### The first-run questions never appeared — or I picked the wrong answer
 
-It's asked once, only in an interactive terminal, and never to someone who
-already has a board. Run `kandy setup` to be asked again. It's also skipped
-when `CI` or `KANDY_NO_SETUP` is set.
+The install script asks them once, in a terminal — so installing by hand with
+`npm i -g`, or from a script, skips them, and so does a machine that already
+has a board. Run `kandy setup` to be asked (again). They're also skipped when
+`CI` or `KANDY_NO_SETUP` is set.
 
 ## Agents
 
@@ -178,6 +173,15 @@ Before an agent starts, kandy runs the board's setup command in the new
 worktree — usually installing dependencies. It failed, so the agent never
 started. Run the same command in your own checkout to see why, then fix it — or
 change it in **Settings → Workspace** ([board settings](/guide/settings#workspace)).
+
+### *said nothing for 2 min, so kandy stopped it*
+
+The agent started but printed nothing at all — not one line — for two minutes.
+That's almost always the model, not the agent: a free model that's
+rate-limited, a provider that's down, or no network. Press **Retry** (`r` in
+the terminal), or pick another model first. An agent that has printed anything
+is never stopped this way, however long it then works quietly.
+`KANDY_SILENT_MS` changes the limit (in milliseconds).
 
 ### A note says *interrupted*
 

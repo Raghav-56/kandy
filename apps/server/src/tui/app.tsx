@@ -339,6 +339,7 @@ export function App({ client, live, boards: initialBoards, boardId: initialBoard
     heldMine,
     note: !!focusNote,
     stage: focusNote && !focusNote.held ? stageOf(focusNote.status) : null,
+    failed: focusNote?.status === "failed",
     kanban: kanbanOn,
     owner: hub && owner,
     member: member !== null,

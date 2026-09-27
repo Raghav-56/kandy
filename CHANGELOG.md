@@ -1,7 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-alpha.6 — opencode with no subscription
 
+September 2026. **Extremely experimental** — see [Status](https://github.com/hiteshbandhu/kandy/tree/main/apps/docs/status.md). Install or
+update:
+
+```sh
+curl -fsSL https://hiteshbandhu.github.io/kandy/install.sh | sh
+```
+
+- **An agent that never answers is stopped after 2 minutes.** A run that
+  prints nothing at all — a rate-limited free model, say — used to sit
+  *running* forever. Now the note fails with the reason and a **Retry** (`r` in
+  the terminal). Any output at all counts as working, and is left alone.
+  → [Troubleshooting](https://hiteshbandhu.github.io/kandy/guide/troubleshooting)
 - **opencode works with no subscription.** It runs its own free models without
   an account, but kandy called it *signed out* unless you'd logged in to a
   provider. Installed is now ready, and the model menu lists what
