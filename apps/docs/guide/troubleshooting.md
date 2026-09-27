@@ -188,8 +188,7 @@ goes away the moment it prints anything.
 After **10 minutes** without a byte — **30** while a tool the agent started is
 still running — kandy stops the run for you and fails the note with that
 reason, ready to **Retry**. The clock restarts on any output, and stops while
-the agent is waiting on your answer to a question. This is the same shape as
-T3 Code's stall timeout.
+the agent is waiting on your answer to a question.
 
 The limits are `KANDY_QUIET_MS` (the warning), `KANDY_STALL_MS` and
 `KANDY_STALL_TOOL_MS`, in milliseconds.
