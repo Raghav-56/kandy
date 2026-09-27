@@ -11,6 +11,7 @@ import type { Run, TranscriptFrame } from "@kandy/core"
 import { agentLabel, formatDuration } from "./board.js"
 import type { Tone } from "./theme.js"
 import { truncate, wrap } from "./text.js"
+import { markdownRows } from "./markdown.js"
 
 /** Live frames kept per run. The full record is on disk, one fetch away. */
 export const FRAME_CAP = 2000
@@ -55,7 +56,7 @@ function frameRows(f: TranscriptFrame, width: number): TRow[] {
 function computeFrameRows(f: TranscriptFrame, width: number): TRow[] {
   switch (f.role) {
     case "assistant":
-      return wrap(f.text, width).map((t) => [{ text: t, tone: "plain" }])
+      return markdownRows(f.text, width)
     case "user": {
       const rows = wrap(f.text, width - 2)
       return rows.map((t, i) => [

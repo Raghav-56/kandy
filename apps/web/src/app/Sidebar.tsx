@@ -350,7 +350,11 @@ export function Sidebar({
                         ? `${stale.length} sign-in${stale.length === 1 ? "" : "s"} need${stale.length === 1 ? "s" : ""} attention`
                         : ready.length > 0
                           ? `${ready.length} ${ready.length === 1 ? "agent" : "agents"} ready`
-                          : "no agent ready"}
+                          : agents.length === 0
+                            ? // Every known agent is listed once detection answers,
+                              // installed or not — empty means it hasn't yet.
+                              "checking agents…"
+                            : "no agent ready"}
                     </span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-3.5 shrink-0 opacity-60" />

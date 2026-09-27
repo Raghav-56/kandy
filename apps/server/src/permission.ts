@@ -125,7 +125,10 @@ export class Permissions {
         release: () => gone?.removeEventListener("abort", onGone),
       })
 
-      this.engine.say(runId, "system", `${req.tool}: ${req.command}`, "permission")
+      // "asked", not "permission": that marker means refused, and the board's
+      // Refused panel counts it. A question that is then allowed was shown
+      // there as a refusal, on notes whose tests had run and passed.
+      this.engine.say(runId, "system", `${req.tool}: ${req.command}`, "asked")
       this.engine.emit(
         event("run.blocked", {
           runId,

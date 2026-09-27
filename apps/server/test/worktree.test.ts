@@ -349,3 +349,22 @@ test("a branch with nothing on it is not pushed — there is nothing to lose", a
   assert.deepEqual(r, { removed: true, pushed: false, branchKept: false })
   assert.equal(gitOut(remote, "branch", "--list", wt.branch), "")
 })
+
+test("a repo with no lockfile is set up without writing one into the diff", async () => {
+  // Found on a real board: `npm install` made package-lock.json in the
+  // worktree, and review opened on a file the agent never touched.
+  const dir = repo()
+  writeFileSync(path.join(dir, "package.json"), '{"name":"demo"}\n')
+  assert.equal((await checkRepo(dir)).suggestedSetup, "npm install --no-package-lock")
+  writeFileSync(path.join(dir, "package-lock.json"), "{}\n")
+  assert.equal((await checkRepo(dir)).suggestedSetup, "npm ci --prefer-offline")
+})
+
+test("a worktree knows which branch a local merge would land on", async () => {
+  // A worktree adopted after a restart has no logged base branch; without
+  // this the merge button could only say "merge into the base branch".
+  const { landingBranch } = await import("../dist/worktree.js")
+  const dir = repo()
+  const wt = await createWorktree(dir, "note_land", "Land it")
+  assert.equal(await landingBranch(wt.path), "main")
+})

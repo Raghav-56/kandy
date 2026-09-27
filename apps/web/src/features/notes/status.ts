@@ -32,7 +32,7 @@ const PAPER = {
 export const LOOK: Record<NoteStatus, Look> = {
   blocked: { ...PAPER, surface: "bg-[#f6dcd9]", muted: "text-[#7d5a58]", tone: "berry", label: "Needs you", urgency: 0 },
   review:  { ...PAPER, tone: "mint",    label: "Ready to review", urgency: 1 },
-  failed:  { surface: "bg-[#241419] border border-[#4a2b38]", ink: "text-[#efb9cb]", muted: "text-[#94667a]", rule: "bg-[#4a2b38]", tone: "berry", label: "Failed", urgency: 2 },
+  failed:  { surface: "bg-berry-bg border border-berry/30", ink: "text-berry", muted: "text-berry/70", rule: "bg-berry/30", tone: "berry", label: "Failed", urgency: 2 },
   running: { ...PAPER, tone: "lemon",   label: "Running", urgency: 3 },
   queued:  { ...PAPER, surface: "bg-paper-2", tone: "sky", label: "Queued", urgency: 4 },
   draft:   { ...PAPER, tone: "neutral", label: "Draft", urgency: 5 },

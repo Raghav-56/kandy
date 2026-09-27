@@ -100,7 +100,16 @@ void main() {
   // Multiply needs more signal than screen to be visible at all. Named lit
   // rather than c because a float c already exists above, and a redefinition
   // is a shader that never compiles — silently, since only the link is checked.
-  vec3 lit = (col + grain) * mix(0.315, 0.30, uLight) * edge;
+  vec3 lit = (col + grain) * 0.315 * edge;
+
+  // Light mode multiplies, where black is not "nothing" but ink: a dark haze
+  // over paper turned the whole board near-black. There, nothing is white and
+  // the haze is a tint towards its own hue — fainter, since the same amount
+  // over paper reads as a stain.
+  float amt = max(col.r, max(col.g, col.b));
+  vec3 hue = col / max(amt, 0.001);
+  vec3 tint = mix(vec3(1.0), hue, clamp(amt, 0.0, 1.0) * edge * 0.22) + grain;
+  lit = mix(lit, tint, uLight);
 
   /*
    * Dither, then quantise — in that order, and never the other way.
@@ -113,7 +122,7 @@ void main() {
    */
   const float STEPS = 18.0;
   float th = (dither(gl_FragCoord.xy) - 0.5) / STEPS;
-  gl_FragColor = vec4(max(floor((lit + th) * STEPS + 0.5) / STEPS, 0.0), 1.0);
+  gl_FragColor = vec4(clamp(floor((lit + th) * STEPS + 0.5) / STEPS, 0.0, 1.0), 1.0);
 }`
 
 const VERT = `

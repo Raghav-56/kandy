@@ -157,7 +157,7 @@ export function SettingsPage({
             size="sm"
             disabled={saving === "policy"}
             onClick={() => (defaultPolicy === "full" ? undefined : setAskFull(true))}
-            className={cn(defaultPolicy === "full" && "border-[#4a3a20] bg-[#241d10] text-lemon")}
+            className={cn(defaultPolicy === "full" && "border-lemon/30 bg-lemon-bg text-lemon")}
           >
             Full access
           </Button>

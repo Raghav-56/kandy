@@ -9,11 +9,11 @@ const badge = cva(
     variants: {
       tone: {
         neutral: "bg-raised text-dim",
-        berry: "bg-[#2a161f] text-berry",
-        mint: "bg-[#15241d] text-mint",
-        lemon: "bg-[#262013] text-lemon",
-        sky: "bg-[#152232] text-sky",
-        grape: "bg-[#1e1a32] text-grape",
+        berry: "bg-berry-bg text-berry",
+        mint: "bg-mint-bg text-mint",
+        lemon: "bg-lemon-bg text-lemon",
+        sky: "bg-sky-bg text-sky",
+        grape: "bg-grape-bg text-grape",
       },
       size: {
         sm: "px-2 py-0.5 text-meta",

@@ -198,6 +198,25 @@ export async function mergeBranch(
   }
 }
 
+/**
+ * The branch a local merge of this worktree would land on: whatever the main
+ * checkout has out right now, since that is where `mergeBranch` merges.
+ *
+ * For worktrees adopted after a restart, whose base branch was never logged —
+ * without it the board could only say "merge into the base branch".
+ */
+export async function landingBranch(worktreePath: string): Promise<string | null> {
+  try {
+    const list = await git(worktreePath, "worktree", "list", "--porcelain")
+    const main = /^worktree (.+)$/m.exec(list)?.[1]
+    if (!main) return null
+    const branch = await git(main, "rev-parse", "--abbrev-ref", "HEAD")
+    return branch && branch !== "HEAD" ? branch : null
+  } catch {
+    return null
+  }
+}
+
 export async function deleteBranch(repoPath: string, branch: string): Promise<void> {
   await git(repoPath, "branch", "-D", branch).catch(() => {})
 }
@@ -303,7 +322,10 @@ function guessSetup(root: string): string | null {
   if (existsSync(path.join(root, "bun.lockb")) || existsSync(path.join(root, "bun.lock")))
     return "bun install"
   if (existsSync(path.join(root, "package-lock.json"))) return "npm ci --prefer-offline"
-  if (existsSync(path.join(root, "package.json"))) return "npm install"
+  // No lockfile: install, but don't write one. A plain `npm install` creates
+  // package-lock.json in the worktree, and it arrives in review as the first
+  // file of the agent's diff — a change nobody asked for.
+  if (existsSync(path.join(root, "package.json"))) return "npm install --no-package-lock"
   if (existsSync(path.join(root, "uv.lock"))) return "uv sync"
   if (existsSync(path.join(root, "poetry.lock"))) return "poetry install"
   if (existsSync(path.join(root, "Cargo.toml"))) return "cargo fetch"

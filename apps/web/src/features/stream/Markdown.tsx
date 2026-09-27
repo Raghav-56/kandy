@@ -43,7 +43,7 @@ export function Markdown({ children, className }: { children: string; className?
             return inline ? (
               <code
                 {...props}
-                className="rounded bg-raised px-1 py-px font-mono text-ui text-[#d9c8a0]"
+                className="rounded bg-raised px-1 py-px font-mono text-ui text-foreground/90"
               >
                 {children}
               </code>

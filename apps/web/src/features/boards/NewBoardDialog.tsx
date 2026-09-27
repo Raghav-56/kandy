@@ -127,7 +127,7 @@ export function NewBoardDialog({
         </div>
 
         {error && (
-          <p className="mt-4 rounded-lg border border-[#3d2621] bg-[#1d1312] px-3 py-2 text-aux text-[#e8b3a8]">
+          <p className="mt-4 rounded-lg border border-berry/25 bg-berry-bg px-3 py-2 text-aux text-berry">
             {error}
           </p>
         )}

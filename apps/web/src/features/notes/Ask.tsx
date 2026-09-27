@@ -51,7 +51,7 @@ export function Ask({
   }
 
   return (
-    <div className="border-y border-[#4a3a20] bg-[#1c180f] px-4 py-3">
+    <div className="border-y border-lemon/30 bg-lemon-bg px-4 py-3">
       <div className="flex items-center gap-1.5 text-micro font-medium uppercase tracking-[0.08em] text-lemon">
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-lemon" />
         Waiting on you
@@ -61,7 +61,7 @@ export function Ask({
         The agent has stopped and is asking to use <b className="text-ink">{prompt.tool}</b>.
       </p>
 
-      <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-black/30 px-2.5 py-2 font-mono text-meta leading-[1.6] text-[#d9c894]">
+      <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-lemon/10 px-2.5 py-2 font-mono text-meta leading-[1.6] text-lemon">
         {prompt.command}
       </pre>
 
@@ -87,7 +87,7 @@ export function Ask({
         <Button
           size="sm"
           variant="outline"
-          className={cn("text-berry", denying && "border-[#4a2b38] bg-[#241419]")}
+          className={cn("text-berry", denying && "border-berry/30 bg-berry-bg")}
           disabled={busy}
           onClick={() => setDenying((d) => !d)}
         >

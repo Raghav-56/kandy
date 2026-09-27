@@ -575,3 +575,31 @@ test("needsYou reads a note from an older daemon, which has no held field, as ne
   const v = view([{ ...note("n1", { status: "done" }), held: undefined } as never])
   assert.equal(needsYou(v), 0)
 })
+
+test("an agent's markdown reads as formatting, not asterisks", async () => {
+  const { markdownRows } = await import("../dist/tui/markdown.js")
+  const reply = [
+    "I added the chime.",
+    "",
+    "- **Volume:** peaks at 0.06, set in `src/chime.js`, quiet enough not to startle anyone nearby",
+    "1. first",
+    "```",
+    "const x = **not bold**",
+    "```",
+    "a lone ** stays",
+  ].join("\n")
+  const rows = markdownRows(reply, 40)
+  const text = rows.map((r: { text: string }[]) => r.map((s) => s.text).join(""))
+  assert.ok(!text.some((t: string) => t.includes("**Volume") || t.includes("`src")))
+  const bullet = rows[2]
+  assert.equal(text[2].startsWith("• Volume:"), true)
+  assert.ok(bullet.some((s: { text: string; bold?: boolean }) => s.text === "Volume:" && s.bold))
+  assert.ok(rows.flat().some((s: { text: string; tone: string }) => s.text === "src/chime.js" && s.tone === "cyan"))
+  // The bullet's continuation hangs under its text, not under the dot.
+  assert.ok(text[3].startsWith("  ") && !text[3].startsWith("   "))
+  assert.ok(text.includes("1. first"))
+  // Inside a fence nothing is interpreted.
+  assert.ok(text.includes("  const x = **not bold**"))
+  assert.ok(text.includes("a lone ** stays"))
+  for (const t of text.filter((t: string) => !t.startsWith("  const"))) assert.ok(textWidth(t) <= 40, t)
+})

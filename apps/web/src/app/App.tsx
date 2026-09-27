@@ -463,7 +463,7 @@ export function App() {
               clearError()
               setNotice(null)
             }}
-            className="shrink-0 border-b border-[#4a2b38] bg-[#241419] px-4 py-2.5 text-left text-aux text-[#efb9cb]"
+            className="shrink-0 border-b border-berry/30 bg-berry-bg px-4 py-2.5 text-left text-aux text-berry"
           >
             {error ?? notice} <span className="ml-2 text-faint">dismiss</span>
           </button>

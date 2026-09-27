@@ -113,12 +113,12 @@ function Frame({ frame: f }: { frame: TranscriptFrame }) {
 
   if (denied || f.role === "error") {
     return (
-      <div className="rounded-xl border border-[#3d2621] bg-[#1a1211] px-3 py-3">
+      <div className="rounded-xl border border-berry/25 bg-berry-bg px-3 py-3">
         <div className="flex items-center gap-1.5 text-micro font-medium uppercase tracking-[0.08em] text-berry">
           <span className="h-1.5 w-1.5 rounded-full bg-berry" />
           {denied ? "Refused" : "Error"}
         </div>
-        <p className="mt-1.5 whitespace-pre-wrap break-words text-title leading-[1.55] text-[#e8b3a8]">
+        <p className="mt-1.5 whitespace-pre-wrap break-words text-title leading-[1.55] text-berry">
           {f.text}
         </p>
       </div>
@@ -127,9 +127,9 @@ function Frame({ frame: f }: { frame: TranscriptFrame }) {
 
   if (f.role === "user") {
     return (
-      <div className="rounded-xl border border-[#22304d] bg-[#121826] px-3 py-3">
+      <div className="rounded-xl border border-sky/25 bg-sky-bg px-3 py-3">
         <div className="text-micro font-medium uppercase tracking-[0.08em] text-sky">You</div>
-        <p className="mt-1.5 whitespace-pre-wrap break-words text-prose leading-[1.6] text-[#c7d6f5]">
+        <p className="mt-1.5 whitespace-pre-wrap break-words text-prose leading-[1.6] text-foreground/90">
           {f.text}
         </p>
       </div>

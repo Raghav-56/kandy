@@ -201,7 +201,7 @@ function Waiting({
     <button
       data-note={prompt.noteId}
       onClick={() => onSelect(prompt.noteId)}
-      className="flex w-full items-start gap-3 rounded-2xl border border-[#4a3a20] bg-[#1c180f] px-4 py-3 text-left transition-colors hover:border-lemon/50"
+      className="flex w-full items-start gap-3 rounded-2xl border border-lemon/30 bg-lemon-bg px-4 py-3 text-left transition-colors hover:border-lemon/50"
     >
       <span className="mt-1.5 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-lemon" />
       <span className="min-w-0 flex-1">
@@ -209,7 +209,7 @@ function Waiting({
           <span className="truncate text-ui text-ink">{title}</span>
           <span className="shrink-0 text-meta text-lemon">{prompt.tool}</span>
         </span>
-        <span className="mt-1 block truncate font-mono text-meta text-[#b9a06a]" title={prompt.command}>
+        <span className="mt-1 block truncate font-mono text-meta text-lemon/85" title={prompt.command}>
           {prompt.command}
         </span>
       </span>

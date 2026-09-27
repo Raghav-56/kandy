@@ -259,3 +259,17 @@ test("a run kandy no longer knows about is denied rather than asked about", asyn
   assert.equal(verdict.behavior, "deny")
   assert.deepEqual(view().prompts, [])
 })
+
+test("a question is written as asked, not refused, so allowing it isn't shown as a refusal", async () => {
+  // Found on a real board: the Refused panel counts every "permission" frame,
+  // and the question itself was one — so a note whose tests were allowed,
+  // ran and passed still said "refused before the question could reach you".
+  const { engine, permissions, view } = fresh(10_000)
+  const pending = permissions.request(RUN, "Bash", { command: "npm test" })
+  await settle()
+  permissions.answer(view().prompts[0]!.requestId, { decision: "allow" })
+  await pending
+  const frames = engine.store.transcriptSince(RUN)
+  assert.ok(frames.some((f) => f.meta === "asked" && f.text.includes("npm test")))
+  assert.equal(frames.filter((f) => f.meta === "permission").length, 0)
+})

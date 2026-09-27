@@ -43,6 +43,7 @@ import {
   trackedPaths,
   commitLeftovers,
   pushBranch,
+  landingBranch,
 } from "./worktree.js"
 
 /**
@@ -150,7 +151,7 @@ export class LocalWorkshop implements Workshop {
     if (!wt) return null
     try {
       const [diff, stat] = await Promise.all([gitDiff(wt), diffStat(wt)])
-      return { diff, stat, branch: wt.branch, baseBranch: wt.baseBranch }
+      return { diff, stat, branch: wt.branch, baseBranch: wt.baseBranch ?? (await landingBranch(wt.path)) }
     } catch {
       // Worktree remembered but no longer on disk. The snapshot is all we have.
       return null

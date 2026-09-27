@@ -391,14 +391,14 @@ export function NoteDetail(p: NoteDetailProps) {
             <Button onClick={() => p.onCancel(run.id)}>Stop</Button>
           )}
           {/*
-            Work leaves here through a pull request, or it does not leave.
+            Work leaves through a pull request where there is somewhere to
+            open one.
 
-            There used to be a "Merge here" beside this, which merged the branch
-            into the base on this laptop and pushed nothing. Nobody lands work
-            that way — a merge nobody else can see is a commit you have to
-            remember to do something about later. The engine still merges on
-            that path, because prwatch.ts uses it to record a PR that was merged
-            on GitHub; it is only gone as something to press.
+            A local merge is hidden when a forge is available: a merge nobody
+            else can see is a commit you have to remember to do something about
+            later. But a repo with no GitHub remote — the first thing most
+            people try — has nowhere to send a PR, and without this a finished
+            note had no way to land at all, only Discard.
           */}
           {reviewable && (
             <>
@@ -412,6 +412,10 @@ export function NoteDetail(p: NoteDetailProps) {
               ) : p.forge?.available ? (
                 <Button size="sm" onClick={() => setAsk("pr")} disabled={pring}>
                   {pring ? "Opening…" : "Open a PR"}
+                </Button>
+              ) : p.forge ? (
+                <Button size="sm" onClick={() => setAsk("merge")} disabled={busy}>
+                  Merge into {base}
                 </Button>
               ) : null}
               <Button
@@ -474,7 +478,7 @@ export function NoteDetail(p: NoteDetailProps) {
           ))}
           <button
             onClick={() => setAsk("delete")}
-            className="ml-auto rounded-lg px-2.5 py-1.5 text-meta text-faint transition-colors hover:bg-[#241419] hover:text-berry"
+            className="ml-auto rounded-lg px-2.5 py-1.5 text-meta text-faint transition-colors hover:bg-berry-bg hover:text-berry"
           >
             Delete
           </button>
@@ -533,12 +537,12 @@ export function NoteDetail(p: NoteDetailProps) {
       </div>
 
       {live && p.activity && (
-        <div className="border-t border-hairline bg-[#1c180f] px-4 py-2.5">
+        <div className="border-t border-hairline bg-lemon-bg px-4 py-2.5">
           <div className="flex items-baseline gap-2.5">
             <span className="shrink-0 text-meta font-medium uppercase tracking-[0.06em] text-lemon">
               {p.activity.tool}
             </span>
-            <span className="truncate font-mono text-meta text-[#b9a06a]" title={p.activity.detail}>
+            <span className="truncate font-mono text-meta text-lemon/85" title={p.activity.detail}>
               {p.activity.detail}
             </span>
           </div>
@@ -655,6 +659,22 @@ export function NoteDetail(p: NoteDetailProps) {
       </Dialog>
 
       <Confirm
+        open={ask === "merge"}
+        onOpenChange={(v) => !v && setAsk(null)}
+        title={`Merge into ${base}`}
+        body={
+          <>
+            Merges this branch into <b>{base}</b> in your repository, on this machine. Nothing is
+            pushed. The branch and its worktree are tidied away afterwards.
+          </>
+        }
+        facts={facts}
+        confirmLabel="Merge"
+        busy={busy}
+        onConfirm={() => confirmAction(() => p.onReview("merge"))}
+      />
+
+      <Confirm
         open={ask === "discard"}
         onOpenChange={(v) => !v && setAsk(null)}
         title="Discard this work"
@@ -749,7 +769,7 @@ function Refused({
   const more = frames.length - shown.length
 
   return (
-    <div className="border-y border-[#3d2621] bg-[#1a1211] px-4 py-3">
+    <div className="border-y border-berry/25 bg-berry-bg px-4 py-3">
       <div className="flex items-center gap-1.5 text-micro font-medium uppercase tracking-[0.08em] text-berry">
         <span className="h-1.5 w-1.5 rounded-full bg-berry" />
         Refused — repo only
@@ -759,7 +779,7 @@ function Refused({
         {shown.map((f) => (
           <li
             key={`${f.runId}-${f.seq}`}
-            className="truncate font-mono text-meta leading-[1.6] text-[#e8b3a8]"
+            className="truncate font-mono text-meta leading-[1.6] text-berry/85"
             title={f.text}
           >
             {f.text}
@@ -819,7 +839,7 @@ function PolicyToggle({
         variant={full ? "outline" : "ghost"}
         disabled={disabled}
         onClick={() => onChange(full ? "repo" : "full")}
-        className={cn(full && "border-[#4a3a20] bg-[#241d10] text-lemon")}
+        className={cn(full && "border-lemon/30 bg-lemon-bg text-lemon")}
       >
         <span className={cn("h-1.5 w-1.5 rounded-full", full ? "bg-lemon" : "bg-faint")} />
         {full ? "Full access" : "Repo only"}
