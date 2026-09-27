@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Setup is picked with the arrow keys** — ↑ ↓ and Enter, with the numbers
+  still working as shortcuts.
+- **The install script updates.** Run it where kandy is already installed and
+  it says so, updates, and reports *0.2.0-alpha.5 → 0.2.0-alpha.6* (or that
+  you're already on the newest) — without asking the setup questions again.
+
 ## 0.2.0-alpha.6 — opencode with no subscription
 
 September 2026. **Extremely experimental** — see [Status](/status). Install or

@@ -7,6 +7,7 @@ import { CONFIG_DIR, DB_PATH } from "../paths.js"
 import { explain, tailscaleStatus } from "../tailscale.js"
 import { banner, bold, dim, faint, lemon, mint } from "./banner.js"
 import { cmdJoin } from "./join.js"
+import { choose } from "./choose.js"
 import type { Policy } from "@kandy/core"
 
 /**
@@ -90,27 +91,32 @@ export async function runSetup(opts: { board?: boolean } = {}): Promise<boolean>
   out()
 
   out(`  ${bold("How will you use it?")}`)
-  out(`    ${bold("1")}  Just me, on this machine          ${faint("(enter)")}`)
-  out(`    ${bold("2")}  Join my team's hub`)
-  out(`    ${bold("3")}  Start a hub for my team`)
-  out()
+  const MODES: Mode[] = ["solo", "team", "hub"]
+  const mode = MODES[
+    await choose([
+      { label: "Just me, on this machine" },
+      { label: "Join my team's hub" },
+      { label: "Start a hub for my team" },
+    ])
+  ]!
 
+  // A hub runs no agents, so it has nothing to ask about access.
+  let policy: Policy | undefined
+  if (mode !== "hub") {
+    out()
+    out(`  ${bold("What may agents do?")} ${faint("for new boards — each board can change it later")}`)
+    const pick = await choose([
+      { label: "Full access", hint: "run anything, never ask" },
+      { label: "Repo only", hint: "edit the worktree, ask before anything else" },
+    ])
+    policy = pick === 1 ? "repo" : "full"
+  }
+
+  // Typed answers — a hub's url, a yes or no — are read as lines, after the
+  // lists are done with the keyboard.
   const rl = createInterface({ input: process.stdin, output: process.stdout })
   const ask = async (q: string) => (await rl.question(q)).trim()
   try {
-    const pick = await ask(`  ${dim("›")} `)
-    const mode: Mode = pick === "2" ? "team" : pick === "3" ? "hub" : "solo"
-
-    // A hub runs no agents, so it has nothing to ask about access.
-    let policy: Policy | undefined
-    if (mode !== "hub") {
-      out()
-      out(`  ${bold("What may agents do?")} ${faint("for new boards — each board can change it later")}`)
-      out(`    ${bold("1")}  Full access: run anything, never ask   ${faint("(enter)")}`)
-      out(`    ${bold("2")}  Repo only: edit the worktree, ask before anything else`)
-      out()
-      policy = (await ask(`  ${dim("›")} `)) === "2" ? "repo" : "full"
-    }
 
     if (mode === "solo") {
       remember("solo", policy)

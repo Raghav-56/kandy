@@ -15,8 +15,12 @@ DOCS="https://hiteshbandhu.github.io/kandy/guide/getting-started"
 say() { printf '  %s\n' "$*"; }
 fail() { printf '\n  \033[31m%s\033[0m\n' "$1" >&2; shift; for l in "$@"; do say "$l" >&2; done; echo >&2; exit 1; }
 
+# Already here? Then this is an update, and says so.
+OLD=""
+if command -v kandy >/dev/null 2>&1; then OLD=$(kandy --version 2>/dev/null || true); fi
+
 echo
-say "installing kandy"
+if [ -n "$OLD" ]; then say "kandy $OLD is installed — updating to the newest release"; else say "installing kandy"; fi
 
 command -v node >/dev/null 2>&1 || fail "kandy needs Node.js 22 or newer, and there's no node here." \
   "Get it from https://nodejs.org (or: brew install node, fnm, nvm), then run this again."
@@ -26,7 +30,7 @@ MAJOR=$(node -p 'process.versions.node.split(".")[0]')
 command -v npm >/dev/null 2>&1 || fail "npm is missing — it ships with Node.js; reinstall Node from https://nodejs.org."
 
 # Stop a running kandy first, so the new version is what starts next.
-if command -v kandy >/dev/null 2>&1; then kandy stop >/dev/null 2>&1 || true; fi
+if [ -n "$OLD" ]; then kandy stop >/dev/null 2>&1 || true; fi
 
 if ! npm install -g --no-fund --no-audit --no-update-notifier --no-progress --loglevel=error "$URL"; then
   fail "npm couldn't install kandy." \
@@ -38,7 +42,10 @@ fi
 command -v kandy >/dev/null 2>&1 || fail "kandy installed, but it isn't on your PATH." \
   "npm put it in $(npm prefix -g)/bin — add that to PATH, then run: kandy"
 
-say "kandy $(kandy --version) installed"
+NEW=$(kandy --version)
+if [ -z "$OLD" ]; then say "kandy $NEW installed"
+elif [ "$OLD" = "$NEW" ]; then say "kandy $NEW — already the newest"
+else say "kandy updated: $OLD → $NEW"; fi
 
 # The first-run questions need a keyboard. This script is being read from a
 # pipe, so the terminal is reached directly; with none (CI, a script), skip.

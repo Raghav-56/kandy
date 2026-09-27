@@ -18,8 +18,12 @@ function Fail([string]$msg, [string[]]$more = @()) {
   throw "kandy was not installed."
 }
 
+# Already here? Then this is an update, and says so.
+$old = $null
+if (Get-Command kandy -ErrorAction SilentlyContinue) { try { $old = (kandy --version).Trim() } catch {} }
+
 Write-Host ""
-Write-Host "  installing kandy"
+if ($old) { Write-Host "  kandy $old is installed — updating to the newest release" } else { Write-Host "  installing kandy" }
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
   Fail "kandy needs Node.js 22 or newer, and there's no node here." @("Get it from https://nodejs.org (or: winget install OpenJS.NodeJS.LTS), then run this again.")
@@ -29,7 +33,7 @@ if ($major -lt 22) {
   Fail "kandy needs Node.js 22 or newer; this is $(node -v)." @("Update it from https://nodejs.org, then run this again.")
 }
 
-if (Get-Command kandy -ErrorAction SilentlyContinue) { try { kandy stop *> $null } catch {} }
+if ($old) { try { kandy stop *> $null } catch {} }
 
 npm install -g --no-fund --no-audit --no-update-notifier --no-progress --loglevel=error $url
 if ($LASTEXITCODE -ne 0) { Fail "npm couldn't install kandy." @("See the error above, then run this again.") }
@@ -38,6 +42,9 @@ if ($LASTEXITCODE -ne 0) { Fail "npm couldn't install kandy." @("See the error a
 $prefix = (npm prefix -g).Trim()
 if (-not (($env:Path -split ';') -contains $prefix)) { $env:Path = "$prefix;$env:Path" }
 
-Write-Host "  kandy $(kandy --version) installed"
+$new = (kandy --version).Trim()
+if (-not $old) { Write-Host "  kandy $new installed" }
+elseif ($old -eq $new) { Write-Host "  kandy $new — already the newest" }
+else { Write-Host "  kandy updated: $old → $new" }
 kandy setup --first-run
 Write-Host ""
