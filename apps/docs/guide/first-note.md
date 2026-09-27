@@ -35,7 +35,7 @@ agent starts in a fresh checkout it has never seen:
 - **Say what not to touch.** Agents are literal, and a fresh worktree looks like
   fair game.
 
-![The board: three notes ready to review, one open with its diff](/shots/list.png)
+<p class="k-shot"><img class="only-light" src="/shots/site/board-light.webp" alt="The board: notes waiting on you, ready to review, in the backlog, and done"><img class="only-dark" src="/shots/site/board-dark.webp" alt="The board: notes waiting on you, ready to review, in the backlog, and done"></p>
 
 ## What happens
 

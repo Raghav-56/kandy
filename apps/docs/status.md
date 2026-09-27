@@ -53,9 +53,13 @@ worktree survives so the note can continue — but the turn in progress is lost.
 prices them from a public table and marks every such number `≈`. Your provider's
 billing page is the source of truth.
 
-**The terminal board shows agents' markdown raw** — `**bold**` and all. Some of
-its team actions (answering consent, giving to a machine) have only been tested
-against a fake board.
+**Some terminal team actions are untested for real** — answering consent and
+giving a note to another machine have only been driven against a fake board.
+
+**Codex and Cursor can look signed in when they aren't.** kandy asks each CLI
+whether it's logged in, and Cursor says yes even when its token has expired; the
+run then fails with "Authentication required", and the note shows only that it
+failed. Signing in again (`cursor-agent login`, `codex login`) fixes it.
 
 **A team needs Tailscale.** Without it a hub works on a single shared token,
 which suits one person with two machines, not a team.
@@ -68,5 +72,5 @@ the handoff is the hard part.
 ## Coming next
 
 Roughly in order: permission prompts for Codex, Cursor and opencode · publishing
-to npm under a name of its own · real two-laptop testing of teams · markdown in the terminal board ·
+to npm under a name of its own · real two-laptop testing of teams ·
 keeping runs alive across a daemon restart.

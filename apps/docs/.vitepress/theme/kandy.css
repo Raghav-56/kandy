@@ -14,6 +14,7 @@
   /* One colour. A three-stop rainbow on a five-letter word reads as a toy,
      and the headline underneath is what should be carrying the page. */
   --vp-home-hero-name-color: var(--vp-c-brand-1);
+  --k-lemon: #a8802a;
 }
 
 .dark {
@@ -27,6 +28,7 @@
   --vp-c-brand-1: #e87fa4;
   --vp-c-brand-2: #ef93b3;
   --vp-c-brand-3: #d96b91;
+  --k-lemon: #e8c56a;
 }
 
 /* Long shell examples are the norm here; let them scroll rather than wrap. */
@@ -79,3 +81,9 @@
 .dark .k-banner { background: #2a2414; color: #e8c56a; border-bottom-color: rgb(232 197 106 / 0.25); }
 :root { --vp-layout-top-height: 37px; }
 @media (max-width: 640px) { .k-banner-more { display: none; } }
+
+/* Screenshots that come in both themes show the one you're reading in. */
+.dark .only-light { display: none; }
+html:not(.dark) .only-dark { display: none; }
+.vp-doc .k-shot img { border: 1px solid var(--vp-c-divider); border-radius: 12px; margin: 20px 0 4px; }
+.vp-doc .k-shot img[src*="pane-"] { max-width: 420px; max-height: 520px; object-fit: cover; object-position: top; }

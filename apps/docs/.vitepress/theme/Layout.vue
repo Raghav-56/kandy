@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DefaultTheme from "vitepress/theme"
 import Backdrop from "./Backdrop.vue"
-import Hero from "./Hero.vue"
+import Home from "./Home.vue"
 
 const { Layout } = DefaultTheme
 </script>
@@ -18,11 +18,11 @@ const { Layout } = DefaultTheme
         <a href="/status">What that means →</a>
       </div>
     </template>
-    <!-- The whole hero is ours: VitePress's `hero` frontmatter is unset, so its
-         own hero renders nothing and this stands in its place. -->
+    <!-- The whole home page is ours: VitePress's `hero` frontmatter is unset,
+         so its own hero renders nothing, and index.md has no body. -->
     <template #home-hero-before>
       <Backdrop />
-      <Hero />
+      <Home />
     </template>
   </Layout>
 </template>

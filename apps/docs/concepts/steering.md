@@ -25,7 +25,7 @@ note lands in review.
 
 Steering after that point becomes a follow-up run. Same intent, one turn later.
 
-![A run in review: what the agent said, its briefing, and a box to answer back](/shots/review.png)
+<p class="k-shot"><img class="only-light" src="/shots/site/streampane-light.webp" alt="A finished run: the agent's own summary, what it cost, and a box to say what to change"><img class="only-dark" src="/shots/site/streampane-dark.webp" alt="A finished run: the agent's own summary, what it cost, and a box to say what to change"></p>
 
 ## Attachments
 

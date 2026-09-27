@@ -70,6 +70,8 @@ comes to the board. It can only be answered by the person whose machine the
 agent is running on — the hub relays the question and the answer, and decides
 neither.
 
+<p class="k-shot"><img class="only-light" src="/shots/site/askpane-light.webp" alt="A note waiting on you: the agent asks to run a shell command, with Allow once and Deny"><img class="only-dark" src="/shots/site/askpane-dark.webp" alt="A note waiting on you: the agent asks to run a shell command, with Allow once and Deny"></p>
+
 ## Secrets
 
 - **Agent logins** never leave the machine. kandy starts the CLI; it never reads

@@ -76,6 +76,8 @@ Two levels, per note:
   with a one-click way to continue with full access.
 - **Full access** — it can run anything, without asking.
 
+<p class="k-shot"><img class="only-light" src="/shots/site/askpane-light.webp" alt="A note waiting on you: the agent asks to run a shell command, with Allow once and Deny"><img class="only-dark" src="/shots/site/askpane-dark.webp" alt="A note waiting on you: the agent asks to run a shell command, with Allow once and Deny"></p>
+
 A worktree bounds what an agent can damage *inside the repository*. It does
 nothing about `$HOME` or the network, which is why full access is a decision
 kandy asks you to make rather than one it makes for you.

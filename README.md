@@ -32,7 +32,10 @@ Not `npm i -g kandy` — that name on npm is someone else's package. Docs:
 [getting started](apps/docs/guide/getting-started.md) ·
 [the three modes](apps/docs/modes/index.md) · [CLI](apps/docs/guide/cli.md).
 
-![The kandy board: notes in flight, waiting on review, and done](apps/docs/public/shots/board.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="apps/docs/public/shots/site/review-dark.webp">
+  <img alt="The kandy board: notes waiting on you and ready to review, one open beside its diff" src="apps/docs/public/shots/site/review-light.webp">
+</picture>
 
 ## What works
 

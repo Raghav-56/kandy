@@ -13,7 +13,7 @@ write*. In the terminal, <kbd>]</kbd> and <kbd>[</kbd> jump between files.
 Full screen puts the stream and the diff side by side — reading what the agent
 said it did next to what it actually did is the real review motion.
 
-![A finished note: its diff, what it cost, and merge, open a PR, or discard](/shots/review.png)
+<p class="k-shot"><img class="only-light" src="/shots/site/review-light.webp" alt="A finished note open beside the board: its diff, what it cost, and Merge into main or Discard"><img class="only-dark" src="/shots/site/review-dark.webp" alt="A finished note open beside the board: its diff, what it cost, and Merge into main or Discard"></p>
 
 ## Three ways to finish
 

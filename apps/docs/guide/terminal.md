@@ -4,7 +4,7 @@ Type `kandy` in a terminal and the board opens right there — this repository's
 board if you're inside one. Everything the web board does for a day of work, you
 can do from the keyboard.
 
-![The terminal board: notes grouped by lane, what each changed, which agent ran it](/shots/terminal.png)
+![The terminal board: notes grouped by lane, what each changed, which agent ran it](/shots/site/terminal.webp)
 
 Piped, scripted or in CI, bare `kandy` prints a status summary instead — there
 is nobody to press keys. `kandy board` opens it explicitly.
@@ -30,7 +30,7 @@ question, or held for your permission.
 
 ## A note
 
-![A note in the terminal: the agent's summary, what it cost, and the keys for what to do next](/shots/terminal-note.png)
+![A note in the terminal: the agent's summary, what it cost, and the keys for what to do next](/shots/site/terminal-note.webp)
 
 The transcript streams live while the agent works, and follows the end until you
 scroll up. <kbd>G</kbd> jumps back and follows again.
