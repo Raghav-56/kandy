@@ -21,3 +21,6 @@ apps/docs/.vitepress/cache/
 apps/server/README.md
 apps/server/LICENSE
 apps/server/dist/
+
+# release tarballs (scripts/release.mjs)
+release/

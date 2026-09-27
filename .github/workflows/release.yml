@@ -1,0 +1,39 @@
+name: release
+
+# Push a tag like v0.2.0-alpha.2 and this builds the one file people install
+# and attaches it to a GitHub release. The docs install from
+# releases/latest/download/kandy.tgz, so a new release needs no doc changes.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run typecheck test build
+
+      - name: the tag matches the package
+        run: test "v$(node -p 'require("./apps/server/package.json").version')" = "$GITHUB_REF_NAME"
+
+      - run: node scripts/release.mjs --no-build
+
+      # The notes are the changelog's newest section: written once, in the repo.
+      - run: awk '/^## /{n++} n==1' CHANGELOG.md | tail -n +2 > release-notes.md
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/kandy.tgz release/kandy-*.tgz \
+            --title "kandy $GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag

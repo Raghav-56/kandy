@@ -11,9 +11,9 @@ on the home page are its own board — but it is not something to depend on yet.
   leaves a board unreadable, the fix is to delete
   `~/.local/state/kandy/` and start again. Your code is never at risk — notes
   work in their own worktrees and branches — but the board's history can be.
-- **It isn't published.** Install from a clone ([how](/guide/getting-started#install)).
-  The name `kandy` on npm belongs to someone else, so the install command will
-  change when it is published.
+- **It installs from GitHub, not npm.** One command, from the newest release
+  ([how](/guide/getting-started#install)). The name `kandy` on npm belongs to
+  someone else — never run `npm i -g kandy`.
 - **Nobody has audited it.** The security model is written down in
   [Who decides what](/modes/permissions) and tested, but it hasn't been reviewed
   by anyone else. Keep a hub on your tailnet — never expose one to the internet.
@@ -68,5 +68,5 @@ the handoff is the hard part.
 ## Coming next
 
 Roughly in order: permission prompts for Codex, Cursor and opencode · publishing
-to npm · real two-laptop testing of teams · markdown in the terminal board ·
+to npm under a name of its own · real two-laptop testing of teams · markdown in the terminal board ·
 keeping runs alive across a daemon restart.

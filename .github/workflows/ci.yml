@@ -36,25 +36,20 @@ jobs:
       - run: pnpm turbo run typecheck lint test build
 
       # The release path, exercised on every commit rather than discovered on
-      # release day. `pnpm pack` and not `npm pack`: only pnpm rewrites
-      # `workspace:*` into a real version, and an npm-packed tarball fails to
-      # install at all with EUNSUPPORTEDPROTOCOL.
-      - name: the tarball is installable and serves the board
+      # release day: the exact file a person installs, installed the way the
+      # docs say, into a prefix with nothing else in it.
+      - name: the release tarball installs and serves the board
         run: |
           set -euo pipefail
+          node scripts/release.mjs --no-build
           out="$(mktemp -d)"
-          for p in packages/core packages/client apps/server; do
-            (cd "$p" && pnpm pack --pack-destination "$out" >/dev/null)
-          done
-          cd "$out"
-          npm init -y >/dev/null
-          npm i --silent ./kandy-core-*.tgz ./kandy-client-*.tgz ./kandy-*.tgz
+          npm i -g --silent --prefix "$out/prefix" ./release/kandy.tgz
 
           # The board has to be inside the package. It was not, and the failure
           # was invisible in the repo because a sibling path happened to resolve.
-          test -f node_modules/kandy/dist/web/index.html
+          test -f "$out"/prefix/lib/node_modules/kandy/dist/web/index.html
 
-          XDG_STATE_HOME="$out/state" ./node_modules/.bin/kandy serve --port 4911 &
+          XDG_STATE_HOME="$out/state" "$out/prefix/bin/kandy" serve --port 4911 &
           for _ in $(seq 1 30); do
             curl -sf localhost:4911/health >/dev/null && break || sleep 1
           done

@@ -1,14 +1,13 @@
 # Install and first run
 
 ::: warning Extremely experimental
-kandy changes daily and is not published to npm yet. Install it from a clone,
-expect to `git pull` often, and don't point it at anything you can't afford to
-have an agent get wrong. [Status →](/status)
+kandy changes daily. Expect to update often, and don't point it at anything you
+can't afford to have an agent get wrong. [Status →](/status)
 :::
 
 ## What you need
 
-- **macOS or Linux**, **Node 22 or newer**, **pnpm**, and **git**.
+- **macOS or Linux**, **Node 22 or newer**, and **git**.
 - **At least one agent CLI, installed and signed in** — any of:
   [Claude Code](https://claude.com/claude-code) (`claude`),
   [Codex](https://developers.openai.com/codex/cli) (`codex login`),
@@ -22,18 +21,32 @@ have an agent get wrong. [Status →](/status)
 ## Install
 
 ```sh
-git clone https://github.com/hiteshbandhu/kandy.git
-cd kandy
-pnpm install
-pnpm build
-cd apps/server && pnpm link --global
+npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz
 ```
 
-That puts `kandy` on your PATH, pointing at your clone. To update:
+That's the newest release, from GitHub — one file, nothing else to fetch but
+two small dependencies. Check it worked:
 
 ```sh
-cd kandy && git pull && pnpm install && pnpm build
+kandy --version
 ```
+
+To update, run the same command again. To remove it, `npm rm -g kandy`.
+
+::: details Why not `npm i -g kandy`?
+The name `kandy` on npm belongs to an unrelated package, so that command would
+install a stranger's code. kandy installs from its GitHub releases until it has
+an npm name of its own.
+:::
+
+::: details From source, to follow `main`
+```sh
+git clone https://github.com/hiteshbandhu/kandy.git
+cd kandy && pnpm install && pnpm build
+cd apps/server && pnpm link --global
+```
+Update with `git pull && pnpm install && pnpm build` in the clone.
+:::
 
 ## First run
 

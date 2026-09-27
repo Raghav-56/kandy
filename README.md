@@ -20,7 +20,17 @@ you review without leaving the board.
 flight* and *what's blocked on me*. A board answers both at a glance. A scrollback
 answers neither.
 
-**Status:** pre-alpha, but it runs real work. kandy is developed using kandy.
+**Status: extremely experimental.** It runs real work — kandy is developed using
+kandy — but it changes daily. [What that means](apps/docs/status.md).
+
+```sh
+npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz
+cd your-repo && kandy
+```
+
+Not `npm i -g kandy` — that name on npm is someone else's package. Docs:
+[getting started](apps/docs/guide/getting-started.md) ·
+[the three modes](apps/docs/modes/index.md) · [CLI](apps/docs/guide/cli.md).
 
 ![The kandy board: notes in flight, waiting on review, and done](apps/docs/public/shots/board.png)
 
@@ -72,7 +82,7 @@ Read [`docs/01-architecture.md`](docs/01-architecture.md) for the reasoning, and
 | `packages/client` | Typed client for the server API. |
 | `apps/docs` | The documentation site (VitePress). `pnpm --filter @kandy/docs dev` |
 
-## Running it
+## Running it from source
 
 ```sh
 pnpm install

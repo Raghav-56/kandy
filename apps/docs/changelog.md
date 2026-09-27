@@ -2,8 +2,13 @@
 
 ## 0.2.0-alpha.1 — teams, capabilities, the terminal
 
-September 2026. **Extremely experimental** — see [Status](/status). Still not
-published; install from a clone.
+September 2026. **Extremely experimental** — see [Status](/status).
+
+**Installable.** One command, from the GitHub release — no clone:
+
+```sh
+npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz
+```
 
 ### Teams
 
