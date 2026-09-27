@@ -29,7 +29,7 @@ with what you ran and what it printed.
 | Notes, worktrees, review, merge | used daily on this repository |
 | Claude Code | used daily |
 | Codex, Cursor | real runs, less often |
-| The terminal board | driven for real: a note written, run by Claude, reviewed and merged from the keyboard |
+| The terminal board | driven for real: the kanban by keyboard and mouse (click, double-click, drag, wheel, tabs), a note run by Claude and merged; the team screen against a local hub — inviting, changing a role, declining a teammate's request |
 | Skills and MCP | real Claude and Cursor runs calling a board's MCP server |
 | Teams — hub, join, identity | run once end to end on a real tailnet: a hub in Docker, a Mac joined to it, a note run through it |
 | Handoff between machines | two clones and two runners on one machine: Claude on one, Cursor continuing on the other |
@@ -53,8 +53,10 @@ worktree survives so the note can continue — but the turn in progress is lost.
 prices them from a public table and marks every such number `≈`. Your provider's
 billing page is the source of truth.
 
-**Some terminal team actions are untested for real** — answering consent and
-giving a note to another machine have only been driven against a fake board.
+**Giving a note to another machine from the terminal** (<kbd>g</kbd>) hasn't been
+driven against a real second machine — only through the API. The mouse needs a
+terminal that reports it (most do: iTerm2, Terminal.app, kitty, WezTerm, the VS
+Code terminal); `KANDY_NO_MOUSE=1` turns it off.
 
 **Codex and Cursor can look signed in when they aren't.** kandy asks each CLI
 whether it's logged in, and Cursor says yes even when its token has expired; the

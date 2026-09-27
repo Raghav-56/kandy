@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- **The terminal board is a kanban.** Columns side by side, each note a sticky
+  note coloured by what it's waiting for; every note action works straight from
+  its card. → [The terminal board](/guide/terminal)
+- **The mouse**: click a card, double-click to open, drag to reorder or to act —
+  a draft dropped on Running runs, a review dropped on Done merges — scroll a
+  column, click a tab or a key in the footer. `KANDY_NO_MOUSE=1` turns it off.
+- **Several boards**, as tabs with how many notes need you on each; `[` `]` to
+  switch, `B` to add a repository.
+- **The team, in the terminal**: `t` shows who may run notes on this machine
+  (and changes it), the machines connected, the people and their roles — owners
+  invite and change roles from there — and what everyone did.
+- **A runner reconnects when its hub goes quiet**, rather than sitting "online"
+  on a dead connection after a network drop or a hub restart.
+- Team activity names who asked, not whose machine wrote it down: *bob asked to
+  run «…» on alice-laptop*.
+
 ## 0.2.0-alpha.2 — a first run that works
 
 September 2026. **Extremely experimental** — see [Status](/status). Install or

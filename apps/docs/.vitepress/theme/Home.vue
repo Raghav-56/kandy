@@ -184,13 +184,15 @@ const MODES = [
           <p class="kh-eyebrow">The terminal</p>
           <h2>The same board, where you already are.</h2>
           <p>
-            <code>kandy</code> opens the board in your terminal. Run, steer, read the diff, merge,
-            answer an agent — all from the keyboard, against the same notes as the browser.
+            <code>kandy</code> opens the board in your terminal: columns of sticky notes, coloured
+            by what each is waiting for. Run, steer, read the diff, merge, answer an agent,
+            switch boards — from the keyboard or with the mouse, against the same notes as the
+            browser.
           </p>
           <p><a :href="withBase('/guide/terminal')">The terminal board →</a></p>
         </div>
         <div class="kh-frame kh-frame-term">
-          <img :src="withBase('/shots/site/terminal-note.webp')" alt="kandy in a terminal: a finished note with the agent's summary, and keys to diff, merge or revise" />
+          <img :src="withBase('/shots/site/terminal-kanban.webp')" alt="kandy in a terminal: Inbox, Queued, Running, Review and Done side by side, each note a card coloured by its state" />
         </div>
       </div>
 

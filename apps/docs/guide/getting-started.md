@@ -100,13 +100,14 @@ found signed in, and asks one question:
   should live, and offers to start one. → [Run a hub](/modes/hub)
 
 Choosing **just me** turns this repository into a board and opens it, right in
-the terminal:
+the terminal — a kanban, one column per stage, with more columns off to the right
+(`2›`) when the terminal is narrow:
 
 ```
- ▮▮▮ kandy  pomodoro  ~/Developer/pomodoro                          0 need you · ● live
+ ▮▮▮  pomodoro   +                                              0 need you · ● live
 ────────────────────────────────────────────────────────────────────────────────────
-
-  No notes yet — press n to write one.
+INBOX 0 ──────────────────── QUEUED 0 ────────────────── RUNNING 0 ────────────── 2›
+ n writes a note              —                           nothing running
 ```
 
 It never asks in a script, a pipe or CI, and never asks someone who already has
@@ -181,15 +182,21 @@ a guess and a change you can trust. More in [Your first note](/guide/first-note)
 Open the board with `kandy` — or `kandy ls` for a quick list:
 
 ```
- ▮▮▮ kandy  pomodoro  ~/Developer/pomodoro          1 running · 0 need you · ● live
+ ▮▮▮  pomodoro   +                                  1 running · 0 need you · ● live
 ────────────────────────────────────────────────────────────────────────────────────
- RUNNING 1 ────────────────────────────────────────────────────────────────────────
- › ⠸ Reset the timer with the R key                                     claude  12s
+INBOX 0 ──────────────────── QUEUED 0 ────────────────── RUNNING 1 ────────────── 2›
+ n writes a note              —                          ╭─────────────────────────╮
+                                                         │ Reset the timer with    │
+                                                         │ the R key               │
+                                                         │ ⠇ running     claude 3s │
+                                                         ╰─────────────────────────╯
 ```
 
-Press <kbd>Enter</kbd> on a note to follow it live: every file it reads, every
-edit, every command. <kbd>m</kbd> sends it a message mid-run; <kbd>x</kbd>
-cancels it. You don't have to watch — that's the point — but you can.
+Each note is a card, coloured by what it's waiting for — blue while it runs.
+Move with the arrow keys or click; press <kbd>Enter</kbd> or double-click to
+follow it live: every file it reads, every edit, every command. <kbd>m</kbd>
+sends it a message mid-run; <kbd>x</kbd> cancels it. You don't have to watch —
+that's the point — but you can. [Every key, and the mouse →](/guide/terminal)
 
 In the browser (`kandy open`) it's the same board:
 
