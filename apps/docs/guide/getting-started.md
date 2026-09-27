@@ -20,7 +20,7 @@ You need three things kandy doesn't install for you.
 
 | | Check | Why |
 | --- | --- | --- |
-| **macOS or Linux** | — | Windows hasn't been tried. |
+| **macOS or Linux** | — | Windows installs and runs, but has barely been tried ([Status](/status)). |
 | **Node 22 or newer** | `node --version` | kandy stores its board with Node's built-in SQLite, which arrived in 22. |
 | **git** | `git --version` | Every note runs in its own git worktree, on its own branch. |
 

@@ -40,11 +40,30 @@ type Pending = {
   timer: ReturnType<typeof setTimeout>
 }
 
+/** Three missed check-ins (runners send one every 20s). */
+const STALE_MS = 60_000
+
 export class Runners {
   private runners = new Map<RunnerId, Connected>()
   private pending = new Map<string, Pending>()
 
-  constructor(private readonly engine: Engine) {}
+  constructor(private readonly engine: Engine) {
+    /*
+     * A runner can vanish without its connection closing — a process killed
+     * with its terminal, a laptop that slept — and a proxy in between (such
+     * as `tailscale serve`) may hold the socket open indefinitely. Runners
+     * check in every 20s; one silent for a minute is dropped, which runs the
+     * ordinary "went offline" path below.
+     */
+    setInterval(() => this.sweep(), 15_000).unref()
+  }
+
+  /** Drop runners not heard from in `staleMs`. Public for tests. */
+  sweep(now = Date.now(), staleMs = STALE_MS): void {
+    for (const r of this.runners.values()) {
+      if (r.stream && now - r.lastSeen > staleMs) r.stream.destroy()
+    }
+  }
 
   // ── what a runner sends ─────────────────────────────────────────────────
 

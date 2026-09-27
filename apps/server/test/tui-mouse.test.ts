@@ -43,3 +43,11 @@ test("the mouse can be turned off, and is never asked for without a terminal", (
   assert.equal(mouseWanted({ KANDY_NO_MOUSE: "0" }, true), true)
   assert.equal(mouseWanted({}, false), false)
 })
+
+test("on Windows the mouse is left to the terminal unless asked for", () => {
+  // Node drops the Windows console's mouse events; asking for them only
+  // takes text selection away.
+  assert.equal(mouseWanted({}, true, "win32"), false)
+  assert.equal(mouseWanted({ KANDY_MOUSE: "1" }, true, "win32"), true)
+  assert.equal(mouseWanted({}, true, "darwin"), true)
+})

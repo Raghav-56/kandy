@@ -62,8 +62,22 @@ export function clickCounter(windowMs = 400) {
   }
 }
 
-/** Whether to turn the mouse on at all: off with KANDY_NO_MOUSE, and never without a terminal. */
-export function mouseWanted(env: NodeJS.ProcessEnv = process.env, tty = !!process.stdout.isTTY): boolean {
+/**
+ * Whether to turn the mouse on at all: off with KANDY_NO_MOUSE, and never
+ * without a terminal.
+ *
+ * Off by default on Windows: Node reads the Windows console as key events and
+ * drops mouse events, so no report would ever arrive — and asking for them
+ * would still take the terminal's own text selection away. KANDY_MOUSE=1 turns
+ * it on for a setup that does pass them through.
+ */
+export function mouseWanted(
+  env: NodeJS.ProcessEnv = process.env,
+  tty = !!process.stdout.isTTY,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
   const off = env["KANDY_NO_MOUSE"]
-  return tty && (off === undefined || off === "" || off === "0")
+  if (!tty || (off !== undefined && off !== "" && off !== "0")) return false
+  if (platform === "win32") return env["KANDY_MOUSE"] === "1"
+  return true
 }

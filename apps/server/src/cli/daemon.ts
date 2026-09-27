@@ -51,7 +51,7 @@ export async function ensureUp(port = DEFAULT_PORT): Promise<boolean> {
   if (hub) return ensureJoined(hub)
   if (await isUp(port)) return true
 
-  const entry = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../cli.js")
+  const entry = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../bin.js")
   const child = spawn(process.execPath, [entry, "serve", "--port", String(port)], {
     detached: true,
     stdio: "ignore",
@@ -93,7 +93,7 @@ async function ensureJoined(hub: Joined): Promise<boolean> {
 export function startRunner(): void {
   mkdirSync(path.dirname(RUNNER_LOG), { recursive: true })
   const log = openSync(RUNNER_LOG, "a")
-  const entry = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../cli.js")
+  const entry = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../bin.js")
   const child = spawn(process.execPath, [entry, "runner", "--json"], {
     detached: true,
     stdio: ["ignore", log, log],

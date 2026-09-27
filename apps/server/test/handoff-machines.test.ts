@@ -125,3 +125,12 @@ test("a handed note moves to its new machine, loses its old checkout, and rememb
   assert.equal(n.worktree, null, "Alice's checkout path means nothing on Bob's machine")
   assert.deepEqual(n.handoff, { branch: "kandy/n1", from: "alice-mbp", by: "alice@example.com", at: 5 })
 })
+
+test("a Windows path to a repository is a path, however it was typed", () => {
+  // Read as scp syntax, "C:\repos\app.git" was an ssh host called "C".
+  const a = normalizeRemote("C:\\repos\\app.git")
+  assert.equal(a, "file:C:/repos/app")
+  assert.equal(normalizeRemote("C:/repos/app"), a)
+  assert.equal(normalizeRemote("file:///C:/repos/app.git"), a)
+  assert.notEqual(normalizeRemote("git@github.com:acme/app.git"), a)
+})

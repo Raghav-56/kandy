@@ -16,4 +16,17 @@ if (major < 22) {
   )
   process.exit(1)
 }
+/*
+ * Node 22 prints "ExperimentalWarning: SQLite is an experimental feature" on
+ * every run — above every command's output, for most people's Node. kandy has
+ * chosen node:sqlite knowingly; that one warning is dropped and every other
+ * warning still shows.
+ */
+const emitWarning = process.emitWarning.bind(process)
+process.emitWarning = ((warning: string | Error, ...rest: unknown[]) => {
+  const text = typeof warning === "string" ? warning : warning.message
+  if (/SQLite is an experimental feature/.test(text)) return
+  return (emitWarning as (...a: unknown[]) => void)(warning, ...rest)
+}) as typeof process.emitWarning
+
 await import("./cli.js")

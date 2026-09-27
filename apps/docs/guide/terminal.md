@@ -108,6 +108,10 @@ While kandy has the mouse, a plain drag doesn't select text — hold
 To keep the mouse for your terminal instead, start kandy with
 `KANDY_NO_MOUSE=1`.
 
+**On Windows the mouse is off**: Node reads the Windows console as keys only, so
+clicks never reach kandy — every key still works. `KANDY_MOUSE=1` turns it on for
+a setup that does pass them through.
+
 ### Moving a card between columns
 
 The columns aren't places a card can simply be put: kandy moves each note to the

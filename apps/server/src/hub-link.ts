@@ -24,6 +24,8 @@ export type Handlers = Record<string, (...args: never[]) => Promise<unknown>>
 
 /** Three of the hub's 15-second keep-alives. */
 const SILENCE_MS = 45_000
+/** Well inside the hub's one-minute limit for a silent runner. */
+const CHECK_IN_MS = 20_000
 
 export class HubLink {
   private stopped = false
@@ -44,6 +46,8 @@ export class HubLink {
       onStatus?: (s: "online" | "offline", why?: string) => void
       /** How long the stream may say nothing before it's treated as dead. */
       silenceMs?: number
+      /** How often to tell the hub this runner is still here. */
+      checkInMs?: number
     },
   ) {
     this.ready = new Promise((r) => (this.markReady = r))
@@ -119,6 +123,9 @@ export class HubLink {
       quiet = setTimeout(() => controller.abort(new Error("the hub went quiet")), this.opts.silenceMs ?? SILENCE_MS)
     }
     listen()
+    // The other direction: tell the hub we're here, so a runner that dies
+    // without closing its connection doesn't stay "online" there.
+    const checkIn = setInterval(() => void this.sendLog([]).catch(() => {}), this.opts.checkInMs ?? CHECK_IN_MS)
 
     const decoder = new SseDecoder()
     const text = new TextDecoder()
@@ -142,6 +149,7 @@ export class HubLink {
       }
     } finally {
       clearTimeout(quiet)
+      clearInterval(checkIn)
     }
     throw new Error("stream closed")
   }

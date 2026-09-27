@@ -37,6 +37,7 @@ ap.add_argument("--keys", default="")
 ap.add_argument("--cwd", default=os.getcwd())
 ap.add_argument("--settle", type=float, default=3.0, help="seconds to wait for the first screen")
 ap.add_argument("--html", action="store_true")
+ap.add_argument("--exec", action="store_true", help="run the arguments as a command, not as kandy's arguments (e.g. ssh -tt host kandy)")
 ap.add_argument("args", nargs=argparse.REMAINDER)
 opt = ap.parse_args()
 args = opt.args[1:] if opt.args[:1] == ["--"] else opt.args
@@ -45,6 +46,8 @@ env = dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor")
 pid, fd = pty.fork()
 if pid == 0:
     os.chdir(opt.cwd)
+    if opt.exec:
+        os.execvpe(args[0], args, env)
     os.execvpe("node", ["node", os.path.abspath(CLI), *args], env)
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", opt.rows, opt.cols, 0, 0))
 screen = pyte.Screen(opt.cols, opt.rows)

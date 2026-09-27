@@ -347,13 +347,18 @@ export function normalizeRemote(url: string): string | null {
   // A remote on disk — a shared drive, or a bare repository beside the clones
   // in a test. Resolved through symlinks, because two people naming the same
   // directory through different links are naming one repository.
-  if (u.startsWith("/") || u.startsWith("file://")) {
-    const p = u.replace(/^file:\/\//, "")
+  // On Windows that's C:\… or C:/…, which would otherwise read as an ssh
+  // host called "C". Backslashes become slashes, so one repository has one
+  // spelling however it was typed.
+  if (u.startsWith("/") || u.startsWith("file://") || /^[A-Za-z]:[\\/]/.test(u)) {
+    const p = u.replace(/^file:\/\/\/?(?=[A-Za-z]:)/, "").replace(/^file:\/\//, "")
+    let real = p
     try {
-      return `file:${realpathSync(p).replace(/\/+$/, "").replace(/\.git$/, "")}`
+      real = realpathSync(p)
     } catch {
-      return `file:${p.replace(/\/+$/, "").replace(/\.git$/, "")}`
+      // Not on this disk; keep what was written.
     }
+    return `file:${real.replace(/\\/g, "/").replace(/\/+$/, "").replace(/\.git$/, "")}`
   }
   const scp = /^(?:[^@/]+@)?([^:/]+):(?!\/)(.+)$/.exec(u)
   let host: string, rest: string
@@ -480,7 +485,8 @@ export async function checkRepo(p: string): Promise<{
     remote: null,
     error: null,
   }
-  if (!p.startsWith("/")) return { ...base, error: "path must be absolute" }
+  // path.isAbsolute, not a leading "/": on Windows an absolute path is C:\…
+  if (!path.isAbsolute(p)) return { ...base, error: "path must be absolute" }
   if (!existsSync(p)) return { ...base, error: "no such directory" }
 
   try {

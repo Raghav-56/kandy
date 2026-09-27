@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Windows, first contact.** kandy now installs and runs on Windows 10: a
+  repository path like `C:\\Users\\…\\my repos\\app` was refused as "not
+  absolute", and a Windows remote read as an ssh host called `C`. The mouse is
+  left to the terminal there, since Node drops Windows console mouse events.
+- **No more SQLite warning** above every command on Node 22.
+- **A runner that vanished shows as offline.** Runners check in every 20s and the
+  hub drops one it hasn't heard from in a minute — before, a runner killed
+  behind `tailscale serve` stayed "online" and teammates' notes waited for it.
+
 - **The terminal board is a kanban.** Columns side by side, each note a sticky
   note coloured by what it's waiting for; every note action works straight from
   its card. → [The terminal board](https://hiteshbandhu.github.io/kandy/guide/terminal)

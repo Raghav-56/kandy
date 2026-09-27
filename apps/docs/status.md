@@ -17,7 +17,10 @@ on the home page are its own board — but it is not something to depend on yet.
 - **Nobody has audited it.** The security model is written down in
   [Who decides what](/modes/permissions) and tested, but it hasn't been reviewed
   by anyone else. Keep a hub on your tailnet — never expose one to the internet.
-- **macOS and Linux only.** Windows hasn't been tried.
+- **macOS and Linux first; Windows barely tried.** kandy installs and runs on
+  Windows 10, and a Windows machine has joined a team hub — but no note has run
+  there yet, the mouse doesn't work in Windows terminals, and a runner started
+  over SSH ends when the SSH session does.
 
 If something breaks, [open an issue](https://github.com/hiteshbandhu/kandy/issues)
 with what you ran and what it printed.
