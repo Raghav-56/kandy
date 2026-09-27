@@ -15,5 +15,7 @@
  */
 export const INSTALL_URL = "https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz"
 export const INSTALL_NPM = `npm i -g ${INSTALL_URL}`
+/** Redirects to the newest release's tag page, which names its version. */
+export const RELEASES_LATEST = "https://github.com/hiteshbandhu/kandy/releases/latest"
 export const INSTALL_COMMAND = "curl -fsSL https://hiteshbandhu.github.io/kandy/install.sh | sh"
 export const INSTALL_COMMAND_WINDOWS = "irm https://hiteshbandhu.github.io/kandy/install.ps1 | iex"

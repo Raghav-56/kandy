@@ -16,6 +16,7 @@ import { ASK_TIMEOUT_MS, Permissions } from "./permission.js"
 import { loadToken } from "./auth.js"
 import { kandyVersion } from "./version.js"
 import { DB_PATH, TOKEN_PATH } from "./paths.js"
+import { portOwner } from "./port.js"
 import { hasWebBuild } from "./static.js"
 import { warmPrices } from "./pricing.js"
 import { banner, berry, bold, dim, faint, lemon, mint } from "./cli/banner.js"
@@ -75,32 +76,6 @@ function positionals(args: string[], valued: string[], bare: string[]): string[]
 }
 
 
-/**
- * Who already has the port, if anyone.
- *
- * Asked before anything is constructed, because starting a second daemon is
- * not merely noisy — `reconcile` below marks every run it finds in flight as
- * interrupted, and the two daemons share one database. The crash was the
- * harmless half of what used to happen.
- */
-async function portOwner(
-  port: number,
-): Promise<{ kandy: true; pid: number } | { kandy: false } | null> {
-  try {
-    const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      signal: AbortSignal.timeout(1500),
-    })
-    const body = (await res.json()) as { pid?: number }
-    return typeof body.pid === "number" ? { kandy: true, pid: body.pid } : { kandy: false }
-  } catch (err) {
-    // Refused means nobody is listening. Anything else — a socket that accepts
-    // and says something we cannot read — is somebody else's server.
-    const cause = (err as { cause?: { code?: string } }).cause
-    if (cause?.code === "ECONNREFUSED") return null
-    if (err instanceof DOMException && err.name === "TimeoutError") return { kandy: false }
-    return cause?.code ? { kandy: false } : null
-  }
-}
 
 /**
  * `kandy stop` — stop this machine's daemon.
@@ -292,7 +267,7 @@ async function main(): Promise<void> {
   const agent = strFlag(argv, "--agent") as AgentId | undefined
   const noRun = argv.includes("--no-run")
   const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env", "--hub", "--token", "--https-port", "--repo", "--bind", "--role"]
-  const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json", "--tailscale", "--first-run"]
+  const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json", "--tailscale", "--first-run", "--check"]
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
   // and reporting "nothing here" is worse than refusing it.
@@ -452,6 +427,11 @@ async function main(): Promise<void> {
     case "stop":
       process.exit(await stop(port))
       break
+    case "update": {
+      const { cmdUpdate } = await import("./cli/update.js")
+      process.exit(await cmdUpdate({ port, check: argv.includes("--check") }))
+      break
+    }
     case "setup":
       // From the install script: only a machine that hasn't been set up, and
       // no board after — the terminal it runs in is the installer's.

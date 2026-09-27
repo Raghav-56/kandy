@@ -77,8 +77,8 @@ kandy --version
 0.2.0-alpha.5
 ```
 
-To **update**, run the install command again — the script stops a running
-kandy first, so the next command starts the new version. To **remove** it,
+To **update**, `kandy update` — or run the install command again. Either
+stops a running kandy first, so the next command starts the new version. To **remove** it,
 `npm rm -g kandy` — your boards stay in `~/.local/state/kandy` until you delete
 that too.
 

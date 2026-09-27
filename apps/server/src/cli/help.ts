@@ -60,6 +60,7 @@ export async function printHelp(topic?: string): Promise<number> {
   out(head("this machine"))
   out(row("kandy status", "daemon or team, repos, agents"))
   out(row("kandy stop", "stop kandy here; any command starts it again"))
+  out(row("kandy update", "the newest release, in place"))
   out(row("kandy setup", "the first-run questions, again"))
   out(row("kandy gc", "reclaim disk from finished notes"))
 
@@ -211,6 +212,13 @@ const COMMANDS: Record<string, CommandHelp> = {
     does: [
       "Reclaim disk held by notes' checkouts. Finished notes lose theirs; notes in review keep",
       "theirs but lose node_modules and caches. Running notes and every branch are never touched.",
+    ],
+  },
+  update: {
+    usage: "kandy update [--check]",
+    does: [
+      "Install the newest release over this one, stopping the running kandy first.",
+      "--check only says whether there is a newer one.",
     ],
   },
   serve: { usage: "kandy serve [--port N] [--slots N] [--json]", does: ["Run this machine's daemon in the foreground. Other commands start it for you."] },

@@ -53,7 +53,8 @@ See [Skills and MCP servers](/guide/capabilities).
 ```sh
 kandy status [--json]            # daemon or team, repos, which agents are signed in
 kandy stop [--port N]            # stop kandy here; any command starts it again
-kandy setup                      # the first-run question, again
+kandy update [--check]           # the newest release, in place
+kandy setup                      # the first-run questions, again
 kandy gc [--dry-run] [--force]   # reclaim disk from finished notes
 kandy serve [--port N] [--slots N] [--json]   # the daemon, in the foreground
 kandy skill                      # let other agents queue work onto a board
@@ -76,8 +77,14 @@ isn't what keeps your agents alive.
 
 To stop it, `kandy stop`. Notes that were running show as **interrupted**, and
 **Resume** carries on where they stopped — the worktree and the agent's session
-are kept. `kandy stop` then any command is how you restart kandy, for instance
-after updating it.
+are kept. `kandy stop` then any command is how you restart kandy.
+
+`kandy update` asks GitHub for the newest release and, if it's newer, stops
+the running kandy (and runner) and installs it — then says what changed from
+what: *0.2.0-alpha.5 → 0.2.0-alpha.7*. `--check` only says whether there is
+one. Run from a source checkout, it tells you to `git pull` there instead of
+installing over it. It arrived in 0.2.0-alpha.7: on anything older, `kandy
+update` isn't a command yet — update with the install script instead.
 
 ## Environment
 

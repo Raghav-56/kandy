@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **`kandy update`** installs the newest release in place, stopping what's
+  running first, and says *0.2.0-alpha.5 → 0.2.0-alpha.7*. `--check` only
+  looks. (From here on — to get this release, use the install script.)
 - **opencode works with no subscription.** It runs its own free models without
   an account, but kandy called it *signed out* unless you'd logged in to a
   provider. Installed is now ready, and the model menu lists what
