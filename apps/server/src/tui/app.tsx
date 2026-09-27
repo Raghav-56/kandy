@@ -67,7 +67,7 @@ type Screen = { kind: "board" } | { kind: "note"; noteId: string } | { kind: "di
 type InputPurpose = "new" | "new-hold" | "message" | "revise" | "deny" | "filter"
 type Overlay =
   | { kind: "input"; purpose: InputPurpose; editor: Editor; noteId: string | null; prompt: PermissionPrompt | null }
-  | { kind: "confirm"; purpose: "merge" | "discard"; noteId: string }
+  | { kind: "confirm"; purpose: "merge" | "discard"; noteId: string; base?: string | null }
   | { kind: "pick"; purpose: "agent" | "board" | "runner"; title: string; items: PickItem[]; index: number; noteId: string | null }
 
 type PickItem = { id: string; label: string; hint: string }
@@ -496,7 +496,21 @@ export function App({ client, live, boards: initialBoards, boardId: initialBoard
         return setOverlay({ kind: "input", purpose: "message", editor: emptyEditor(), noteId: note.id, prompt: null })
       case "revise":
         return setOverlay({ kind: "input", purpose: "revise", editor: emptyEditor(), noteId: note.id, prompt: null })
-      case "merge":
+      case "merge": {
+        // Say which branch it lands on. Known already if the diff was opened;
+        // otherwise asked for, and filled in while the question is on screen.
+        const known = diff?.noteId === note.id ? diff.base : null
+        setOverlay({ kind: "confirm", purpose: "merge", noteId: note.id, base: known })
+        if (!known)
+          client.diff(note.id).then(
+            (d) =>
+              setOverlay((cur) =>
+                cur?.kind === "confirm" && cur.noteId === note.id ? { ...cur, base: d.baseBranch } : cur,
+              ),
+            () => {},
+          )
+        return
+      }
       case "discard":
         return setOverlay({ kind: "confirm", purpose: a.type, noteId: note.id })
       case "give": {
@@ -975,7 +989,10 @@ function statusLine(overlay: Overlay | null, toast: Toast | null, view: BoardVie
   if (overlay?.kind === "confirm") {
     const note = view?.notes.find((n) => n.id === overlay.noteId)
     const verb = overlay.purpose === "merge" ? "Merge" : "Discard"
-    const tail = overlay.purpose === "merge" ? " into the base branch?" : "? The branch and worktree are thrown away."
+    const tail =
+      overlay.purpose === "merge"
+        ? ` into ${overlay.base ?? "the base branch"}?`
+        : "? The branch and worktree are thrown away."
     return (
       <Text {...toneProps(p, overlay.purpose === "merge" ? "mint" : "berry")} bold wrap="truncate-end">
         {" " + truncate(`${verb} “${note?.title ?? "this note"}”${tail}  y / n`, width - 2)}

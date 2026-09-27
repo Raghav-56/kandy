@@ -7,7 +7,7 @@
  * can count them; `Follow` pins the view to the bottom until the reader
  * scrolls up, and re-pins when they come back down.
  */
-import type { Run, TranscriptFrame } from "@kandy/core"
+import { shortenCheckoutPaths, type Run, type TranscriptFrame } from "@kandy/core"
 import { agentLabel, formatDuration } from "./board.js"
 import type { Tone } from "./theme.js"
 import { truncate, wrap } from "./text.js"
@@ -68,7 +68,7 @@ function computeFrameRows(f: TranscriptFrame, width: number): TRow[] {
       const name = (f.meta ?? "tool").trim() || "tool"
       const label = truncate(name, Math.max(4, Math.floor(width / 3)))
       const indent = label.length + 1
-      const body = wrap(f.text, Math.max(8, width - indent))
+      const body = wrap(shortenCheckoutPaths(f.text), Math.max(8, width - indent))
       const shown = body.slice(0, TOOL_ROWS)
       const rows: TRow[] = shown.map((t, i) => [
         { text: i === 0 ? label + " " : " ".repeat(indent), tone: "dim", bold: i === 0 },

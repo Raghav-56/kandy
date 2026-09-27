@@ -3,14 +3,14 @@
   "version": "0.2.0-alpha.1",
   "type": "module",
   "bin": {
-    "kandy": "./dist/cli.js"
+    "kandy": "./dist/bin.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js && node scripts/stage-web.mjs",
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js dist/bin.js && node scripts/stage-web.mjs",
     "dev": "node --watch --experimental-strip-types src/cli.ts",
     "start": "node dist/cli.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.json && chmod +x dist/cli.js && node --test"
+    "test": "tsc -p tsconfig.json && chmod +x dist/cli.js dist/bin.js && node --test"
   },
   "dependencies": {
     "@kandy/client": "workspace:*",

@@ -70,3 +70,31 @@ test("the banner is suppressed under --json", async () => {
   assert.ok(!line.includes("▛"), "no box-drawing banner on a machine-readable stream")
   assert.doesNotThrow(() => JSON.parse(line))
 })
+
+test("kandy stop stops the daemon on its port, and says so when there is none", async () => {
+  // Restarting kandy used to mean finding its pid by hand.
+  const state = mkdtempSync(path.join(tmpdir(), "kandy-stop-"))
+  const env = { ...process.env, XDG_STATE_HOME: state, XDG_CONFIG_HOME: state, KANDY_LOCAL: "1", NO_COLOR: "1" }
+  const daemon = spawn("node", [CLI, "serve", "--port", "45773"], { env, stdio: "ignore" })
+  const up = async () => fetch("http://127.0.0.1:45773/health").then((r) => r.ok, () => false)
+  for (let i = 0; i < 40 && !(await up()); i++) await new Promise((r) => setTimeout(r, 250))
+  assert.equal(await up(), true, "daemon never came up")
+
+  const run = (): Promise<{ out: string; code: number | null }> =>
+    new Promise((resolve) => {
+      const c = spawn("node", [CLI, "stop", "--port", "45773"], { env })
+      let out = ""
+      c.stdout.on("data", (d: Buffer) => (out += d.toString()))
+      c.on("close", (code) => resolve({ out, code }))
+    })
+
+  const first = await run()
+  assert.equal(first.code, 0)
+  assert.match(first.out, /stopped/)
+  assert.equal(await up(), false)
+
+  const again = await run()
+  assert.equal(again.code, 0)
+  assert.match(again.out, /isn't running/)
+  daemon.kill()
+})

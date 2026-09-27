@@ -102,6 +102,40 @@ async function portOwner(
   }
 }
 
+/**
+ * `kandy stop` — stop this machine's daemon.
+ *
+ * Every other command starts it, so restarting kandy is "stop, then carry on";
+ * without this, it meant finding a process id by hand. Only ever stops kandy:
+ * whatever else might hold the port is left alone.
+ */
+async function stop(port: number): Promise<number> {
+  const owner = await portOwner(port)
+  if (!owner) {
+    process.stdout.write(`  ${dim(`kandy isn't running on :${port}`)}\n`)
+    return 0
+  }
+  if (!owner.kandy) {
+    process.stdout.write(`  ${lemon(`port ${port} is held by something that is not kandy`)} ${dim("— leaving it alone")}\n`)
+    return 1
+  }
+  try {
+    process.kill(owner.pid, "SIGTERM")
+  } catch {
+    // Gone between the question and the signal: that is what was wanted.
+  }
+  for (let i = 0; i < 40; i++) {
+    if (!(await portOwner(port))) break
+    await new Promise((r) => setTimeout(r, 250))
+  }
+  process.stdout.write(
+    `  ${mint("stopped")} ${dim(`kandy on :${port} (pid ${owner.pid})`)}\n` +
+      `  ${faint("Notes that were running show as interrupted — Resume carries on where they stopped.")}\n` +
+      `  ${faint("Any kandy command starts it again.")}\n`,
+  )
+  return 0
+}
+
 async function serve(args: string[]): Promise<void> {
   const port = intFlag(args, "--port", DEFAULT_PORT)
   const slots = intFlag(args, "--slots", DEFAULT_SLOTS)
@@ -414,6 +448,9 @@ async function main(): Promise<void> {
     }
     case "help":
       process.exit(await printHelp(rest[1]))
+      break
+    case "stop":
+      process.exit(await stop(port))
       break
     case "setup":
       if (await runSetup()) process.exit(await cmdBoard({ port }))

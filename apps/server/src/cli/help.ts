@@ -59,6 +59,7 @@ export async function printHelp(topic?: string): Promise<number> {
 
   out(head("this machine"))
   out(row("kandy status", "daemon or team, repos, agents"))
+  out(row("kandy stop", "stop kandy here; any command starts it again"))
   out(row("kandy setup", "the first-run questions, again"))
   out(row("kandy gc", "reclaim disk from finished notes"))
 
@@ -213,6 +214,13 @@ const COMMANDS: Record<string, CommandHelp> = {
     ],
   },
   serve: { usage: "kandy serve [--port N] [--slots N] [--json]", does: ["Run this machine's daemon in the foreground. Other commands start it for you."] },
+  stop: {
+    usage: "kandy stop [--port N]",
+    does: [
+      "Stop this machine's kandy. Notes that were running show as interrupted, and Resume",
+      "carries on where they stopped. Any kandy command starts it again.",
+    ],
+  },
   setup: { usage: "kandy setup", does: ["Ask the first-run question again: just me, join a team, or start a hub."] },
 }
 

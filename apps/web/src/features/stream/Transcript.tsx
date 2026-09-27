@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Eye, EyeOff } from "lucide-react"
-import type { TranscriptFrame } from "@kandy/core"
+import { shortenCheckoutPaths, type TranscriptFrame } from "@kandy/core"
 import { InlineEdit } from "@/features/notes/InlineEdit"
 import { Markdown } from "@/features/stream/Markdown"
 import { cn } from "@/lib/utils"
@@ -143,7 +143,7 @@ function Frame({ frame: f }: { frame: TranscriptFrame }) {
           {f.meta ?? "tool"}
         </span>
         <span className="truncate font-mono text-aux text-faint" title={f.text}>
-          {f.text}
+          {shortenCheckoutPaths(f.text)}
         </span>
       </div>
     )
