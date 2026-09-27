@@ -91,9 +91,10 @@ test("a zero cost is unpriced, not free", () => {
   assert.equal(usage.tokens, 12, "tokens still travel, so kandy can price it")
 })
 
-test("a finished tool is reported completed, never as still running", () => {
-  // opencode only emits tool_use once a call has completed or errored, so
-  // there is no started frame to pair with and none is invented.
+test("a finished tool reaches the transcript, and is not left running", () => {
+  // opencode only emits tool_use once a call has completed or errored. The
+  // runner writes a tool's line on "started", so a finished call arrives as
+  // both — completed alone was never written anywhere.
   const out = opencode.parse(
     line({
       type: "tool_use",
@@ -107,6 +108,7 @@ test("a finished tool is reported completed, never as still running", () => {
     }),
   )
   assert.deepEqual(out.filter((e) => e.kind === "tool"), [
+    { kind: "tool", tool: "shell", detail: "npm test", status: "started" },
     { kind: "tool", tool: "shell", detail: "npm test", status: "completed" },
   ])
 })

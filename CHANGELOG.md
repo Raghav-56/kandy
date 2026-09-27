@@ -1,15 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-alpha.3 — the terminal board is a kanban
 
-- **Windows, first contact.** kandy now installs and runs on Windows 10: a
-  repository path like `C:\\Users\\…\\my repos\\app` was refused as "not
-  absolute", and a Windows remote read as an ssh host called `C`. The mouse is
-  left to the terminal there, since Node drops Windows console mouse events.
-- **No more SQLite warning** above every command on Node 22.
-- **A runner that vanished shows as offline.** Runners check in every 20s and the
-  hub drops one it hasn't heard from in a minute — before, a runner killed
-  behind `tailscale serve` stayed "online" and teammates' notes waited for it.
+September 2026. **Extremely experimental** — see [Status](https://github.com/hiteshbandhu/kandy/tree/main/apps/docs/status.md). Install or
+update:
+
+```sh
+npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz
+kandy stop   # if kandy was already running, so the new version starts
+```
+
+### New
 
 - **The terminal board is a kanban.** Columns side by side, each note a sticky
   note coloured by what it's waiting for; every note action works straight from
@@ -26,6 +27,24 @@
   on a dead connection after a network drop or a hub restart.
 - Team activity names who asked, not whose machine wrote it down: *bob asked to
   run «…» on alice-laptop*.
+
+### Fixed
+
+- **opencode edited the wrong checkout.** opencode takes its directory from
+  `$PWD`, and kandy passed on the daemon's — so a note run with opencode changed
+  the folder the daemon was started in, and its own worktree showed +0 −0.
+  Every agent now gets its note's worktree as `PWD` too.
+- **opencode's tool calls never reached the transcript** or the card's live
+  activity: opencode reports a call only once it has finished, and those were
+  dropped. Checked against opencode 1.18 with a real run.
+- **Windows, first contact.** kandy now installs and runs on Windows 10: a
+  repository path like `C:\Users\…\my repos\app` was refused as "not
+  absolute", and a Windows remote read as an ssh host called `C`. The mouse is
+  left to the terminal there, since Node drops Windows console mouse events.
+- **No more SQLite warning** above every command on Node 22.
+- **A runner that vanished shows as offline.** Runners check in every 20s and the
+  hub drops one it hasn't heard from in a minute — before, a runner killed
+  behind `tailscale serve` stayed "online" and teammates' notes waited for it.
 
 ## 0.2.0-alpha.2 — a first run that works
 

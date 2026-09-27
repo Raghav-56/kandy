@@ -26,8 +26,9 @@ import type { AgentAdapter, AgentEvent } from "./types.js"
  *    is not loud: resume and follow-up runs just quietly stop working.
  *
  * 2. `tool_use` is only emitted once a tool has completed or errored, so there
- *    is no "started" frame to pair with. Reporting one anyway would leave every
- *    tool in the transcript looking permanently in-flight.
+ *    is no separate "started" frame. The runner writes a tool's line when it
+ *    starts, so a finished call is reported as both at once — reported as
+ *    completed alone, it never reached the transcript at all.
  *
  * 3. A permission refusal never becomes JSON. opencode prints it to the same
  *    stdout as a plain line — `! permission requested: bash (…); auto-rejecting`
@@ -178,7 +179,8 @@ const REFUSAL = /(permission requested: .*?; auto-rejecting)/
  * A finished tool call.
  *
  * opencode only emits `tool_use` once `state.status` is `completed` or
- * `error`, so there is never a started frame and none is invented.
+ * `error`. A success is handed on as started-then-completed, which is how the
+ * runner writes one transcript line for it; a failure is a line by itself.
  */
 function fromTool(part: Record<string, any>): AgentEvent[] {
   const state = (part["state"] ?? {}) as Record<string, any>
@@ -199,7 +201,10 @@ function fromTool(part: Record<string, any>): AgentEvent[] {
     return [{ kind: "tool", tool, detail: (detail || why).slice(0, 200), status: "failed" }]
   }
 
-  return [{ kind: "tool", tool, detail: detail.slice(0, 200), status: "completed" }]
+  return [
+    { kind: "tool", tool, detail: detail.slice(0, 200), status: "started" },
+    { kind: "tool", tool, detail: detail.slice(0, 200), status: "completed" },
+  ]
 }
 
 /** opencode's tool names, in kandy's vocabulary where the two disagree. */

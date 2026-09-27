@@ -541,7 +541,10 @@ export class Runner {
       cwd: worktree.path,
       // The child inherits the user's existing CLI credentials. We never read,
       // store, or forward a token ourselves.
-      env: { ...process.env, ...spec.env },
+      // PWD too: opencode takes its directory from $PWD rather than the
+      // process's own, and the daemon's is wherever it was started — so an
+      // inherited PWD had it editing that checkout instead of the note's.
+      env: { ...process.env, ...spec.env, PWD: worktree.path },
       // stdin stays open: it is how steering reaches agents that accept it.
       stdio: ["pipe", "pipe", "pipe"],
     })
