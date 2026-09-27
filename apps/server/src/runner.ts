@@ -69,18 +69,37 @@ type Live = {
   ask?: AskChannel
   /** Reverses whatever the adapter's `prepare` put in the worktree. */
   undo?: () => Promise<void>
-  /** Stopped for never saying anything; see SILENT_MS. */
+  /** When the agent last wrote anything at all, on stdout or stderr. */
+  lastHeard: number
+  /** Tools it said it started and hasn't said finished. */
+  openTools: number
+  /** Set once the silence is long enough to tell people about. */
+  quietSince: number | null
+  /** Stopped for saying nothing for far too long; see STALL_MS. */
   silent?: boolean
 }
 
-/**
- * How long an agent may say nothing at all — not one byte, on stdout or
- * stderr — before it's taken for stuck. Only a run that never started
- * talking: any output is a sign of work, and a long quiet stretch after it
- * (a slow build, a model thinking) is left alone. A free model that is
- * rate-limited can hang like this forever, and the note sat "running".
+/*
+ * An agent that goes quiet, as T3 Code and Vibe Kanban handle it: mostly by
+ * leaving it to a person. Vibe Kanban never times a run out; T3 Code gives its
+ * one watched agent ten minutes without progress, thirty while a tool is
+ * running, and pauses the clock while it waits on the user.
+ *
+ * So kandy warns early and stops late. After QUIET_MS without a byte the note
+ * says so, with a Stop beside it — it may be a rate-limited model, or a build
+ * that prints nothing. Only after STALL_MS (STALL_TOOL_MS while a tool it
+ * started is still running) is it stopped for you, failed with the reason, to
+ * retry. Any output resets both, and a question waiting on you stops the clock.
  */
-export const SILENT_MS = Number(process.env["KANDY_SILENT_MS"]) || 120_000
+const ms = (name: string, fallback: number) => Number(process.env[name]) || fallback
+export const QUIET_MS = ms("KANDY_QUIET_MS", 2 * 60_000)
+export const STALL_MS = ms("KANDY_STALL_MS", 10 * 60_000)
+export const STALL_TOOL_MS = ms("KANDY_STALL_TOOL_MS", 30 * 60_000)
+
+/** "45s", "10 min" — for saying how long something was quiet. */
+function span(t: number): string {
+  return t < 60_000 ? `${Math.round(t / 1000)}s` : `${Math.round(t / 60_000)} min`
+}
 
 type Queued = {
   runId: string
@@ -570,6 +589,9 @@ export class Runner {
       repoPath: view.board.repoPath,
       ...(ask ? { ask } : {}),
       ...(prepared ? { undo: prepared.undo } : {}),
+      lastHeard: Date.now(),
+      openTools: 0,
+      quietSince: null,
     })
 
     this.emit(
@@ -621,27 +643,56 @@ export class Runner {
       this.say(q.runId, "error", err.message)
     })
 
-    const heard = () => clearTimeout(silence)
-    const silence = setTimeout(() => {
-      const l = this.live.get(q.runId)
-      if (!l || l.child !== child) return
-      l.silent = true
-      this.say(
-        q.runId,
-        "error",
-        `${agentId} said nothing for ${SILENT_MS >= 60_000 ? `${Math.round(SILENT_MS / 60_000)} min` : `${Math.round(SILENT_MS / 1000)}s`}, so kandy stopped it — ` +
-          `often a model that's rate-limited or unreachable. Retry, or pick another model.`,
-      )
-      child.kill("SIGTERM")
-    }, SILENT_MS)
-    silence.unref?.()
-    child.stdout?.once("data", heard)
-    child.stderr?.once("data", heard)
+    const heard = () => this.heard(q.runId)
+    child.stdout?.on("data", heard)
+    child.stderr?.on("data", heard)
+    const watch = setInterval(() => this.watch(q.runId), Math.min(15_000, QUIET_MS / 4))
+    watch.unref?.()
 
     child.on("exit", (code, signal) => {
-      clearTimeout(silence)
+      clearInterval(watch)
       void this.finish(q.runId, q.noteId, code, signal)
     })
+  }
+
+  /** The agent wrote something: it's alive, whatever it said. */
+  private heard(runId: string): void {
+    const l = this.live.get(runId)
+    if (!l) return
+    l.lastHeard = Date.now()
+    if (l.quietSince !== null) {
+      l.quietSince = null
+      this.emit(event("run.quiet", { runId, since: null }))
+    }
+  }
+
+  /** How long it's been quiet, and whether that's worth a word or a stop. */
+  private watch(runId: string): void {
+    const l = this.live.get(runId)
+    if (!l || l.silent) return
+    const now = Date.now()
+    // Waiting on a person isn't being stuck. The clock starts again from the
+    // answer, not from the question.
+    if (this.getView(l.boardId)?.prompts.some((p) => p.runId === runId)) {
+      l.lastHeard = now
+      return
+    }
+    const quiet = now - l.lastHeard
+    if (quiet >= QUIET_MS && l.quietSince === null) {
+      l.quietSince = l.lastHeard
+      this.emit(event("run.quiet", { runId, since: l.lastHeard }))
+    }
+    const limit = l.openTools > 0 ? STALL_TOOL_MS : STALL_MS
+    if (quiet >= limit) {
+      l.silent = true
+      this.say(
+        runId,
+        "error",
+        `${l.agent} said nothing for ${span(quiet)}, so kandy stopped it — often a model that's ` +
+          `rate-limited or unreachable. Retry, or pick another model.`,
+      )
+      l.child.kill("SIGTERM")
+    }
   }
 
   /** Parse stdout line-by-line into events and transcript; stderr is captured raw. */
@@ -677,7 +728,10 @@ export class Runner {
             case "text":
               if (ev.text.trim()) this.say(runId, "assistant", ev.text)
               break
-            case "tool":
+            case "tool": {
+              // Open tools get the longer leash: a quiet test suite is working.
+              const open = this.live.get(runId)
+              if (open) open.openTools = Math.max(0, open.openTools + (ev.status === "started" ? 1 : -1))
               // One line per call, written when it starts. Adapters that
               // report completion separately would otherwise print every tool
               // twice, which reads like the agent did the work twice.
@@ -691,6 +745,7 @@ export class Runner {
                 this.emit(event("run.tool", { runId, tool: ev.tool, status: ev.status }))
               }
               break
+            }
             case "usage": {
               // Price it ourselves when the agent only counted tokens, and
               // record which of the two the number is.
@@ -863,7 +918,7 @@ export class Runner {
 
     // Stopped for silence is a failure, not something the user cancelled.
     const status = l?.silent ? "failed" : signal ? "cancelled" : code === 0 ? "succeeded" : "failed"
-    if (l?.silent && !error) error = `${l.agent} gave no output`
+    if (l?.silent && !error) error = `${l.agent} went quiet and was stopped`
     // Whatever was wrong with this agent's sign-in, it plainly is not now.
     if (status === "succeeded" && l) clearAuthFailure(l.agent)
     this.emit(event("run.finished", { runId, noteId, status, exitCode: code, error }))

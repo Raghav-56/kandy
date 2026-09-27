@@ -189,3 +189,15 @@ test("a card's text fits its width: two lines of title, then details that give w
   const wide = cardText(v, long as never, 44, NOW, 0).meta.map((s: { text: string }) => s.text).join("")
   assert.match(wide, /\+12 −0 claude/)
 })
+
+test("a quiet run turns its card yellow and says for how long", () => {
+  const n = note("q", { columnId: "c2", status: "running", agent: "opencode", runId: "r1" })
+  const run = { id: "r1", noteId: "q", agent: "opencode", status: "running", startedAt: NOW - 300_000, quietSince: NOW - 180_000 }
+  const v = view([n], { runs: [run] })
+  assert.equal(paperOf(v, n as never), "needs")
+  const meta = cardText(v, n as never, 40, NOW, 0).meta.map((s: { text: string }) => s.text).join("")
+  assert.match(meta, /no output 3m/)
+  // Talking again: back to an ordinary running card.
+  const talking = view([n], { runs: [{ ...run, quietSince: null }] })
+  assert.equal(paperOf(talking, n as never), "running")
+})

@@ -65,6 +65,8 @@ function detailOf(e: KandyEvent): string {
       return `${e.data.kind}: ${clip(e.data.detail, 60)}`
     case "run.unblocked":
       return e.data.decision
+    case "run.quiet":
+      return e.data.since === null ? "talking again" : "no output"
     case "run.finished":
       return e.data.status + (e.data.error ? ` · ${clip(e.data.error, 60)}` : "")
     case "run.metrics":

@@ -98,7 +98,12 @@ export const NoteRow = memo(function NoteRow({
           )}
         </span>
 
-        {live && activity ? (
+        {live && run?.quietSince ? (
+          /* The agent has gone silent: say so where the activity would be. */
+          <span className="mt-1.5 block text-meta text-lemon">
+            No output for {quietFor(run.quietSince)} — may be stuck
+          </span>
+        ) : live && activity ? (
           /* What it is doing, not what it will have done. */
           <span className="mt-1.5 block">
             <span className="flex items-baseline gap-1.5">
@@ -184,3 +189,9 @@ export const NoteRow = memo(function NoteRow({
     </div>
   )
 })
+
+/** "3 min" — how long a run has said nothing. */
+export function quietFor(since: number): string {
+  const m = Math.max(1, Math.round((Date.now() - since) / 60_000))
+  return `${m} min`
+}

@@ -290,9 +290,13 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
       return without(running, (p) => p.requestId === e.data.requestId)
     }
 
+    case "run.quiet":
+      return patchRun(view, e.data.runId, (r) => ({ ...r, quietSince: e.data.since }))
+
     case "run.finished": {
       const withRun = patchRun(view, e.data.runId, (r) => ({
         ...r,
+        quietSince: null,
         status: e.data.status,
         endedAt: e.ts,
         exitCode: e.data.exitCode,

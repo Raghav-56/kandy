@@ -72,6 +72,7 @@ import {
   kanbanColumns,
   layout as kanbanLayout,
   moveFocus,
+  quietSince,
   reconcileFocus,
   type Drop,
   type Focus,
@@ -1557,6 +1558,29 @@ function pinnedRows(
             : []),
           { text: "D", tone: "plain", bold: true },
           { text: " deny", tone: "dim" },
+        ]}
+      />,
+    )
+  }
+  const quiet = view && prompts.length === 0 ? quietSince(view, note) : null
+  if (quiet !== null) {
+    const agent = view?.runs.find((r) => r.id === note.runId)?.agent ?? note.agent
+    const mins = Math.max(1, Math.round((Date.now() - quiet) / 60_000))
+    out.push(<Rule key="qr" width={width} p={p} tone="lemon" />)
+    out.push(
+      <Text key="qq" {...toneProps(p, "lemon")} wrap="truncate-end">
+        {` ! No output from ${agent ? agentLabel(agent) : "the agent"} for ${mins} min — it may be stuck, often on a rate-limited model.`}
+      </Text>,
+    )
+    out.push(
+      <Segs
+        key="qk"
+        p={p}
+        segs={[
+          { text: "   x", tone: "plain", bold: true },
+          { text: " stop it, then ", tone: "dim" },
+          { text: "r", tone: "plain", bold: true },
+          { text: " to retry — or leave it longer", tone: "dim" },
         ]}
       />,
     )

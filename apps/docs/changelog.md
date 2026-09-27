@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **A quiet agent is warned about, not killed.** alpha.6 stopped any agent that
+  printed nothing for 2 minutes — which could stop a model that was slow to
+  start. Now 2 minutes of silence only turns the card yellow — *no output 3m* —
+  with **Stop** beside it, and clears when the agent speaks. kandy stops a run
+  itself only after **10 minutes** of complete silence (30 while a tool is
+  running, and never while it waits on your answer), then offers **Retry**.
+  → [Troubleshooting](/guide/troubleshooting)
 - **Setup is picked with the arrow keys** — ↑ ↓ and Enter, with the numbers
   still working as shortcuts.
 - **The install script updates.** Run it where kandy is already installed and

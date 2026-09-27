@@ -47,6 +47,7 @@ import { LOOK } from "@/features/notes/status"
 import { Transcript } from "@/features/stream/Transcript"
 import { cn, compact, cost, duration } from "@/lib/utils"
 import { useTick } from "@/hooks/useTick"
+import { quietFor } from "@/app/NoteRow"
 
 export type NoteDetailProps = {
   note: Note
@@ -442,6 +443,27 @@ export function NoteDetail(p: NoteDetailProps) {
               untouched and the agent's session was saved, so Resume continues where it stopped.
             </span>
           </p>
+        </div>
+      )}
+
+      {/* Silent, not failed: most runs that go quiet are a rate-limited or
+          unreachable model, but a build can be quiet too — so it's said, and
+          stopping is offered, never done here. kandy stops it itself only
+          after a much longer silence. */}
+      {live && run?.quietSince && (
+        <div className="border-hairline bg-lemon-bg/40 flex items-center gap-3 border-y px-4 py-2.5">
+          <p className="text-aux flex-1 leading-relaxed">
+            <span className="text-lemon font-medium">
+              No output from {agentLabel(run.agent)} for {quietFor(run.quietSince)}
+            </span>
+            <span className="text-muted-foreground">
+              {" — "}it may be stuck: often a model that's rate-limited or unreachable. Stop it to
+              retry or pick another model, or give it longer.
+            </span>
+          </p>
+          <Button size="sm" onClick={() => p.onCancel(run.id)} disabled={readOnly}>
+            Stop
+          </Button>
         </div>
       )}
 

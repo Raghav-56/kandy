@@ -249,8 +249,16 @@ export function dropAction(cols: readonly KanbanColumn[], note: Note, to: string
 /** A sticky note's colour: what state it's in, at a glance. */
 export type Paper = "needs" | "running" | "review" | "failed" | "done" | "draft"
 
+/** Since when a live note's agent has said nothing, once that's worth saying. */
+export function quietSince(view: BoardView, note: Note): number | null {
+  if (!isLive(note)) return null
+  return view.runs.find((r) => r.id === note.runId)?.quietSince ?? null
+}
+
 export function paperOf(view: BoardView, note: Note): Paper {
-  if (view.prompts.some((p) => p.noteId === note.id) || note.held || note.status === "blocked") return "needs"
+  // A quiet run is yellow too: it may need someone to stop it.
+  if (view.prompts.some((p) => p.noteId === note.id) || note.held || note.status === "blocked" || quietSince(view, note) !== null)
+    return "needs"
   if (note.status === "failed") return "failed"
   if (note.status === "review") return "review"
   if (note.status === "done") return "done"
@@ -259,9 +267,11 @@ export function paperOf(view: BoardView, note: Note): Paper {
 }
 
 /** The word under a card's title: what it's doing, in the board's words. */
-export function stateWord(view: BoardView, note: Note): string {
+export function stateWord(view: BoardView, note: Note, now = Date.now()): string {
   if (view.prompts.some((p) => p.noteId === note.id)) return "needs you"
   if (note.held) return "waiting to run"
+  const quiet = quietSince(view, note)
+  if (quiet !== null) return `no output ${Math.max(1, Math.round((now - quiet) / 60_000))}m`
   switch (note.status) {
     case "draft":
       return "draft"
@@ -300,7 +310,7 @@ export function cardText(
   // Two lines of title; the second ends in … when the title goes on.
   const second = lines.length > 2 ? truncate(lines.slice(1).join(" "), w) : (lines[1] ?? "")
   const g = glyph(view, note, tick)
-  const state: Seg = { text: `${g.char} ${stateWord(view, note)}`, tone: g.tone === "plain" ? "dim" : g.tone, bold: g.tone === "lemon" }
+  const state: Seg = { text: `${g.char} ${stateWord(view, note, now)}`, tone: g.tone === "plain" ? "dim" : g.tone, bold: g.tone === "lemon" }
 
   // Details, right-aligned, each a unit that is shown whole or not at all.
   // The clock is last in the list and last to be dropped when space is short.

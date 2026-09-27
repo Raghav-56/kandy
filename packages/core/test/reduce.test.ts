@@ -223,3 +223,18 @@ test("notes sort by position, then stably by id", () => {
     ["T", "B", "C"],
   )
 })
+
+test("a quiet run is marked, cleared when it speaks, and cleared when it ends", () => {
+  const { v, noteId } = withNote()
+  const runId = "run_1"
+  const quiet = reduceAll(v, [
+    ev({ type: "run.requested", data: { runId, noteId, agent: "opencode" } }),
+    ev({ type: "run.quiet", data: { runId, since: 500 } }),
+  ])
+  assert.equal(quiet.runs[0]!.quietSince, 500)
+  assert.equal(quiet.notes[0]!.status, "queued", "a warning, not a status change")
+  const spoke = reduce(quiet, ev({ type: "run.quiet", data: { runId, since: null } }))
+  assert.equal(spoke.runs[0]!.quietSince, null)
+  const ended = reduce(quiet, ev({ type: "run.finished", data: { runId, noteId, status: "failed", exitCode: null, error: "x" } }))
+  assert.equal(ended.runs[0]!.quietSince, null)
+})

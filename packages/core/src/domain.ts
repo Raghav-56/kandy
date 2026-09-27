@@ -267,6 +267,8 @@ export type Run = {
   turns: number | null
   /** The model that actually ran, when the agent tells us. */
   model: string | null
+  /** Since when the agent has been silent, once that's long enough to say; see `run.quiet`. */
+  quietSince?: number | null
   /**
    * Where the cost figure came from.
    *

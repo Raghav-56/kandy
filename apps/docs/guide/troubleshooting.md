@@ -174,14 +174,25 @@ worktree — usually installing dependencies. It failed, so the agent never
 started. Run the same command in your own checkout to see why, then fix it — or
 change it in **Settings → Workspace** ([board settings](/guide/settings#workspace)).
 
-### *said nothing for 2 min, so kandy stopped it*
+### *No output for 3 min — may be stuck*
 
-The agent started but printed nothing at all — not one line — for two minutes.
-That's almost always the model, not the agent: a free model that's
-rate-limited, a provider that's down, or no network. Press **Retry** (`r` in
-the terminal), or pick another model first. An agent that has printed anything
-is never stopped this way, however long it then works quietly.
-`KANDY_SILENT_MS` changes the limit (in milliseconds).
+The agent has printed nothing at all — not one line — for a while. Most often
+that's the model, not the agent: a free model that's rate-limited, a provider
+that's down, no network. But a long build or test run can be quiet too, so
+kandy only says so, and turns the card yellow. **Stop** it (`x` in the
+terminal) and **Retry** (`r`) or pick another model — or leave it: the warning
+goes away the moment it prints anything.
+
+### *said nothing for 10 min, so kandy stopped it*
+
+After **10 minutes** without a byte — **30** while a tool the agent started is
+still running — kandy stops the run for you and fails the note with that
+reason, ready to **Retry**. The clock restarts on any output, and stops while
+the agent is waiting on your answer to a question. This is the same shape as
+T3 Code's stall timeout.
+
+The limits are `KANDY_QUIET_MS` (the warning), `KANDY_STALL_MS` and
+`KANDY_STALL_TOOL_MS`, in milliseconds.
 
 ### A note says *interrupted*
 

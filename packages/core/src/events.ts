@@ -141,6 +141,12 @@ export type KandyEventMap = {
   /** High volume. Stored apart from the domain log — see docs/02-data-model.md. */
   "run.output": { runId: RunId; channel: "stdout" | "stderr"; text: string }
   "run.tool": { runId: RunId; tool: string; status: "started" | "completed" | "failed" }
+  /**
+   * The agent has said nothing since `since` — not one byte — for long enough
+   * to mention; null when it speaks again. A warning, not a verdict: the run
+   * goes on until someone stops it, or it's been quiet far longer.
+   */
+  "run.quiet": { runId: RunId; since: number | null }
   "run.session": { runId: RunId; agentSessionId: string }
   /**
    * The agent could not do something.
@@ -250,6 +256,7 @@ export const EVENT_TYPES = [
   "run.started",
   "run.output",
   "run.tool",
+  "run.quiet",
   "run.session",
   "run.blocked",
   "run.unblocked",
