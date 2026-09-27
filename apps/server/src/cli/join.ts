@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs"
 import path from "node:path"
-import { INSTALL_COMMAND, ROLES, type Board, type Role } from "@kandy/core"
+import { INSTALL_COMMAND, INSTALL_COMMAND_WINDOWS, ROLES, type Board, type Role } from "@kandy/core"
 import { detectAll } from "../agents/index.js"
 import { repos as nearby } from "../browse.js"
 import { forgetJoined, joinedHub, RUNNER_LOG, runnerPid, saveJoined } from "../joined.js"
@@ -192,6 +192,7 @@ export function inviteMessage(url: string): string[] {
     `You're on the kandy hub at ${url}`,
     `1. Make sure you're on our Tailscale network.`,
     `2. Install kandy:  ${INSTALL_COMMAND}`,
+    `   (on Windows, in PowerShell:  ${INSTALL_COMMAND_WINDOWS})`,
     `3. Connect your machine:  kandy join ${url}`,
     `Your notes run on your own machine, with your own agents.`,
   ]

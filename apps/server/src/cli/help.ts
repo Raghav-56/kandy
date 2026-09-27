@@ -221,7 +221,13 @@ const COMMANDS: Record<string, CommandHelp> = {
       "carries on where they stopped. Any kandy command starts it again.",
     ],
   },
-  setup: { usage: "kandy setup", does: ["Ask the first-run question again: just me, join a team, or start a hub."] },
+  setup: {
+    usage: "kandy setup [--first-run]",
+    does: [
+      "Ask the first-run questions again: just me, join a team, or start a hub — and what agents may do.",
+      "--first-run asks only on a machine that hasn't been set up (the install script uses it).",
+    ],
+  },
 }
 
 export function hasCommandHelp(cmd: string): boolean {

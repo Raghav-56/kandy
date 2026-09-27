@@ -17,6 +17,7 @@ import {
   activityPhrase,
   isTeamActivity,
   INSTALL_COMMAND,
+  INSTALL_COMMAND_WINDOWS,
   promptsFor,
   splitPrompt,
   type AgentId,
@@ -559,6 +560,7 @@ export function App({ client, live, boards: initialBoards, boardId: initialBoard
       `You're on the kandy hub at ${url}`,
       `1. Make sure you're on our Tailscale network.`,
       `2. Install kandy:  ${INSTALL_COMMAND}`,
+      `   (on Windows, in PowerShell:  ${INSTALL_COMMAND_WINDOWS})`,
       `3. Connect your machine:  kandy join ${url}`,
     ])
   }

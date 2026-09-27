@@ -42,21 +42,42 @@ you before running a command ([why that matters](#_7-answer-its-question)).
 
 ## 2. Install kandy
 
-```sh
-npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz
+::: code-group
+
+```sh [macOS / Linux]
+curl -fsSL https://hiteshbandhu.github.io/kandy/install.sh | sh
 ```
 
-That's the newest release, straight from GitHub — one file. Check it:
+```powershell [Windows]
+irm https://hiteshbandhu.github.io/kandy/install.ps1 | iex
+```
+
+:::
+
+The script checks you have Node 22 or newer, installs the newest release from
+GitHub, and then asks two questions: how you'll use kandy (just you, joining a
+team, or starting a hub), and what agents may do — **full access** (the
+default) or **repo only**. It asks only once; running it again just updates.
+You can read it first: [install.sh](https://hiteshbandhu.github.io/kandy/install.sh) · [install.ps1](https://hiteshbandhu.github.io/kandy/install.ps1).
+
+Rather not pipe a script into a shell? The same thing by hand:
+
+```sh
+npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz
+kandy setup
+```
+
+Check it:
 
 ```sh
 kandy --version
 ```
 ```
-0.2.0-alpha.4
+0.2.0-alpha.5
 ```
 
-To **update**, run the install command again, then `kandy stop` so the next
-command starts the new version. To **remove** it,
+To **update**, run the install command again — the script stops a running
+kandy first, so the next command starts the new version. To **remove** it,
 `npm rm -g kandy` — your boards stay in `~/.local/state/kandy` until you delete
 that too.
 

@@ -24,11 +24,14 @@ answers neither.
 kandy — but it changes daily. [What that means](apps/docs/status.md).
 
 ```sh
-npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz
-cd your-repo && kandy
+curl -fsSL https://hiteshbandhu.github.io/kandy/install.sh | sh
 ```
 
-Not `npm i -g kandy` — that name on npm is someone else's package.
+On Windows, in PowerShell: `irm https://hiteshbandhu.github.io/kandy/install.ps1 | iex`. The script checks for Node 22+, installs
+the newest release, and asks the first-run questions. Then `cd your-repo && kandy`.
+
+Or by hand: `npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz` —
+not `npm i -g kandy`, which is someone else's package.
 
 **Docs: [hiteshbandhu.github.io/kandy](https://hiteshbandhu.github.io/kandy/)** —
 [get started](https://hiteshbandhu.github.io/kandy/guide/getting-started) ·

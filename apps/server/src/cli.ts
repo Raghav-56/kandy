@@ -292,7 +292,7 @@ async function main(): Promise<void> {
   const agent = strFlag(argv, "--agent") as AgentId | undefined
   const noRun = argv.includes("--no-run")
   const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env", "--hub", "--token", "--https-port", "--repo", "--bind", "--role"]
-  const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json", "--tailscale"]
+  const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json", "--tailscale", "--first-run"]
 
   // A flag we do not know is a typo, not a prompt. Silently dropping `-all`
   // and reporting "nothing here" is worse than refusing it.
@@ -453,6 +453,12 @@ async function main(): Promise<void> {
       process.exit(await stop(port))
       break
     case "setup":
+      // From the install script: only a machine that hasn't been set up, and
+      // no board after — the terminal it runs in is the installer's.
+      if (argv.includes("--first-run")) {
+        if (needsSetup()) await runSetup({ board: false })
+        process.exit(0)
+      }
       if (await runSetup()) process.exit(await cmdBoard({ port }))
       process.exit(0)
       break

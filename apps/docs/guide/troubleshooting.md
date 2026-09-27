@@ -22,7 +22,13 @@ Older versions of kandy printed
 `Error [ERR_UNKNOWN_BUILTIN_MODULE]: No such built-in module: node:sqlite`
 instead. It means the same thing.
 
-### `npm i -g` fails with `EACCES: permission denied`
+### The first-run questions didn't appear
+
+They're asked once, by the install script, in a terminal. Installed by hand
+with `npm i -g`, from a script, or answered already? Run `kandy setup` to be
+asked (again).
+
+### The install fails with `EACCES: permission denied`
 
 npm is trying to write to a system directory. Don't use `sudo`; point npm at
 one you own:

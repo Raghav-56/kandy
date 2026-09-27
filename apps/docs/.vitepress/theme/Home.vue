@@ -10,7 +10,8 @@ import { withBase } from "vitepress"
  * and each comes in the theme you're reading in. Copy stays short and plain;
  * the screenshots carry what copy can only claim.
  */
-const INSTALL = "npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz"
+const INSTALL = "curl -fsSL https://hiteshbandhu.github.io/kandy/install.sh | sh"
+const INSTALL_WIN = "irm https://hiteshbandhu.github.io/kandy/install.ps1 | iex"
 
 const copied = ref<string | null>(null)
 async function copy(text: string) {
@@ -78,8 +79,8 @@ const MODES = [
         <span class="kh-copy">{{ copied === INSTALL ? "Copied" : "Copy" }}</span>
       </div>
       <p class="kh-then">
-        then <code>cd your-repo &amp;&amp; kandy</code> <span class="kh-sep">·</span> macOS, Linux, Windows (early)
-        <span class="kh-sep">·</span> Node 22+
+        then <code>cd your-repo &amp;&amp; kandy</code> <span class="kh-sep">·</span> Node 22+
+        <span class="kh-sep">·</span> Windows (early): <code>{{ INSTALL_WIN }}</code>
       </p>
 
       <div class="kh-actions">
@@ -316,7 +317,7 @@ html:not(.dark) .only-dark { display: none; }
 .kh-cmd:hover .kh-copy { color: var(--vp-c-text-1); }
 
 .kh-then { margin: 12px 0 0; font-size: 13px; color: var(--vp-c-text-3); }
-.kh-then code { font-size: 12px; }
+.kh-then code { font-size: 12px; overflow-wrap: anywhere; }
 .kh-sep { margin: 0 6px; }
 
 .kh-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin: 32px 0 0; }

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.0-alpha.5 — a one-line install
+
+September 2026. **Extremely experimental** — see [Status](/status). Install or
+update:
+
+```sh
+curl -fsSL https://hiteshbandhu.github.io/kandy/install.sh | sh
+```
+
+On Windows, in PowerShell: `irm https://hiteshbandhu.github.io/kandy/install.ps1 | iex`.
+
+- **One line to install**, and it starts setup. The script checks for Node 22+,
+  installs the newest release, stops a running kandy so the new version starts,
+  and asks the first-run questions — only on a machine that hasn't answered
+  them. Before, `npm i -g` installed and said nothing, and setup waited for a
+  first bare `kandy` that people didn't know to run.
+  → [Getting started](/guide/getting-started)
+- `kandy setup --first-run` asks only on a machine that hasn't been set up.
+- Invites give the one-liners, Windows included.
+
 ## 0.2.0-alpha.4 — full access by default
 
 September 2026. **Extremely experimental** — see [Status](/status). Install or

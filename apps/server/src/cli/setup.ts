@@ -69,7 +69,7 @@ export function setupMode(): Mode | null {
  * board, for bare `kandy` — and false when setup has already done the thing
  * (joined a team, explained a hub) and should end there.
  */
-export async function runSetup(): Promise<boolean> {
+export async function runSetup(opts: { board?: boolean } = {}): Promise<boolean> {
   process.stdout.write(banner())
   out(`  ${bold("Welcome.")} ${faint("Each note is one job: an agent does it in its own git worktree,")}`)
   out(`  ${faint("and it comes back as a diff you review and merge.")}`)
@@ -116,7 +116,7 @@ export async function runSetup(): Promise<boolean> {
       remember("solo", policy)
       // Straight on to the board — its footer carries the keys. The lines
       // below are for the case where there is no repository here to show.
-      if (process.stdout.isTTY) return true
+      if (process.stdout.isTTY && opts.board !== false) return true
       out()
       out(`  ${mint("Set.")} ${faint("Inside any repository:")}`)
       out(`    ${bold('kandy "fix the login flash"')}   ${faint("a note, run by an agent")}`)
