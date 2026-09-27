@@ -1,16 +1,51 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-alpha.2 — a first run that works
+
+September 2026. **Extremely experimental** — see [Status](https://github.com/hiteshbandhu/kandy/tree/main/apps/docs/status.md). Install or
+update:
+
+```sh
+npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz
+kandy stop   # if kandy was already running, so the new version starts
+```
+
+### Fixed — found by running real boards end to end
+
+- **Light mode was unreadable.** The board's background painted near-black on
+  light themes, and the waiting-for-you cards, permission questions, failed
+  notes and errors used dark-only colours. All follow the theme now.
+- **A repo with no GitHub remote couldn't land a note** in the browser — only
+  Discard was offered. **Merge into main** is back wherever there's nowhere to
+  open a pull request, naming the branch it lands on.
+- **Allowed commands were shown as refused.** A note whose tests you allowed,
+  and which then passed, still said "refused before the question could reach
+  you".
+- **A repo without a lockfile got one** at the top of every diff: setup ran
+  `npm install`, which wrote `package-lock.json`. It now installs without
+  writing one.
+- **The terminal printed agents' markdown raw.** Bold, code, bullets, headings
+  and code blocks render as formatting.
+- **An old Node failed cryptically** with `ERR_UNKNOWN_BUILTIN_MODULE:
+  node:sqlite`. It now says kandy needs Node 22 or newer.
+
+### Better
 
 - **`kandy stop`** stops kandy on this machine; any command starts it again.
-  Restarting used to mean finding a process id by hand.
-- **A clear message on an old Node.** kandy needs Node 22; on anything older it
-  now says so, instead of failing with `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`.
-- **Short paths in transcripts.** Tool lines inside a note's checkout read
-  `src/app.js`, not the full worktree path — in the terminal and the browser.
-- **The terminal's merge prompt names the branch** — *Merge … into main?*
-- **Docs:** a step-by-step getting started from a real run, troubleshooting, a
-  page per agent, a board settings reference, and `/llms.txt` for agents.
+- **Short paths in transcripts** — `src/app.js`, not the note's whole worktree
+  path, in the terminal and the browser.
+- **The terminal's merge prompt names the branch**: *Merge … into main?*
+- The sidebar says *checking agents…* while it checks, rather than *no agent
+  ready*.
+
+### Docs
+
+- A new landing page built from real screenshots, in light and dark.
+- **Get started** as ten steps from a real run, each with its real screen.
+- **Troubleshooting**, led by kandy's exact messages.
+- **A page per agent** — Claude Code, Codex, Cursor, opencode, aider.
+- **Board settings**, every one.
+- `/llms.txt` and a markdown copy of every page, for agents.
 
 ## 0.2.0-alpha.1 — teams, capabilities, the terminal
 
