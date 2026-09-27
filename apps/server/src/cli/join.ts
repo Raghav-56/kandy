@@ -228,3 +228,41 @@ async function waitForRunner(ms: number): Promise<boolean> {
   }
   return false
 }
+
+/**
+ * `kandy consent [nobody|approved|team]`, `kandy consent revoke <email>` —
+ * who may run notes on this machine besides you.
+ *
+ * The setting lives on this machine, in a file only you can write, and is read
+ * fresh on every request — so a change here applies to a running runner at
+ * once. See consent.ts for why it is not a hub setting.
+ */
+export async function cmdConsent(args: string[]): Promise<number> {
+  const { ConsentStore } = await import("../consent.js")
+  const store = new ConsentStore()
+  const [verb, arg] = args
+
+  if (verb === "nobody" || verb === "approved" || verb === "team") {
+    store.setAccept(verb)
+  } else if (verb === "revoke" || verb === "approve") {
+    if (!arg || !arg.includes("@")) {
+      out(dim("  usage: ") + `kandy consent ${verb} <email>`)
+      return 1
+    }
+    if (verb === "revoke") store.revoke(arg)
+    else store.approve(arg)
+  } else if (verb !== undefined) {
+    out(dim("  usage: ") + "kandy consent [nobody | approved | team]   ·   kandy consent revoke <email>")
+    return 1
+  }
+
+  const c = store.get()
+  const MEANS = {
+    nobody: "only your own notes run here",
+    approved: "your notes, and people you've approved — anyone else's waits for you",
+    team: "anyone on the hub",
+  } as const
+  out(`  ${dim("accept")}    ${bold(c.accept)} ${faint(`— ${MEANS[c.accept]}`)}`)
+  out(`  ${dim("approved")}  ${c.approved.length ? c.approved.join(", ") : faint("nobody yet")}`)
+  return 0
+}

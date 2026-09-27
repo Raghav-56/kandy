@@ -69,6 +69,9 @@ export class ConsentStore {
    * permission, which is decided here.
    */
   decide(requestedBy: string | null, owner: string | null): "run" | "hold" {
+    // Read fresh every time: `kandy consent team` edits the file from another
+    // process, and a running runner must honour it at once, not after a restart.
+    this.held = this.load()
     // A single-player setup has no owner and no one else to ask: every
     // request is the one person at the keyboard.
     if (owner === null || requestedBy === null) return "run"

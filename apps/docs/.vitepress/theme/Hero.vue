@@ -50,7 +50,10 @@ const taken = computed(() =>
 <template>
   <section class="k-hero">
     <div class="k-hero-inner">
-      <p class="k-eyebrow"><span class="k-rule" />A board for coding agents</p>
+      <p class="k-eyebrow">
+        <span class="k-rule" />A board for coding agents
+        <a class="k-exp" href="/status">Extremely experimental</a>
+      </p>
 
       <h1 class="k-title">
         Stop <em>babysitting</em><br />
@@ -58,8 +61,10 @@ const taken = computed(() =>
       </h1>
 
       <p class="k-sub">
-        Twelve agents on one repository. Each job runs in its own git worktree, so
-        they never collide — and comes back as a branch and a diff you approve.
+        Write a note, and an agent does the job in its own git worktree — Claude
+        Code, Codex, Cursor, whichever you're signed into. It comes back as a
+        branch and a diff you approve. Alone on your laptop, or as a team, where
+        everyone's notes still run on their own machine.
       </p>
 
       <div class="k-cmd" @click="copy">
@@ -71,7 +76,8 @@ const taken = computed(() =>
 
       <p class="k-meta">
         macOS · Linux · Node 22+ —
-        <a href="/guide/getting-started">getting started</a> ·
+        <a href="/guide/getting-started">get started</a> ·
+        <a href="/modes/">the three modes</a> ·
         <a href="/guide/cli">the CLI</a>
       </p>
 
@@ -89,7 +95,7 @@ const taken = computed(() =>
     <!-- Cropped deliberately: the board continues past the fold, which is the
          one thing a static image can say about a list that is never finished. -->
     <div class="k-shot">
-      <img src="/shots/board.png" alt="The kandy board: a note blocked on a decision, one ready to review, three agents working, and nine landed" />
+      <img src="/shots/board.png" alt="The kandy board: notes ready to review, one open beside its diff" />
     </div>
   </section>
 </template>
@@ -99,12 +105,22 @@ const taken = computed(() =>
 .k-hero-inner { max-width: 1152px; margin: 0 auto; padding: 88px 24px 0; }
 
 .k-eyebrow {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px;
   margin: 0 0 22px;
   font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--vp-c-text-2);
 }
 .k-rule { display: block; width: 40px; height: 1px; background: var(--vp-c-brand-1); opacity: 0.7; }
+/* Said up front, in the one place everyone reads, not in a footnote. */
+.k-exp {
+  margin-left: 4px; padding: 3px 9px; white-space: nowrap;
+  border: 1px solid rgb(232 197 106 / 0.45); border-radius: 999px;
+  background: rgb(232 197 106 / 0.12);
+  color: #a8802a; font-size: 10.5px; letter-spacing: 0.1em;
+  text-decoration: none;
+}
+.dark .k-exp { color: #e8c56a; }
+.k-exp:hover { background: rgb(232 197 106 / 0.2); }
 
 .k-title {
   margin: 0;

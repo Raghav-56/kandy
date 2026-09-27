@@ -9,9 +9,19 @@ things kandy needs anyway:
 - **History.** "What did this agent do" is a query, not a log file someone
   forgot to write.
 - **Audit.** Agents take destructive actions. You want the tape.
-- **A future.** A single-writer ordered log is the substrate sync would need.
+- **Teams.** A single writer means one order of events. On a team the
+  [hub](/concepts/hub-and-runners) is that writer, so two machines can never end
+  up disagreeing about a note.
 
 Storage is SQLite via Node's built-in `node:sqlite` — no dependency, one file.
+
+## Who did it
+
+Every event carries an **actor**: the person who caused it, as the hub knows
+them — or nobody, on a machine used by one person. It's stamped by whoever owns
+the log, never taken from the event itself, so a runner on someone's laptop
+can report what its run did but can't claim to be someone else. The Team page's
+activity, and "who admitted whom", are just this field.
 
 ## Transcript is not the log
 

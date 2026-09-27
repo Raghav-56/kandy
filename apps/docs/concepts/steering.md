@@ -25,7 +25,7 @@ note lands in review.
 
 Steering after that point becomes a follow-up run. Same intent, one turn later.
 
-![The agent's reasoning, eighteen tool calls folded away behind one line, and a box to answer back](/shots/stream.png)
+![A run in review: what the agent said, its briefing, and a box to answer back](/shots/review.png)
 
 ## Attachments
 

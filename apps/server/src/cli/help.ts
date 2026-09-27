@@ -95,6 +95,7 @@ const TOPICS: Record<string, () => void | Promise<void>> = {
     out(head("everyone else"))
     out(row("kandy join <hub-url>", "checks you can reach it, who you are, your agents, your"))
     out(`    ${" ".repeat(W)}${faint("clones — then starts your runner. That's all.")}`)
+    out(row("kandy consent [nobody|approved|team]", "who may run notes on this machine"))
     out(row("kandy leave", "back to just this machine"))
     out(row("KANDY_LOCAL=1 kandy …", "your own board, while on a team"))
     out(head("who decides"))
@@ -177,6 +178,13 @@ const COMMANDS: Record<string, CommandHelp> = {
     does: ["Add someone to your team's hub, and print the message to send them. Owners only."],
   },
   leave: { usage: "kandy leave", does: ["Take this machine off its team: stops the runner, forgets the hub."] },
+  consent: {
+    usage: "kandy consent [nobody|approved|team]  ·  kandy consent revoke|approve <email>",
+    does: [
+      "Who may run notes on this machine besides you. approved (the default): people you've",
+      "said yes to — anyone else's note waits for you. Kept on this machine, never on the hub.",
+    ],
+  },
   hub: {
     usage: "kandy hub --tailscale [--port N]",
     does: [

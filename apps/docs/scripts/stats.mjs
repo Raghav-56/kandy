@@ -22,7 +22,13 @@ const repo = path.resolve(here, "../../..")
 const cli = path.join(repo, "apps/server/dist/cli.js")
 const out = path.join(here, "../data/stats.json")
 
-const raw = execFileSync("node", [cli, "stats", "--json"], { cwd: repo, encoding: "utf8" })
+// KANDY_LOCAL: this repository's own board, on this machine — never a team
+// hub the machine happens to have joined.
+const raw = execFileSync("node", [cli, "stats", "--json"], {
+  cwd: repo,
+  encoding: "utf8",
+  env: { ...process.env, KANDY_LOCAL: "1" },
+})
 const s = JSON.parse(raw)
 if (!s.board) {
   console.error("No board for this repo — start the daemon and run a note first.")

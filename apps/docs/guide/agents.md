@@ -46,17 +46,18 @@ A model can be chosen in three places, most specific first:
 2. **On the board** — the default for each agent in this repo, in Settings.
 3. **Neither** — the agent's own default.
 
-The menu is built from the price table kandy already fetches, filtered to what
-each agent can actually run. It is a menu, not a promise: the agent still
-refuses one you have no access to.
+The menu comes from the agents themselves wherever they'll say:
 
-Two agents are deliberately not filtered from that table. Cursor's catalogue is
-its own and depends on your plan — `cursor-agent --list-models` is the only
-authority on it — so kandy offers `auto` plus whatever Cursor is already
-configured for, and you can type the rest. opencode addresses models as
-`provider/model`, so its menu is the same set rewritten into that form. Neither
-gets a default picked for it: both already resolve one from their own config,
-and overriding a working choice with a guess off a price list helps nobody.
+- **Codex** is asked over its app-server (`model/list`) — the models *your
+  account* can run, and nothing it has hidden.
+- **Cursor** is asked with `cursor-agent models`, which depends on your plan.
+- **Claude Code** has no way to list its models, so kandy keeps a short list of
+  what the CLI accepts — aliases first.
+- **Any agent** — add your own model ids and they're offered beside the rest.
+
+Each list is cached for an hour and refreshed in the background, so a menu never
+waits on a network call. It is a menu, not a promise: an agent can still refuse
+a model your account can't use.
 
 ::: tip
 Aliases come first for Claude — `opus`, `sonnet`, `haiku` — because an alias
@@ -68,10 +69,19 @@ not.
 
 Two levels, per note:
 
-- **Repo only** — the agent edits files freely. Most shell commands are refused,
-  including the tests it just wrote.
-- **Full access** — it can run anything.
+- **Repo only** — the agent edits files freely. When Claude Code wants to run a
+  shell command, the question comes to the board and you answer it: once, for
+  the rest of the note, or no — with a note saying what to do instead. Other
+  agents can't ask, so their refused commands show the note as **blocked**,
+  with a one-click way to continue with full access.
+- **Full access** — it can run anything, without asking.
 
 A worktree bounds what an agent can damage *inside the repository*. It does
 nothing about `$HOME` or the network, which is why full access is a decision
 kandy asks you to make rather than one it makes for you.
+
+## Rate limits
+
+Claude Code reports how much of your subscription's five-hour and weekly windows
+you've used. kandy shows it beside the agent in the web board, so you can see a
+limit coming before a run hits it.

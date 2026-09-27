@@ -61,3 +61,21 @@
    under it breaks that, so the prose starts immediately. */
 .VPHome .vp-doc { padding-top: 0; }
 .VPHome .VPContent .vp-doc > div > :first-child { margin-top: 56px; }
+
+/* --- the experimental banner ---------------------------------------------- */
+.k-banner {
+  /* VitePress offsets its nav, sidebar and content by --vp-layout-top-height,
+     so the banner is pinned and exactly that tall — one line at every width. */
+  position: fixed; top: 0; left: 0; right: 0; z-index: 40;
+  height: var(--vp-layout-top-height);
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 0 16px; overflow: hidden; white-space: nowrap;
+  background: #fbf3dc; color: #6b5212;
+  border-bottom: 1px solid rgb(232 197 106 / 0.5);
+  font-size: 13px;
+}
+.k-banner-more { overflow: hidden; text-overflow: ellipsis; }
+.k-banner a { color: inherit; font-weight: 600; flex: none; }
+.dark .k-banner { background: #2a2414; color: #e8c56a; border-bottom-color: rgb(232 197 106 / 0.25); }
+:root { --vp-layout-top-height: 37px; }
+@media (max-width: 640px) { .k-banner-more { display: none; } }

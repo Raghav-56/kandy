@@ -37,7 +37,7 @@ kandy skills commit                commit the ones no worktree can see yet
 ## MCP: one list, four dialects, no secrets
 
 ```
-kandy mcp add github -- npx -y @modelcontextprotocol/server-github --env 'GITHUB_TOKEN=${GITHUB_TOKEN}'
+kandy mcp add github --env 'GITHUB_TOKEN=${GITHUB_TOKEN}' -- npx -y @modelcontextprotocol/server-github
 kandy mcp add linear --url https://mcp.linear.app/mcp --header 'Authorization: Bearer ${LINEAR_TOKEN}'
 ```
 

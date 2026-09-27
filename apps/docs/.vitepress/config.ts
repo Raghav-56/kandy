@@ -10,7 +10,7 @@ import { defineConfig } from "vitepress"
  */
 export default defineConfig({
   title: "kandy",
-  description: "A board for orchestrating coding agents. Each note is one job, in its own worktree.",
+  description: "A board for coding agents. Each note is one job, in its own worktree — alone, or as a team where everyone's work runs on their own machine.",
   lang: "en-GB",
   cleanUrls: true,
   head: [["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }]],
@@ -18,22 +18,42 @@ export default defineConfig({
   // Private for now, so no sitemap and no analytics.
   themeConfig: {
     nav: [
-      { text: "Guide", link: "/guide/getting-started" },
+      { text: "Get started", link: "/guide/getting-started" },
+      { text: "Modes", link: "/modes/" },
       { text: "CLI", link: "/guide/cli" },
       { text: "Concepts", link: "/concepts/notes" },
-      { text: "0.1.0-alpha.1", link: "/changelog" },
+      { text: "Status", link: "/status" },
     ],
     sidebar: [
       {
-        text: "Guide",
+        text: "Start here",
         items: [
-          { text: "Getting started", link: "/guide/getting-started" },
+          { text: "How kandy works", link: "/guide/how-it-works" },
+          { text: "Install and first run", link: "/guide/getting-started" },
           { text: "Your first note", link: "/guide/first-note" },
-          { text: "The CLI", link: "/guide/cli" },
           { text: "Reviewing work", link: "/guide/reviewing" },
+        ],
+      },
+      {
+        text: "Three modes",
+        items: [
+          { text: "Which one is you", link: "/modes/" },
+          { text: "Just you", link: "/modes/solo" },
+          { text: "Join a team", link: "/modes/join" },
+          { text: "Run a hub", link: "/modes/hub" },
+          { text: "Hand work to someone", link: "/modes/handoff" },
+          { text: "Who decides what", link: "/modes/permissions" },
+        ],
+      },
+      {
+        text: "Using it",
+        items: [
+          { text: "The terminal board", link: "/guide/terminal" },
           { text: "Agents and models", link: "/guide/agents" },
+          { text: "Skills and MCP servers", link: "/guide/capabilities" },
           { text: "Cost", link: "/guide/cost" },
-          { text: "Using kandy from another agent", link: "/guide/skill" },
+          { text: "From another agent", link: "/guide/skill" },
+          { text: "CLI reference", link: "/guide/cli" },
         ],
       },
       {
@@ -41,6 +61,8 @@ export default defineConfig({
         items: [
           { text: "Notes and runs", link: "/concepts/notes" },
           { text: "Worktrees", link: "/concepts/worktrees" },
+          { text: "Hub and runners", link: "/concepts/hub-and-runners" },
+          { text: "Briefings", link: "/concepts/briefings" },
           { text: "The event log", link: "/concepts/event-log" },
           { text: "Steering", link: "/concepts/steering" },
         ],
@@ -48,14 +70,14 @@ export default defineConfig({
       {
         text: "Project",
         items: [
+          { text: "Status: extremely experimental", link: "/status" },
           { text: "Changelog", link: "/changelog" },
-          { text: "What's unfinished", link: "/unfinished" },
         ],
       },
     ],
     socialLinks: [{ icon: "github", link: "https://github.com/hiteshbandhu/kandy" }],
     search: { provider: "local" },
     outline: [2, 3],
-    footer: { message: "MIT", copyright: "kandy — alpha" },
+    footer: { message: "MIT · extremely experimental", copyright: "kandy" },
   },
 })

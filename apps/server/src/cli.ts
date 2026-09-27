@@ -7,7 +7,7 @@ import { createHttpServer, parseHosts } from "./http.js"
 import { cmdMcp, cmdSkills } from "./cli/capabilities.js"
 import { runHub, runRunner } from "./cli/roles.js"
 import { joinedHub } from "./joined.js"
-import { cmdInvite, cmdJoin, cmdLeave } from "./cli/join.js"
+import { cmdConsent, cmdInvite, cmdJoin, cmdLeave } from "./cli/join.js"
 import { hasCommandHelp, printCommand, printHelp } from "./cli/help.js"
 import { needsSetup, runSetup } from "./cli/setup.js"
 import { LocalLog } from "./local-log.js"
@@ -326,6 +326,9 @@ async function main(): Promise<void> {
       break
     case "invite":
       process.exit(await cmdInvite(rest[1], strFlag(argv, "--role")))
+      break
+    case "consent":
+      process.exit(await cmdConsent(rest.slice(1)))
       break
     case "hub":
       return runHub({

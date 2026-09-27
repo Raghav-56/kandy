@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.2.0-alpha.1 — teams, capabilities, the terminal
+
+September 2026. **Extremely experimental** — see [Status](/status). Still not
+published; install from a clone.
+
+### Teams
+
+- **Three modes.** Just you, as before; **join a team** with
+  `kandy join <hub-url>`; or **run a hub** with `kandy hub --tailscale` or
+  `deploy/try-hub.sh`. → [The three modes](/modes/)
+- **Your notes run on your machine**, with your agents and logins, even on a
+  shared board. A hub keeps the log and runs nothing — no agents, no keys, no
+  repositories.
+- **Identity from Tailscale.** No accounts or passwords: the tailnet says who you
+  are. Requests with no identity (tagged devices) are refused, not trusted.
+- **Owners, members, viewers**, with `kandy invite` and a Team page — people,
+  machines, and who did what. The first person to open a hub owns it.
+- **Consent at the edge.** A note someone sends to your machine waits for you:
+  run it, always allow them, or decline. Only a machine's owner can answer for
+  it, and only they can answer its agent's permission prompts.
+- **Hand work to a teammate.** Give to… pushes your branch; their machine
+  continues it, with a briefing for whichever agent they use. → [Handoff](/modes/handoff)
+- **Onboarding in one command.** `kandy join` checks reachability, identity,
+  admission, agents and clones, says what to fix, and starts the runner.
+- **A hub image**: Docker, with a Tailscale sidecar; no agents or git inside.
+- **A published runner protocol**, with a conformance test.
+
+### Agents reach more
+
+- **MCP servers on the board**, given to Claude Code, Codex, Cursor and opencode
+  in each one's own format, every run. Secrets are `${NAME}` and never leave the
+  machine. → [Skills and MCP](/guide/capabilities)
+- **Skills**, installed with the `skills` CLI, with uncommitted ones flagged —
+  a note runs in a checkout of git, so they'd reach no agent.
+- **Change agent mid-note.** The next agent gets a [briefing](/concepts/briefings),
+  not a transcript.
+- **Claude asks before running commands** under repo-only access, on the board.
+- **Model menus from the agents themselves** — Codex and Cursor are asked which
+  models your account can run.
+- **Rate limits** for your Claude subscription, beside the agent.
+
+### The terminal
+
+- **`kandy` opens the board in your terminal** — run, steer, diff, merge, answer
+  prompts and consent requests from the keyboard. → [The terminal board](/guide/terminal)
+- **First run asks one question** — just me, join a team, or start a hub — and
+  never in a script. `kandy setup` asks again.
+- **`kandy -h` is one screen**, with `kandy help <topic>` and
+  `kandy <command> -h` for depth.
+- **The real logo**, drawn in the terminal.
+
+### Fixed
+
+- `kandy "…"` now runs the note; without `--agent` it used to write a draft and
+  stop.
+- The daemon refuses reads from anywhere but this machine unless they bring a
+  credential; before, anything that could reach the port could read every board.
+- `kandy gc` reclaims `node_modules` and caches from notes in review, not only
+  finished ones.
+- A finished note's checkout is tidied away after its branch is pushed.
+
 ## 0.1.0-alpha.1
 
 First tagged version. Alpha in the honest sense: it runs real work every day on

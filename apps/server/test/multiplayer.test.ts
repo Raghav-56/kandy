@@ -192,3 +192,13 @@ test("a hub that is down loses nothing and reorders nothing", async () => {
   await log.drain()
   assert.deepEqual(got, ["a", "b", "c"])
 })
+
+test("a consent change made elsewhere applies to a running runner at once", () => {
+  // `kandy consent team` runs in another process and edits the file; the
+  // runner's store was loaded before that and must not keep the old answer.
+  const file = path.join(tmp(), "consent.json")
+  const running = new ConsentStore(file)
+  assert.equal(running.decide("bob@example.com", "alice@example.com"), "hold")
+  new ConsentStore(file).setAccept("team")
+  assert.equal(running.decide("bob@example.com", "alice@example.com"), "run")
+})
