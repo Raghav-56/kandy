@@ -83,7 +83,16 @@ export async function cmdNew(
   const { title: first, body: rest } = splitPrompt(title)
   const { noteId } = await api.createNote(here.board.id, column, first, rest)
 
-  const agent = opts.agent
+  /*
+   * Which agent, when none was named: the last one that ran on this board,
+   * if it can still run here, and otherwise the first that can. `kandy "fix
+   * it"` promises that an agent runs it; without a default it quietly wrote
+   * a draft and ran nothing unless --agent was given.
+   */
+  const agent = opts.agent ?? (opts.run ? await defaultAgent(api, here.view) : undefined)
+  if (opts.run && !agent) {
+    out(lemon("  no agent is signed in here") + dim(" — sign in to one (claude · codex login · cursor-agent login), then: kandy ls"))
+  }
   if (agent) await api.assignNote(noteId, agent)
   if (opts.run && agent) await api.runNote(noteId, agent)
 
@@ -535,4 +544,20 @@ function fail(): number {
 /** Where the board is: the team hub when this machine has joined one. */
 function boardUrl(port: number): string {
   return hubFor(port)?.url ?? `http://127.0.0.1:${port}`
+}
+
+/**
+ * The last agent that ran on this board if it is still ready, else the first ready one.
+ *
+ * Ready *here*: a note run from this machine runs on this machine, so it is
+ * this machine's agents that count — asked directly, not of a hub that may
+ * not have heard from this machine's runner yet.
+ */
+async function defaultAgent(_api: ReturnType<typeof client>, view: BoardView): Promise<AgentId | undefined> {
+  const { detectAll } = await import("../agents/index.js")
+  const ready = (await detectAll()).filter((a) => a.installed && a.authed).map((a) => a.id)
+  const last = [...view.runs].sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))[0]?.agent
+  if (last && ready.includes(last)) return last
+  const order: AgentId[] = ["claude", "codex", "cursor", "opencode", "aider"]
+  return order.find((a) => ready.includes(a)) ?? ready[0]
 }

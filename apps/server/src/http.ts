@@ -168,7 +168,15 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   const port = req.socket.localPort
   const host = req.headers.host ?? ""
   const origin = req.headers.origin
-  if (!allowedHost(host, port, deps.hosts ?? EMPTY) || (origin !== undefined && origin !== `http://${host}`)) {
+  /*
+   * Same host, either scheme. Behind `tailscale serve` the page is https and
+   * the browser's own requests say so; comparing against http alone turned
+   * the hub's first real deployment into a blank page, its script and
+   * stylesheet refused as foreign. The Host is already checked, so the
+   * scheme adds nothing an attacker could use.
+   */
+  const sameOrigin = origin === undefined || origin === `http://${host}` || origin === `https://${host}`
+  if (!allowedHost(host, port, deps.hosts ?? EMPTY) || !sameOrigin) {
     return send(res, 403, { ok: false, error: { code: "forbidden", message: "Untrusted origin or host" } })
   }
   if (req.method === "OPTIONS") return void res.writeHead(204).end()
@@ -354,7 +362,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   }
 
   /*
-   * POST /notes/:id/assign — give a note to another machine.
+   * POST /notes/:id/give — give a note to another machine.
    *
    * `to` names a person, and the note goes to their machine; `runner` names a
    * machine directly, for a hub with no identity to name people by. If the
@@ -367,7 +375,10 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
    * Assigning does not run it. Whoever it now belongs to runs it, or someone
    * asks them to — and their machine's consent rule answers that.
    */
-  if (req.method === "POST" && parts[0] === "notes" && parts[2] === "assign" && deps.runners) {
+  // `/give`, not `/assign`: that path already sets a note's *agent*, and on a
+  // hub this route answered it instead — "use claude" read as "hand it to a
+  // machine", failing every note run from the CLI on a hub.
+  if (req.method === "POST" && parts[0] === "notes" && parts[2] === "give" && deps.runners) {
     const noteId = parts[1]!
     const view = deps.engine.boardOf(noteId)
     const note = view?.notes.find((n) => n.id === noteId)

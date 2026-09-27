@@ -317,3 +317,46 @@ function send(port: number, p: string, method: string, headers: Record<string, s
     r.end()
   })
 }
+
+test("on a hub, setting a note's agent sets its agent — it is not a handoff", async () => {
+  // The handoff route once shared this path, and on a hub it answered first:
+  // "use claude" read as "give it to a machine", and every note run from
+  // the CLI on a hub failed with "that machine is not connected".
+  const h = await tailnetHub()
+  try {
+    await h.as("alice@example.com")("/me")
+    h.engine.emit(event("board.created", { boardId: "b1", name: "demo", repoPath: "/repo" }))
+    h.engine.emit(event("column.created", { columnId: "c1", boardId: "b1", name: "Todo", pos: "a0" }))
+    h.engine.emit(event("note.created", { noteId: "n1", boardId: "b1", columnId: "c1", title: "t", body: "", pos: "a0" }))
+    const res = await h.as("alice@example.com")("/notes/n1/assign", { method: "POST", body: { agent: "claude" } })
+    assert.equal(res.status, 200)
+    assert.equal(h.engine.view("b1")!.notes[0]!.agent, "claude")
+  } finally {
+    h.close()
+  }
+})
+
+test("the page loads over https, as tailscale serve delivers it", async () => {
+  // The browser sends Origin: https://… for the app's own module script and
+  // stylesheet. The first real deployment refused them — the check compared
+  // against http:// only — and the hub was a blank page.
+  const h = await tailnetHub()
+  try {
+    await h.as("alice@example.com")("/me")
+    const res = await send(h.port, "/api/me", "GET", {
+      host: TAILNET,
+      origin: `https://${TAILNET}`,
+      "tailscale-user-login": "alice@example.com",
+    })
+    assert.equal(res.status, 200)
+    // A different host is still refused, whatever the scheme.
+    const evil = await send(h.port, "/api/me", "GET", {
+      host: TAILNET,
+      origin: "https://evil.example",
+      "tailscale-user-login": "alice@example.com",
+    })
+    assert.equal(evil.status, 403)
+  } finally {
+    h.close()
+  }
+})

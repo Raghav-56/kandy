@@ -207,7 +207,7 @@ export class KandyClient {
    * If it was worked on elsewhere, that machine pushes the branch first.
    */
   assign(noteId: string, target: { to: string } | { runner: string }) {
-    return this.req<{ seq: number; runner: string; branch?: string }>("POST", `/notes/${noteId}/assign`, target)
+    return this.req<{ seq: number; runner: string; branch?: string }>("POST", `/notes/${noteId}/give`, target)
   }
   /** Replace the board's MCP servers. The server refuses the whole list if one is malformed. */
   setMcp(boardId: string, servers: McpServer[]) {

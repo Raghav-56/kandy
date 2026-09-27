@@ -45,10 +45,17 @@ export TS_AUTHKEY="${TS_AUTHKEY:-}"
 export KANDY_TAILNET_HOST="kandy-hub.${suffix}"
 url="https://${KANDY_TAILNET_HOST}"
 
+# Saved for Compose, so `docker compose down`, `logs` and `ps` work later
+# without anyone remembering to export it. .env is gitignored.
+if ! grep -q '^KANDY_TAILNET_HOST=' .env 2>/dev/null; then
+  echo "KANDY_TAILNET_HOST=${KANDY_TAILNET_HOST}" >> .env
+fi
+
 say "tailnet  ${suffix}"
 say "hub      ${url}"
 say "starting the hub and its Tailscale sidecar…"
-docker compose up -d --build >/dev/null
+# Compose writes its progress to stderr; the useful lines are below.
+docker compose up -d --build >/dev/null 2>&1 || { docker compose up -d --build; exit 1; }
 
 if [ -z "${TS_AUTHKEY}" ]; then
   # Wait for the sidecar to ask for a login, and hand the link over.
