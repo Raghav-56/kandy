@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { ref } from "vue"
 import { withBase } from "vitepress"
-import stats from "../../data/stats.json"
 
 /**
  * The landing page.
@@ -23,19 +22,6 @@ async function copy(text: string) {
     // Clipboard access can be refused. The command is selectable either way.
   }
 }
-
-// From `kandy stats --json` via scripts/stats.mjs — a number on a landing page
-// is a claim, and this one is checkable.
-const num = (n: number) => n.toLocaleString("en-US")
-const STATS = computed(() => [
-  { n: num(stats.landed), label: "notes landed" },
-  { n: num(stats.runs), label: "agent runs" },
-  { n: `+${num(stats.insertions)}`, label: "lines written" },
-  { n: `${stats.estimated ? "≈" : ""}$${stats.usd.toFixed(2)}`, label: "spent on agents" },
-])
-const taken = computed(() =>
-  new Date(stats.takenAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-)
 
 const shot = (name: string) => ({
   light: withBase(`/shots/site/${name}-light.webp`),
@@ -240,21 +226,6 @@ const MODES = [
           <p>{{ m.text }}</p>
         </a>
       </div>
-    </section>
-
-    <!-- ── proof ────────────────────────────────────────────────────────── -->
-    <section class="kh-section">
-      <header class="kh-head">
-        <p class="kh-eyebrow">Built with itself</p>
-        <h2>kandy's own board, building kandy.</h2>
-      </header>
-      <dl class="kh-stats">
-        <div v-for="s in STATS" :key="s.label">
-          <dt>{{ s.n }}</dt>
-          <dd>{{ s.label }}</dd>
-        </div>
-      </dl>
-      <p class="kh-stats-note">From <code>kandy stats</code>, {{ taken }}.</p>
     </section>
 
     <!-- ── start ────────────────────────────────────────────────────────── -->
@@ -492,15 +463,6 @@ html:not(.dark) .only-dark { display: none; }
 .kh-mode code { display: inline-block; margin: 12px 0 0; font-size: 12.5px; }
 .kh-mode p { margin: 12px 0 0; font-size: 14.5px; }
 
-.kh-stats {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: 0; border-top: 1px solid var(--vp-c-divider);
-}
-.kh-stats > div { padding: 24px 0; }
-.kh-stats dt { font-size: 32px; font-weight: 650; letter-spacing: -0.02em; color: var(--vp-c-text-1); }
-.kh-stats dd { margin: 6px 0 0; font-size: 13px; color: var(--vp-c-text-2); }
-.kh-stats-note { margin: 4px 0 0; font-size: 13px; }
-
 .kh-end { max-width: 760px; text-align: center; }
 .kh-end .kh-cmd { margin-top: 28px; }
 .kh-warn { max-width: 560px; margin: 20px auto 0; font-size: 14px; }
@@ -510,7 +472,6 @@ html:not(.dark) .only-dark { display: none; }
   .kh-steps, .kh-modes { grid-template-columns: minmax(0, 1fr); }
   .kh-feature, .kh-feature-flip { grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .kh-feature-flip .kh-copytext { order: 0; }
-  .kh-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kh-section { margin-top: 96px; }
   .kh-features { gap: 80px; }
 }
