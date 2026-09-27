@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-alpha.7 — free models, quiet agents, kandy update
+
+September 2026. **Extremely experimental** — see [Status](https://github.com/hiteshbandhu/kandy/tree/main/apps/docs/status.md). Install or
+update:
+
+```sh
+curl -fsSL https://hiteshbandhu.github.io/kandy/install.sh | sh
+```
+
+From this release on, `kandy update` does the same.
 
 - **`kandy update`** installs the newest release in place, stopping what's
   running first, and says *0.2.0-alpha.5 → 0.2.0-alpha.7*. `--check` only
