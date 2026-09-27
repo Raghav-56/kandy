@@ -52,7 +52,7 @@ That's the newest release, straight from GitHub — one file. Check it:
 kandy --version
 ```
 ```
-0.2.0-alpha.1
+0.2.0-alpha.2
 ```
 
 To **update**, run the install command again, then `kandy stop` so the next
