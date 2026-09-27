@@ -28,9 +28,12 @@ npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tg
 cd your-repo && kandy
 ```
 
-Not `npm i -g kandy` — that name on npm is someone else's package. Docs:
-[getting started](apps/docs/guide/getting-started.md) ·
-[the three modes](apps/docs/modes/index.md) · [CLI](apps/docs/guide/cli.md).
+Not `npm i -g kandy` — that name on npm is someone else's package.
+
+**Docs: [hiteshbandhu.github.io/kandy](https://hiteshbandhu.github.io/kandy/)** —
+[get started](https://hiteshbandhu.github.io/kandy/guide/getting-started) ·
+[the three modes](https://hiteshbandhu.github.io/kandy/modes/) ·
+[troubleshooting](https://hiteshbandhu.github.io/kandy/guide/troubleshooting).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="apps/docs/public/shots/site/review-dark.webp">
