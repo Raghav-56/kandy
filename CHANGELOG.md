@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-alpha.4 — full access by default
+
+September 2026. **Extremely experimental** — see [Status](https://github.com/hiteshbandhu/kandy/tree/main/apps/docs/status.md). Install or
+update:
+
+```sh
+npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz
+kandy stop   # if kandy was already running, so the new version starts
+```
 
 - **Agents get full access by default.** New boards run their notes in each
   agent's "skip permissions" mode. First-run setup asks which you want, and the
