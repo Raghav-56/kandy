@@ -10,6 +10,7 @@ import type { KandyClient } from "@kandy/client"
 import { render } from "ink"
 import { App } from "./app.js"
 import { LiveBoard } from "./live.js"
+import { MOUSE_OFF, MOUSE_ON, mouseWanted } from "./mouse.js"
 
 export type TuiOptions = { client: KandyClient; boardId?: string | null; hub?: boolean }
 
@@ -64,6 +65,11 @@ export async function runTui(opts: TuiOptions): Promise<void> {
     },
   )
 
+  // The mouse: on once the screen is ours, off on every way out — a shell left
+  // with reporting on prints escape codes for every click.
+  const mouse = mouseWanted()
+  if (mouse) process.stdout.write(MOUSE_ON)
+
   const quit = () => instance.unmount()
   const onCrash = (err: unknown) => {
     crash ??= err
@@ -87,7 +93,8 @@ export async function runTui(opts: TuiOptions): Promise<void> {
     process.off("unhandledRejection", onCrash)
     live.dispose()
     Object.assign(console, original)
-    // Belt and braces: cursor visible, alternate screen left, raw mode off.
+    // Belt and braces: mouse off, cursor visible, alternate screen left, raw mode off.
+    if (mouse) process.stdout.write(MOUSE_OFF)
     if (process.stdin.isTTY) process.stdin.setRawMode(false)
     process.stdout.write("\x1b[?25h")
     process.stdin.pause()

@@ -274,7 +274,7 @@ test("a burst of one key repeats it; a mixed burst is its first key", () => {
   assert.deepEqual(splitBurst("jjj"), { input: "j", count: 3 })
   assert.deepEqual(splitBurst("jk"), { input: "j", count: 1 })
   assert.deepEqual(keyAction(ctx(), "jjj", {}), { type: "move", by: 3 })
-  assert.deepEqual(keyAction(ctx(), "Mq", {}), null) // M means nothing on the board
+  assert.deepEqual(keyAction(ctx(), "Zq", {}), null) // Z means nothing on the board
 })
 
 test("hints: contextual, urgent first, '?' survives narrow widths", () => {
@@ -602,4 +602,37 @@ test("an agent's markdown reads as formatting, not asterisks", async () => {
   assert.ok(text.includes("  const x = **not bold**"))
   assert.ok(text.includes("a lone ** stays"))
   for (const t of text.filter((t: string) => !t.startsWith("  const"))) assert.ok(textWidth(t) <= 40, t)
+})
+
+test("kanban keys: arrows change column, shift moves the card, and the list still opens with →", () => {
+  const k = ctx({ kanban: true })
+  assert.deepEqual(keyAction(k, "", { rightArrow: true }), { type: "column", by: 1 })
+  assert.deepEqual(keyAction(k, "h", {}), { type: "column", by: -1 })
+  assert.deepEqual(keyAction(k, "", { rightArrow: true, shift: true }), { type: "shift", dx: 1, dy: 0 })
+  assert.deepEqual(keyAction(k, "K", { shift: true }), { type: "shift", dx: 0, dy: -1 })
+  assert.deepEqual(keyAction(ctx({ kanban: false }), "", { rightArrow: true }), { type: "open" })
+  assert.deepEqual(keyAction(k, "]", {}), { type: "boardStep", by: 1 })
+  assert.deepEqual(keyAction(k, "t", {}), { type: "team" })
+  assert.deepEqual(keyAction(k, "", { return: true }), { type: "open" })
+  // Review actions work from a card, not only inside the note.
+  assert.deepEqual(keyAction(ctx({ kanban: true, stage: "review" }), "M", {}), { type: "merge" })
+})
+
+test("hints carry their action, so a click does what the key does", () => {
+  const hs = hints(ctx({ kanban: true, stage: "review" }))
+  const merge = hs.find((h: { key: string }) => h.key === "M")
+  assert.deepEqual(merge?.action, { type: "merge" })
+  const move = hs.find((h: { key: string }) => h.key === "←→↑↓")
+  assert.equal(move?.action, null, "a hint for several keys isn't a button")
+})
+
+test("team keys: owners invite and change roles; everyone can set who runs here", () => {
+  const t = ctx({ screen: "team", owner: true, member: true })
+  assert.deepEqual(keyAction(t, "i", {}), { type: "invite" })
+  assert.deepEqual(keyAction(t, "", { return: true }), { type: "role" })
+  assert.deepEqual(keyAction(t, "c", {}), { type: "consentSetting" })
+  const viewer = ctx({ screen: "team", owner: false })
+  assert.equal(keyAction(viewer, "i", {}), null)
+  assert.deepEqual(keyAction(viewer, "c", {}), { type: "consentSetting" })
+  assert.deepEqual(keyAction(viewer, "t", {}), { type: "back" })
 })

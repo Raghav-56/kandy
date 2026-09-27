@@ -22,6 +22,9 @@ import type { RemoteLog } from "./remote-log.js"
 /** Something the hub may ask for, by name. Every argument and result is plain data. */
 export type Handlers = Record<string, (...args: never[]) => Promise<unknown>>
 
+/** Three of the hub's 15-second keep-alives. */
+const SILENCE_MS = 45_000
+
 export class HubLink {
   private stopped = false
   private controller: AbortController | null = null
@@ -39,6 +42,8 @@ export class HubLink {
       handlers: Handlers
       log: RemoteLog
       onStatus?: (s: "online" | "offline", why?: string) => void
+      /** How long the stream may say nothing before it's treated as dead. */
+      silenceMs?: number
     },
   ) {
     this.ready = new Promise((r) => (this.markReady = r))
@@ -100,23 +105,43 @@ export class HubLink {
     if (!res.ok || !res.body) throw new Error(`stream refused: ${res.status} ${await res.text().catch(() => "")}`)
     this.opts.onStatus?.("online")
 
+    /*
+     * A connection can die without closing: Wi-Fi drops, a laptop sleeps, a
+     * proxy loses its upstream. The stream then just goes quiet, the loop in
+     * start() never learns it should reconnect, and the machine sits "online"
+     * doing nothing. The hub sends a keep-alive every 15s, so three missed
+     * beats means nobody is there.
+     */
+    const controller = this.controller
+    let quiet: ReturnType<typeof setTimeout> | undefined
+    const listen = () => {
+      clearTimeout(quiet)
+      quiet = setTimeout(() => controller.abort(new Error("the hub went quiet")), this.opts.silenceMs ?? SILENCE_MS)
+    }
+    listen()
+
     const decoder = new SseDecoder()
     const text = new TextDecoder()
-    for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-      for (const msg of decoder.push(text.decode(chunk, { stream: true }))) {
-        if (msg.type === COMMAND_EVENT) {
-          void this.run(JSON.parse(msg.data) as Command)
-        } else if (msg.type === "caught-up") {
-          // The hub has replayed everything this runner missed. Until now the
-          // replica was a board from the past, and deciding anything by it
-          // would have been deciding by something already untrue.
-          this.markReady()
-        } else if (DOMAIN.has(msg.type)) {
-          this.opts.log.receive(JSON.parse(msg.data) as KandyEvent)
+    try {
+      for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+        listen()
+        for (const msg of decoder.push(text.decode(chunk, { stream: true }))) {
+          if (msg.type === COMMAND_EVENT) {
+            void this.run(JSON.parse(msg.data) as Command)
+          } else if (msg.type === "caught-up") {
+            // The hub has replayed everything this runner missed. Until now the
+            // replica was a board from the past, and deciding anything by it
+            // would have been deciding by something already untrue.
+            this.markReady()
+          } else if (DOMAIN.has(msg.type)) {
+            this.opts.log.receive(JSON.parse(msg.data) as KandyEvent)
+          }
+          // Transcript and activity frames are for people watching. A runner
+          // wrote them and has no use for them back.
         }
-        // Transcript and activity frames are for people watching. A runner
-        // wrote them and has no use for them back.
       }
+    } finally {
+      clearTimeout(quiet)
     }
     throw new Error("stream closed")
   }

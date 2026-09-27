@@ -536,6 +536,9 @@ function byUrgency(notes: Note[]): Note[] {
 }
 
 function fail(): number {
+  // On a team the hub was the target, and ensureUp has already said why it
+  // can't be reached; "start the daemon" would be the wrong advice.
+  if (hubFor()) return 1
   out(berry("  could not reach the kandy daemon"))
   out(dim(`  try: kandy serve --port ${DEFAULT_PORT}`))
   return 1

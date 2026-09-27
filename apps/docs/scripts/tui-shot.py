@@ -10,7 +10,9 @@ behaves exactly as in a terminal; `pyte` keeps the screen a terminal would
 show; the result is printed as plain text (for transcripts) or as HTML with
 kandy's colours (to screenshot).
 
-Keys are separated by `;`. `wait:N` waits N seconds. Escapes such as \\r work.
+Steps are separated by `;`, or by `|` when any step contains `;` (mouse
+reports do: `\\x1b[<0;8;20M` presses at column 8, row 20). `wait:N` waits N
+seconds. Escapes such as \\r work.
 Needs `pip install pyte`.
 """
 import argparse
@@ -65,7 +67,10 @@ def pump(secs: float) -> None:
 
 
 pump(opt.settle)
-for step in [s for s in opt.keys.split(";") if s]:
+# Steps are separated by `|` when there is one — mouse reports contain `;` —
+# and by `;` otherwise.
+sep = "|" if "|" in opt.keys else ";"
+for step in [s for s in opt.keys.split(sep) if s]:
     if step.startswith("wait:"):
         pump(float(step[5:]))
     else:

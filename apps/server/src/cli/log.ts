@@ -1,7 +1,7 @@
 import type { ActivityFrame, KandyEvent, TranscriptFrame } from "@kandy/core"
 import { berry, bold, dim, faint, lemon, mint, sky } from "./banner.js"
 import { boardHere } from "./commands.js"
-import { client, DEFAULT_PORT, ensureUp } from "./daemon.js"
+import { client, DEFAULT_PORT, ensureUp, hubFor } from "./daemon.js"
 
 const out = (s = "") => process.stdout.write(s + "\n")
 
@@ -95,6 +95,7 @@ function detailOf(e: KandyEvent): string {
  */
 export async function cmdLog(opts: { port: number; verbose: boolean }): Promise<number> {
   if (!(await ensureUp(opts.port))) {
+    if (hubFor(opts.port)) return 1
     out(berry("  could not reach the kandy daemon"))
     out(dim(`  try: kandy serve --port ${DEFAULT_PORT}`))
     return 1

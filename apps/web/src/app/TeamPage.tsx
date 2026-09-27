@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { KandyClient } from "@kandy/client"
 import type { BoardView, KandyEvent, Role, RunnerInfo } from "@kandy/core"
-import { can, ROLES } from "@kandy/core"
+import { activityActor, activityContext, activityPhrase, can, isTeamActivity, ROLES } from "@kandy/core"
 import {
   Button,
   CopyButton,
@@ -351,42 +351,22 @@ function Activity({
   view: BoardView | null
   runners: RunnerInfo[]
 }) {
-  /*
-   * Titles from the board, then from the events themselves — a note that was
-   * deleted since is gone from the view, but the event that created it is
-   * still in the ring and still knows what it was called.
-   */
-  const titles = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const e of [...recent].reverse()) {
-      if (e.type === "note.created") m.set(e.data.noteId, e.data.title)
-      if (e.type === "note.edited" && e.data.title) m.set(e.data.noteId, e.data.title)
-    }
-    for (const n of view?.notes ?? []) m.set(n.id, n.title)
-    return m
-  }, [recent, view])
-
-  const lines = recent.slice(0, ACTIVITY)
+  const lines = recent.filter(isTeamActivity).slice(0, ACTIVITY)
   if (lines.length === 0) {
     return <p className="text-muted-foreground text-aux">Nothing yet. What people do here will show up as it happens.</p>
   }
 
-  const ctx: Ctx = {
-    title: (id) => `«${titles.get(id) ?? "a note"}»`,
-    column: (id) => view?.columns.find((c) => c.id === id)?.name ?? "another column",
-    runner: (id) => runnerById(runners, id)?.name ?? "a machine",
-    noteOfRun: (runId) => view?.runs.find((r) => r.id === runId)?.noteId ?? null,
-  }
+  const ctx = useMemo(() => activityContext(recent, view, runners), [recent, view, runners])
 
   return (
     <ul className="space-y-2">
       {lines.map((e) => (
         <li key={e.seq} className="flex items-baseline gap-3 text-aux">
           <span className="min-w-0 flex-1 leading-relaxed">
-            <span className="font-medium" title={e.actor ?? undefined}>
-              {person(e.actor)}
+            <span className="font-medium" title={activityActor(e) ?? undefined}>
+              {person(activityActor(e))}
             </span>{" "}
-            <span className="text-muted-foreground">{phrase(e, ctx)}</span>
+            <span className="text-muted-foreground">{activityPhrase(e, ctx)}</span>
           </span>
           <span className="text-faint shrink-0 text-meta tabular-nums">{ago(e.ts)}</span>
         </li>
@@ -395,60 +375,4 @@ function Activity({
   )
 }
 
-type Ctx = {
-  title: (noteId: string) => string
-  column: (columnId: string) => string
-  runner: (runnerId: string) => string
-  noteOfRun: (runId: string) => string | null
-}
 
-/**
- * One event as the rest of a sentence whose subject is the actor.
- *
- * Only the events people do on purpose are phrased. Anything else falls back
- * to its type — ugly but true, which beats a list that quietly omits what it
- * cannot describe.
- */
-function phrase(e: KandyEvent, c: Ctx): string {
-  switch (e.type) {
-    case "note.created":
-      return `wrote ${c.title(e.data.noteId)}`
-    case "note.edited":
-      return `edited ${c.title(e.data.noteId)}`
-    case "note.moved":
-      return `moved ${c.title(e.data.noteId)} to ${c.column(e.data.columnId)}`
-    case "note.assigned":
-      return `gave ${c.title(e.data.noteId)} to ${agentLabel(e.data.agent)}`
-    case "note.deleted":
-      return `deleted ${c.title(e.data.noteId)}`
-    case "note.policy":
-      return `set ${c.title(e.data.noteId)} to ${e.data.policy === "full" ? "full access" : "repo only"}`
-    case "note.held":
-      return `asked to run ${c.title(e.data.noteId)} on ${c.runner(e.data.runnerId)}`
-    case "note.released":
-      return `${e.data.accepted ? "allowed" : "declined"} ${c.title(e.data.noteId)}`
-    case "note.pr":
-      return e.data.pr ? `opened a PR for ${c.title(e.data.noteId)}` : `updated the PR for ${c.title(e.data.noteId)}`
-    case "run.requested":
-      return `ran ${c.title(e.data.noteId)} with ${agentLabel(e.data.agent)}`
-    case "run.unblocked": {
-      const noteId = c.noteOfRun(e.data.runId)
-      const what = e.data.decision === "allow" ? "allowed" : "denied"
-      return noteId ? `${what} a request on ${c.title(noteId)}` : `${what} an agent's request`
-    }
-    case "review.decided": {
-      const verb = { merge: "merged", discard: "discarded", revise: "sent back" }[e.data.decision]
-      return `${verb} ${c.title(e.data.noteId)}`
-    }
-    case "member.added":
-      return `added ${e.data.email} as ${e.data.role}`
-    case "member.role":
-      return `made ${e.data.email} ${e.data.role === "owner" ? "an" : "a"} ${e.data.role}`
-    case "member.removed":
-      return `removed ${e.data.email}`
-    case "board.created":
-      return `added the repo ${e.data.name}`
-    default:
-      return e.type
-  }
-}

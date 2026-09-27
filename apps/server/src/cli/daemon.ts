@@ -78,7 +78,11 @@ async function ensureJoined(hub: Joined): Promise<boolean> {
   try {
     await client().health()
   } catch {
-    process.stderr.write(berry(`  cannot reach ${hub.url}`) + dim(" — is Tailscale up? (tailscale status)\n"))
+    process.stderr.write(
+      berry(`  cannot reach ${hub.url}`) +
+        dim(" — is Tailscale up? (tailscale status)\n") +
+        dim("  Your own board meanwhile: KANDY_LOCAL=1 kandy   ·   off the team for good: kandy leave\n"),
+    )
     return false
   }
   if (!runnerPid()) startRunner()
