@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process"
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { lstat, readdir } from "node:fs/promises"
 import { promisify } from "node:util"
 import path from "node:path"
 import type { Note, Outcome } from "@kandy/core"
@@ -52,11 +53,31 @@ export async function listWorktrees(
   return trees
 }
 
-/** Size on disk in bytes. `du` is the only thing that counts a tree quickly;
- *  a failure costs us the number, not the removal. */
-async function sizeOf(dir: string): Promise<number> {
-  const out = await exec("du", ["-sk", dir]).then((r) => r.stdout).catch(() => "")
-  return Number(out.split(/\s+/)[0] ?? 0) * 1024
+/** Size on disk in bytes. `du` counts a tree fastest; where there is no `du`
+ *  — Windows — the tree is walked instead, rather than reported as nothing. */
+export async function sizeOf(dir: string): Promise<number> {
+  if (process.platform !== "win32") {
+    const out = await exec("du", ["-sk", dir]).then((r) => r.stdout).catch(() => "")
+    const kb = Number(out.split(/\s+/)[0])
+    if (out && Number.isFinite(kb)) return kb * 1024
+  }
+  return walkSize(dir)
+}
+
+/** Every file's size under `dir`, links not followed; a failure costs the number only. */
+export async function walkSize(dir: string): Promise<number> {
+  let total = 0
+  const pending = [dir]
+  while (pending.length > 0) {
+    const at = pending.pop()!
+    const entries = await readdir(at, { withFileTypes: true }).catch(() => [])
+    for (const e of entries) {
+      const full = path.join(at, e.name)
+      if (e.isDirectory()) pending.push(full)
+      else if (e.isFile()) total += await lstat(full).then((s) => s.size).catch(() => 0)
+    }
+  }
+  return total
 }
 
 /**

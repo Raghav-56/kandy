@@ -6,7 +6,17 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 import { createWorktree } from "../dist/worktree.js"
-import { findReclaimable, heldBack, humanBytes, reclaim } from "../dist/gc.js"
+import { findReclaimable, heldBack, humanBytes, reclaim, walkSize } from "../dist/gc.js"
+
+// Windows has no `du`. A size of nothing reads as "nothing to reclaim", so
+// gc walks the tree itself there.
+test("a tree's size is counted without du", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "kandy-size-"))
+  writeFileSync(path.join(dir, "a"), "x".repeat(1000))
+  mkdirSync(path.join(dir, "deep", "er"), { recursive: true })
+  writeFileSync(path.join(dir, "deep", "er", "b"), "y".repeat(500))
+  assert.equal(await walkSize(dir), 1500)
+})
 
 /** A real repository, because the thing under test is git behaviour. */
 function repo() {

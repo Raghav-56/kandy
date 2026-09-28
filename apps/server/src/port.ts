@@ -13,7 +13,9 @@ export async function portOwner(
     const res = await fetch(`http://127.0.0.1:${port}/health`, {
       signal: AbortSignal.timeout(1500),
     })
-    const body = (await res.json()) as { pid?: number }
+    // Something answered. A body that isn't JSON — another dev server's 404
+    // page — is still somebody, and not kandy.
+    const body = (await res.json().catch(() => ({}))) as { pid?: number }
     return typeof body.pid === "number" ? { kandy: true, pid: body.pid } : { kandy: false }
   } catch (err) {
     // Refused means nobody is listening. Anything else — a socket that accepts
