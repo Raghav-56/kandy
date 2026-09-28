@@ -20,6 +20,7 @@ import {
   INSTALL_COMMAND_WINDOWS,
   promptsFor,
   splitPrompt,
+  cannotDecide,
   type AgentId,
   type AgentInfo,
   type Board,
@@ -341,6 +342,7 @@ export function App({ client, live, boards: initialBoards, boardId: initialBoard
     note: !!focusNote,
     stage: focusNote && !focusNote.held ? stageOf(focusNote.status) : null,
     failed: focusNote?.status === "failed",
+    decidable: !!focusNote && cannotDecide(focusNote, "merge") === null,
     kanban: kanbanOn,
     owner: hub && owner,
     member: member !== null,
@@ -521,7 +523,15 @@ export function App({ client, live, boards: initialBoards, boardId: initialBoard
       decision === "deny" ? "Denied" : scope === "note" ? "Allowed for this note" : "Allowed once",
     )
 
+  /** Asks the question only if the server would take the answer. */
+  const refused = (note: Note, decision: "merge" | "discard" | "revise") => {
+    const why = cannotDecide(note, decision)
+    if (why) flash(`Can't ${decision} this note: ${why}`, "lemon")
+    return why !== null
+  }
+
   const confirmMerge = (note: Note) => {
+    if (refused(note, "merge")) return
     // Say which branch it lands on. Known already if the diff was opened;
     // otherwise asked for, and filled in while the question is on screen.
     const known = diff?.noteId === note.id ? diff.base : null
@@ -815,10 +825,12 @@ export function App({ client, live, boards: initialBoards, boardId: initialBoard
       case "message":
         return setOverlay({ kind: "input", purpose: "message", editor: emptyEditor(), noteId: note.id, prompt: null })
       case "revise":
+        if (refused(note, "revise")) return
         return setOverlay({ kind: "input", purpose: "revise", editor: emptyEditor(), noteId: note.id, prompt: null })
       case "merge":
         return confirmMerge(note)
       case "discard":
+        if (refused(note, "discard")) return
         return setOverlay({ kind: "confirm", purpose: "discard", noteId: note.id })
       case "delete":
         if (isLive(note)) return flash("It's running — x cancels it first", "lemon")
@@ -1707,9 +1719,9 @@ function statusLine(
     const title = `“${note?.title ?? "this note"}”`
     const text =
       overlay.purpose === "merge"
-        ? `Merge ${title} into ${overlay.base ?? "the base branch"}?`
+        ? `Merge ${title} into ${overlay.base ?? "the base branch"}? Nothing is pushed.`
         : overlay.purpose === "discard"
-          ? `Discard ${title}? The branch and worktree are thrown away.`
+          ? `Discard ${title}? Its worktree goes; its branch stays on this machine, unpushed.`
           : overlay.purpose === "delete"
             ? `Delete ${title}? The note and its history go; merged work stays in git.`
             : `Give ${title} full access? It can then run any command, without asking.`

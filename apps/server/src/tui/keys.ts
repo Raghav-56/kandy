@@ -66,6 +66,11 @@ export type KeyCtx = {
   stage: Stage | null
   /** The focused note's last run failed, so running it again is a retry. */
   failed?: boolean
+  /**
+   * The focused note can be merged or discarded now — see `cannotDecide`.
+   * Only narrows the hints: the keys still answer, with the reason when not.
+   */
+  decidable?: boolean
   /** The board is drawn as columns side by side (not the one-column list). */
   kanban?: boolean
   /** Team screen: the viewer can admit people and change roles. */
@@ -118,6 +123,9 @@ const at =
   (c: KeyCtx) =>
     c.stage !== null && stages.includes(c.stage)
 
+/** In review, and something the server would accept a verdict on. */
+const decidable = (c: KeyCtx) => at("review")(c) && c.decidable !== false
+
 const ch = (c: string) => (input: string, key: KeyLike) => input === c && !key.ctrl && !key.meta
 const up = (input: string, key: KeyLike) => !!key.upArrow || ch("k")(input, key)
 const down = (input: string, key: KeyLike) => !!key.downArrow || ch("j")(input, key)
@@ -160,7 +168,7 @@ const BOARD: Binding[] = [
   { label: "x", hint: "cancel", help: "Cancel the note's run", match: ch("x"), action: () => ({ type: "cancel" }), when: (c) => c.note, show: at("live") },
   { label: "m", hint: "message", help: "Message the agent (while it runs, or to send it back)", match: ch("m"), action: () => ({ type: "message" }), when: (c) => c.note, show: at("live") },
   { label: "d", hint: "diff", help: "Diff of the note", match: ch("d"), action: () => ({ type: "diff" }), when: (c) => c.note, show: at("review") },
-  { label: "M", hint: "merge", help: "Merge (asks to confirm)", match: ch("M"), action: () => ({ type: "merge" }), when: (c) => c.note, show: at("review") },
+  { label: "M", hint: "merge", help: "Merge (asks to confirm)", match: ch("M"), action: () => ({ type: "merge" }), when: (c) => c.note, show: decidable },
   { label: "R", hint: "revise", help: "Send back with a comment", match: ch("R"), action: () => ({ type: "revise" }), when: (c) => c.note, show: at("review") },
   { label: "X", help: "Discard (asks to confirm)", match: ch("X"), action: () => ({ type: "discard" }), when: (c) => c.note },
   { label: "e", help: "Edit the note's title and detail", match: ch("e"), action: () => ({ type: "edit" }), when: (c) => c.note },
@@ -197,9 +205,9 @@ const NOTE: Binding[] = [
   { label: "m", hint: "message", help: "Message / steer the agent", match: ch("m"), action: () => ({ type: "message" }), show: at("live", "review") },
   { label: "d", hint: "diff", help: "Diff", match: ch("d"), action: () => ({ type: "diff" }), show: at("live", "review", "done") },
   { label: "x", hint: "cancel", help: "Cancel the run", match: ch("x"), action: () => ({ type: "cancel" }), show: at("live") },
-  { label: "M", hint: "merge", help: "Merge (asks to confirm)", match: ch("M"), action: () => ({ type: "merge" }), show: at("review") },
+  { label: "M", hint: "merge", help: "Merge (asks to confirm)", match: ch("M"), action: () => ({ type: "merge" }), show: decidable },
   { label: "R", hint: "revise", help: "Send back with a comment", match: ch("R"), action: () => ({ type: "revise" }), show: at("review") },
-  { label: "X", hint: "discard", help: "Discard (asks to confirm)", match: ch("X"), action: () => ({ type: "discard" }), show: at("review") },
+  { label: "X", hint: "discard", help: "Discard (asks to confirm)", match: ch("X"), action: () => ({ type: "discard" }), show: decidable },
   { label: "g", hint: "give", help: "Give to another machine", match: ch("g"), action: () => ({ type: "give" }), when: (c) => c.hub },
   { label: "e", help: "Edit the note's title and detail", match: ch("e"), action: () => ({ type: "edit" }) },
   { label: "p", help: "Switch between repo only and full access", match: ch("p"), action: () => ({ type: "policy" }) },
@@ -219,7 +227,7 @@ const DIFF: Binding[] = [
   { label: "", help: "", match: (i, k) => ch("G")(i, k) || !!k.end, action: () => ({ type: "bottom" }), footer: false },
   { label: "] [", hint: "next/prev file", help: "Next / previous file", match: (i, k) => ch("]")(i, k), action: () => ({ type: "file", dir: 1 }) },
   { label: "", help: "", match: ch("["), action: () => ({ type: "file", dir: -1 }), footer: false },
-  { label: "M", hint: "merge", help: "Merge (asks to confirm)", match: ch("M"), action: () => ({ type: "merge" }), show: at("review") },
+  { label: "M", hint: "merge", help: "Merge (asks to confirm)", match: ch("M"), action: () => ({ type: "merge" }), show: decidable },
   { label: "X", help: "Discard (asks to confirm)", match: ch("X"), action: () => ({ type: "discard" }) },
   { label: "?", help: "All keys", match: ch("?"), action: () => ({ type: "help" }) },
   { label: "q", hint: "back", help: "Back (also esc, ←)", match: (i, k) => ch("q")(i, k) || !!k.escape || !!k.leftArrow, action: () => ({ type: "back" }) },

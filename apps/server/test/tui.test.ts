@@ -287,6 +287,10 @@ test("hints: contextual, urgent first, '?' survives narrow widths", () => {
   assert.deepEqual(asked.slice(0, 3), ["a", "A", "D"])
   const review = hints(ctx({ screen: "note", stage: "review" })).map((h: { key: string }) => h.key)
   assert.ok(review.includes("M") && review.includes("X") && review.includes("R"))
+  // A failed run that never made a branch has nothing to merge or discard,
+  // so neither is offered; sending it back still is.
+  const nothing = hints(ctx({ screen: "note", stage: "review", decidable: false })).map((h: { key: string }) => h.key)
+  assert.ok(!nothing.includes("M") && !nothing.includes("X") && nothing.includes("R"))
   // A failed note offers the retry up front, on its card and in the note.
   for (const screen of ["board", "note"]) {
     const failed = hints(ctx({ screen, note: true, stage: "review", failed: true }))

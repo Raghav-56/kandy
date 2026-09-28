@@ -11,7 +11,7 @@ import type {
   StagedFile,
   TranscriptFrame,
 } from "@kandy/core"
-import { canAsk, wasInterrupted } from "@kandy/core"
+import { canAsk, cannotDecide, wasInterrupted } from "@kandy/core"
 import { Maximize2, Minimize2, Paperclip, X } from "lucide-react"
 import {
   ActivityLine,
@@ -401,7 +401,7 @@ export function NoteDetail(p: NoteDetailProps) {
             people try — has nowhere to send a PR, and without this a finished
             note had no way to land at all, only Discard.
           */}
-          {reviewable && (
+          {reviewable && cannotDecide(p.note, "merge") === null && (
             <>
               {p.note.pr ? (
                 <Button size="sm" asChild>
@@ -687,7 +687,8 @@ export function NoteDetail(p: NoteDetailProps) {
         body={
           <>
             Merges this branch into <b>{base}</b> in your repository, on this machine. Nothing is
-            pushed. The branch and its worktree are tidied away afterwards.
+            pushed. Your checkout must be on <b>{base}</b>, with no merge or rebase under way.
+            The branch and its worktree are tidied away afterwards.
           </>
         }
         facts={facts}
@@ -702,8 +703,15 @@ export function NoteDetail(p: NoteDetailProps) {
         title="Discard this work"
         body={
           <>
-            Deletes the branch and its worktree. Everything the agent wrote is lost, and this
-            cannot be undone. The note stays, so you can run it again.
+            Removes the worktree. The branch
+            {p.note.branch ? (
+              <>
+                {" "}
+                <b>{p.note.branch}</b>
+              </>
+            ) : null}{" "}
+            stays on this machine, unpushed, so the work can still be recovered with git. The note
+            stays too, so you can run it again.
           </>
         }
         facts={facts}
