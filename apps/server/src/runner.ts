@@ -535,7 +535,7 @@ export class Runner {
       )
     }
 
-    const task = q.prompt ?? promptForRun(note, past, q.agent, (runId) => frames.get(runId) ?? [])
+    const task = q.prompt ?? promptForRun(note, past, q.agent, (runId) => frames.get(runId) ?? [], handedFrom !== null)
     /*
      * Said, not just done. An agent that does not echo its prompt — Cursor,
      * Codex — would otherwise leave no trace that it was briefed at all, and

@@ -31,6 +31,15 @@ test("the same agent continuing its own work gets the note", () => {
   assert.equal(p, "Add the cursor adapter\n\nIt must pass --trust.")
 })
 
+test("the same agent on another machine is briefed — its session stayed behind", () => {
+  // Handed over from a teammate's laptop: Claude there and Claude here share
+  // nothing, so this Claude starts fresh and needs the account of what came
+  // before as much as Codex would.
+  const p = promptForRun(note, [run("claude")], "claude" as never, () => say("Half done: the parser is in."), true)
+  assert.notEqual(p, "Add the cursor adapter\n\nIt must pass --trust.")
+  assert.match(p, /parser is in/)
+})
+
 test("a different agent gets the briefing", () => {
   const p = promptForRun(note, [run("claude")], "codex" as never, () =>
     say("The sandbox refuses without --trust; I added it."),

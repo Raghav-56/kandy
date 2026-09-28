@@ -39,11 +39,18 @@ export function promptForRun(
   past: readonly Run[],
   to: AgentId,
   frames: (runId: string) => TranscriptFrame[],
+  /**
+   * The note arrived from another machine. The same agent there is no help:
+   * its session is on that laptop, so this one starts fresh and needs the
+   * briefing as much as a different agent would.
+   */
+  handedOver = false,
 ): string {
-  // Nobody has been here, or the same agent is continuing its own work — in
-  // which case its own session is a better memory than anything we could write.
+  // Nobody has been here, or the same agent is continuing its own work on
+  // this machine — in which case its own session is a better memory than
+  // anything we could write.
   const last = past.at(-1)
-  if (!last || last.agent === to) return promptFor(note)
+  if (!last || (last.agent === to && !handedOver)) return promptFor(note)
 
   try {
     const thread = buildThread(
