@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from "react"
 import { Eye, EyeOff } from "lucide-react"
-import { shortenCheckoutPaths, type TranscriptFrame } from "@kandy/core"
+import { shortenCheckoutPaths, type Run, type TranscriptFrame } from "@kandy/core"
+import { agentLabel } from "@/features/agents/AgentMark"
 import { InlineEdit } from "@/features/notes/InlineEdit"
 import { Markdown } from "@/features/stream/Markdown"
-import { cn } from "@/lib/utils"
+import { cn, duration } from "@/lib/utils"
+
+/** One run and what it said. */
+export type RunHistory = { run: Run; frames: TranscriptFrame[] }
 
 /**
  * The agent's stream, as rows rather than a wall of log.
@@ -15,11 +19,16 @@ import { cn } from "@/lib/utils"
  */
 const TOOLS_KEY = "kandy.showTools"
 
-export function Transcript({ frames, prompt, onEditPrompt }: {
-  frames: TranscriptFrame[]
+export function Transcript({ runs, prompt, onEditPrompt }: {
+  /**
+   * Every run of the note, oldest first. A steer after a run ends starts a
+   * new one; showing only the latest made everything before it vanish.
+   */
+  runs: RunHistory[]
   prompt: string
   onEditPrompt?: (body: string) => Promise<boolean>
 }) {
+  const frames = runs.flatMap((r) => r.frames)
   const end = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = useState(true)
@@ -46,7 +55,7 @@ export function Transcript({ frames, prompt, onEditPrompt }: {
   }
 
   const toolCount = frames.filter((f) => f.role === "tool").length
-  const shown = showTools ? frames : frames.filter((f) => f.role !== "tool")
+  const visible = (fs: TranscriptFrame[]) => (showTools ? fs : fs.filter((f) => f.role !== "tool"))
 
   useEffect(() => {
     // Only autoscroll when already at the bottom. Yanking someone back down
@@ -80,12 +89,20 @@ export function Transcript({ frames, prompt, onEditPrompt }: {
           <div className="text-micro font-medium uppercase tracking-[0.08em] text-faint">
             Prompt
           </div>
+          {/* A note can be a title and nothing else — every one-liner is — and
+              the agent is given that title. "Add a prompt…" read as if it
+              was being sent nothing. */}
+          {!prompt.trim() && (
+            <p className="mt-1.5 text-aux leading-relaxed text-faint">
+              The title is the whole prompt — the agent gets it as written.
+            </p>
+          )}
           <div className="mt-1.5 whitespace-pre-wrap text-prose leading-[1.6] text-dim">
             {onEditPrompt ? (
               <InlineEdit
                 value={prompt}
                 label="Edit prompt"
-                placeholder="Add a prompt…"
+                placeholder="Add detail for the agent…"
                 rows={4}
                 onSave={onEditPrompt}
               />
@@ -95,12 +112,41 @@ export function Transcript({ frames, prompt, onEditPrompt }: {
       )}
 
 
-      {frames.length === 0 && (
+      {frames.length === 0 && !runs.some((r) => r.run.error) && (
         <p className="py-6 text-center text-ui text-faint">Nothing yet.</p>
       )}
 
-      {shown.map((f) => (
-        <Frame key={`${f.runId}-${f.seq}`} frame={f} />
+      {runs.map(({ run, frames: fs }, i) => (
+        <div key={run.id} className="space-y-2.5">
+          {/* The same rule the terminal draws between runs, so a follow-up
+              reads as a second turn rather than part of the first. */}
+          {runs.length > 1 && (
+            <div className="flex items-center gap-2.5 px-1 pt-2 pb-0.5">
+              <span className="h-px w-4 shrink-0 bg-line" />
+              <span className="min-w-0 text-meta tabular-nums text-faint">
+                run {i + 1} · {agentLabel(run.agent)} · {run.status} ·{" "}
+                {duration(run.startedAt, run.endedAt)}
+              </span>
+              <span className="h-px flex-1 bg-line" />
+            </div>
+          )}
+          {visible(fs).map((f) => (
+            <Frame key={`${f.runId}-${f.seq}`} frame={f} />
+          ))}
+          {/* A run that died before saying anything still says why. */}
+          {fs.length === 0 && run.error && (
+            <Frame
+              frame={{
+                kind: "transcript",
+                runId: run.id,
+                seq: 0,
+                ts: run.endedAt ?? run.startedAt,
+                role: "error",
+                text: run.error,
+              }}
+            />
+          )}
+        </div>
       ))}
       <div ref={end} />
     </div>

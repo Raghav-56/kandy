@@ -12,7 +12,7 @@ import type {
   TranscriptFrame,
 } from "@kandy/core"
 import { canAsk, cannotDecide, wasInterrupted } from "@kandy/core"
-import { Maximize2, Minimize2, Paperclip, X } from "lucide-react"
+import { ArrowLeft, Maximize2, Minimize2, Paperclip, X } from "lucide-react"
 import {
   ActivityLine,
   Button,
@@ -34,7 +34,7 @@ import {
 } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
 import { AgentSelect } from "@/features/agents/AgentSelect"
-import { ModelSelect } from "@/features/agents/ModelSelect"
+import { defaultModelLabel, ModelSelect } from "@/features/agents/ModelSelect"
 import { DiffView } from "@/features/diff/DiffView"
 import { Ask, type Answer } from "@/features/notes/Ask"
 import { type Attached } from "@/features/notes/Attachments"
@@ -43,8 +43,8 @@ import { InlineEdit } from "@/features/notes/InlineEdit"
 import { PrBadge } from "@/features/notes/PrBadge"
 import { GiveTo, HeldCallout, RunnerChip, useTeam, VIEWER_HINT } from "@/features/team/team"
 import { Markdown } from "@/features/stream/Markdown"
-import { LOOK } from "@/features/notes/status"
-import { Transcript } from "@/features/stream/Transcript"
+import { changesStand, lookOf } from "@/features/notes/status"
+import { Transcript, type RunHistory } from "@/features/stream/Transcript"
 import { cn, compact, cost, duration } from "@/lib/utils"
 import { useTick } from "@/hooks/useTick"
 import { quietFor } from "@/app/NoteRow"
@@ -53,7 +53,10 @@ export type NoteDetailProps = {
   note: Note
   view: BoardView
   agents: AgentInfo[]
+  /** The current run's frames — what it was refused, for the callout. */
   frames: TranscriptFrame[]
+  /** Every run of this note, oldest first, for the stream. */
+  history: RunHistory[]
   activity: ActivityFrame | undefined
   forge: Forge | null
   /** Tracked repo paths, for `@` in the reply box. */
@@ -76,6 +79,10 @@ export type NoteDetailProps = {
   onAnswer: (prompt: PermissionPrompt, answer: Answer) => Promise<void>
   /** Ask the surrounding pane for more or less room. */
   onWiden?: (wide: boolean) => void
+  /** Covering the board rather than beside it: back, not close, and no widen. */
+  narrow?: boolean
+  /** The daemon is gone; nothing here can start or stop anything until it is back. */
+  offline?: boolean
   /** Raise this note to full access and continue it. */
   onEscalate: () => Promise<void>
   /** What the PR would say, so it can be edited before it exists. */
@@ -142,9 +149,25 @@ export function NoteDetail(p: NoteDetailProps) {
   const askable = canAsk(p.note.agent)
   const canEscalate = refused.length > 0 && policy !== "full" && p.note.status !== "queued"
   const reviewable = p.note.status === "review"
-  const look = LOOK[p.note.status]
+  const look = lookOf(p.note)
+  const stands = changesStand(p.note)
   const split = full && Boolean(p.note.branch)
   useTick(live)
+
+  /*
+   * What the diff depends on, as one key.
+   *
+   * The note id alone meant a follow-up run's changes never appeared: the tab
+   * kept the diff it had fetched before the run started. A new run, a status
+   * change or a different stat all mean the worktree moved.
+   */
+  const diffKey = [
+    p.note.id,
+    p.note.runId,
+    p.note.status,
+    run?.status,
+    p.note.stat ? `${p.note.stat.files}/${p.note.stat.insertions}/${p.note.stat.deletions}` : "",
+  ].join(":")
 
   useEffect(() => {
     // Keep whatever we already have on screen while the next one loads:
@@ -159,7 +182,7 @@ export function NoteDetail(p: NoteDetailProps) {
     return () => {
       stale = true
     }
-  }, [tab, split, p.note.id])
+  }, [tab, split, diffKey])
 
   // A different note's diff must not be shown under this note's title.
   useEffect(() => {
@@ -248,6 +271,17 @@ export function NoteDetail(p: NoteDetailProps) {
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="px-4 pb-3.5 pt-4">
         <div className="flex items-start gap-3">
+          {p.narrow && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={p.onClose}
+              aria-label="Back to the board"
+              className="-mt-1 -ml-1.5 shrink-0"
+            >
+              <ArrowLeft className="size-4" />
+            </Button>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <StatusPill tone={look.tone} pulse={p.note.status === "running"}>
@@ -280,10 +314,13 @@ export function NoteDetail(p: NoteDetailProps) {
               path={`/b/${p.note.boardId}/n/${p.note.id}`}
               label="Copy link to this note"
             />
+            {!p.narrow && (
             <Hint text={full ? "Narrow" : "Widen — stream beside diff"}>
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={full ? "Narrow the note" : "Widen — stream beside diff"}
+                aria-pressed={full}
                 onClick={() =>
                   setFull((f) => {
                     // The split needs the room to be worth anything, so the
@@ -296,9 +333,12 @@ export function NoteDetail(p: NoteDetailProps) {
                 {full ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
               </Button>
             </Hint>
-            <Button variant="ghost" size="icon" onClick={p.onClose} aria-label="Close">
-              <X className="size-3.5" />
-            </Button>
+            )}
+            {!p.narrow && (
+              <Button variant="ghost" size="icon" onClick={p.onClose} aria-label="Close">
+                <X className="size-3.5" />
+              </Button>
+            )}
           </div>
         </div>
 
@@ -345,7 +385,7 @@ export function NoteDetail(p: NoteDetailProps) {
               {p.note.branch}
             </span>
             {p.note.pr && <PrBadge pr={p.note.pr} onDark />}
-            {p.note.stat && (
+            {p.note.stat && stands && (
               <span className="ml-auto shrink-0 text-meta tabular-nums">
                 <span className="text-mint">+{p.note.stat.insertions}</span>{" "}
                 <span className="text-berry">−{p.note.stat.deletions}</span>
@@ -366,11 +406,7 @@ export function NoteDetail(p: NoteDetailProps) {
             agent={p.note.agent}
             value={p.note.model}
             onChange={p.onModel}
-            placeholder={
-              p.note.agent && p.view.board.models?.[p.note.agent]
-                ? `${p.view.board.models[p.note.agent]} (repo)`
-                : "Agent default"
-            }
+            placeholder={defaultModelLabel(p.view.board.models, p.note.agent)}
             className="w-[190px]"
           />
 
@@ -382,14 +418,17 @@ export function NoteDetail(p: NoteDetailProps) {
               onClick={() => p.onRun()}
               /* Held means already asked: a second press would only ask the
                  same owner the same question again. */
-              disabled={!p.note.agent || readOnly || !!p.note.held}
+              disabled={!p.note.agent || readOnly || !!p.note.held || p.offline}
               title={readOnly ? VIEWER_HINT : undefined}
             >
               {interrupted ? "Resume" : p.note.status === "failed" ? "Retry" : "Run"}
             </Button>
           )}
           {live && run && (
-            <Button onClick={() => p.onCancel(run.id)}>Stop</Button>
+            // Offline, Stop would only fail: the run went when the daemon did.
+            <Button onClick={() => p.onCancel(run.id)} disabled={p.offline}>
+              Stop
+            </Button>
           )}
           {/*
             Work leaves through a pull request where there is somewhere to
@@ -482,29 +521,49 @@ export function NoteDetail(p: NoteDetailProps) {
       )}
 
       {!split && (
-        <nav className="flex items-center gap-1 border-y border-hairline px-4 py-1.5">
-          {(["stream", "diff"] as const).map((t) => (
+        <div className="flex items-center gap-1 border-y border-hairline px-4 py-1.5">
+          <div role="tablist" aria-label="Note view" className="flex items-center gap-1">
+          {(["stream", "diff"] as const).map((t) => {
+            const files = t === "diff" && stands && p.note.stat ? p.note.stat.files : 0
+            return (
             <button
               key={t}
+              role="tab"
+              id={`note-tab-${t}`}
+              aria-selected={tab === t}
+              aria-controls="note-tabpanel"
+              aria-label={
+                files > 0 ? `Diff — ${files} file${files === 1 ? "" : "s"} changed` : undefined
+              }
+              tabIndex={tab === t ? 0 : -1}
               onClick={() => setTab(t)}
+              onKeyDown={(e) => {
+                // Arrow keys move between tabs, as a tablist is expected to.
+                if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
+                const next = t === "stream" ? "diff" : "stream"
+                setTab(next)
+                document.getElementById(`note-tab-${next}`)?.focus()
+              }}
               className={cn(
-                "rounded-lg px-2.5 py-1.5 text-aux capitalize transition-colors",
+                "rounded-lg px-2.5 py-1.5 text-aux transition-colors",
                 tab === t ? "bg-raised text-ink" : "text-dim hover:text-ink",
               )}
             >
-              {t}
-              {t === "diff" && p.note.stat && p.note.stat.files > 0 && (
-                <span className="ml-1.5 text-meta tabular-nums text-faint">{p.note.stat.files}</span>
+              {t === "stream" ? "Stream" : "Diff"}
+              {files > 0 && (
+                <span className="ml-1.5 text-meta tabular-nums text-faint">{files}</span>
               )}
             </button>
-          ))}
+            )
+          })}
+          </div>
           <button
             onClick={() => setAsk("delete")}
             className="ml-auto rounded-lg px-2.5 py-1.5 text-meta text-faint transition-colors hover:bg-berry-bg hover:text-berry"
           >
             Delete
           </button>
-        </nav>
+        </div>
       )}
 
       {staged.length > 0 && (
@@ -536,12 +595,17 @@ export function NoteDetail(p: NoteDetailProps) {
         </div>
       )}
 
-      <div className={cn("flex min-h-0 flex-1", split && "border-t border-hairline")}>
+      <div
+        id="note-tabpanel"
+        role={split ? undefined : "tabpanel"}
+        aria-labelledby={split ? undefined : `note-tab-${tab}`}
+        className={cn("flex min-h-0 flex-1", split && "border-t border-hairline")}
+      >
         {(tab === "stream" || split) && (
           <div className={cn("flex min-w-0 flex-col", split ? "flex-1 border-r border-hairline" : "flex-1")}>
             <Transcript
               key={p.note.id}
-              frames={p.frames}
+              runs={p.history}
               prompt={p.note.body}
               onEditPrompt={(b) => p.onEdit({ body: b })}
             />
@@ -584,6 +648,13 @@ export function NoteDetail(p: NoteDetailProps) {
           paths={p.paths}
           busy={sending}
           hint={delivery ?? null}
+          blocked={
+            p.offline
+              ? "kandy isn't running"
+              : !live && !p.note.agent
+                ? "Choose an agent above to send"
+                : null
+          }
           placeholder={
             live ? "Steer the agent — paste or drop files too" : "Say what to change, then send"
           }
@@ -595,7 +666,9 @@ export function NoteDetail(p: NoteDetailProps) {
   // Never an overlay. Covering the sidebar to read a diff means losing the one
   // thing the app is for — seeing what else is waiting on you. It is a resizable
   // pane rather than two fixed widths: how much room a diff needs is a property
-  // of the diff, not something this component can know.
+  // of the diff, not something this component can know. The one exception is
+  // a window too narrow to share (`narrow`), where a pane beside the list was
+  // a strip too thin to read — there it covers the board, with a way back.
   return (
     <aside className="bg-card flex h-full w-full flex-col border-l">
       {body}

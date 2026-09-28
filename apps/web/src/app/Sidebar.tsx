@@ -75,11 +75,11 @@ export function Sidebar({
   agents,
   page,
   theme,
-  onPage,
+  onPage: pageTo,
   onTheme,
-  onBoardChange,
-  onNewBoard,
-  onNewNote,
+  onBoardChange: boardTo,
+  onNewBoard: newBoard,
+  onNewNote: newNote,
   user,
   me,
   readOnly,
@@ -101,6 +101,23 @@ export function Sidebar({
   /** A viewer on a hub: writing a note is shown but not offered. */
   readOnly: boolean
 }) {
+  /*
+   * On a phone the sidebar is a sheet over the page, and going somewhere from
+   * it left the sheet covering where you went. Every way out of here closes
+   * it first; on a wider screen there is nothing to close.
+   */
+  const { setOpenMobile } = useSidebar()
+  const leaving =
+    <A extends unknown[]>(f: (...a: A) => void) =>
+    (...a: A) => {
+      setOpenMobile(false)
+      f(...a)
+    }
+  const onPage = leaving(pageTo)
+  const onBoardChange = leaving(boardTo)
+  const onNewBoard = leaving(newBoard)
+  const onNewNote = leaving(newNote)
+
   /* On a hub there *are* accounts, and the footer is you rather than the
      machine — the name the hub knows you by and what it lets you do. */
   const name = me.hub && me.email ? me.email : user
@@ -170,7 +187,11 @@ export function Sidebar({
                         stale.length > 0 ? "text-lemon" : "text-muted-foreground",
                       )}
                     >
-                      {current ? shortPath(current.repoPath) : "no repo yet"}
+                      {current
+                        ? shortPath(current.repoPath)
+                        : boards.length > 0
+                          ? "choose a repo"
+                          : "no repo yet"}
                     </span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-3.5 shrink-0 opacity-60" />

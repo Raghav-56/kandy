@@ -15,15 +15,18 @@ export function AgentSelect({
   agents,
   onChange,
   className,
+  label = "Agent",
 }: {
   value: AgentId | null
   agents: AgentInfo[]
   onChange: (agent: AgentId) => void
   className?: string
+  /** The accessible name; the visible value is the choice, not what it is. */
+  label?: string
 }) {
   return (
     <Select value={value ?? undefined} onValueChange={(v) => onChange(v as AgentId)}>
-      <SelectTrigger size="sm" className={className}>
+      <SelectTrigger size="sm" className={className} aria-label={value ? `${label}: ${agentLabel(value)}` : label}>
         <SelectValue placeholder="Choose an agent" />
       </SelectTrigger>
       <SelectContent>

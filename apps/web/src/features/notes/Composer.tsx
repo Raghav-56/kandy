@@ -3,7 +3,7 @@ import { Paperclip } from "lucide-react"
 import { splitPrompt, type AgentId, type AgentInfo } from "@kandy/core"
 import { Button, Dialog, DialogContent, DialogTitle, Kbd, Textarea } from "@/ui"
 import { AgentSelect } from "@/features/agents/AgentSelect"
-import { ModelSelect } from "@/features/agents/ModelSelect"
+import { defaultModelLabel, ModelSelect } from "@/features/agents/ModelSelect"
 import { Attachments, type Attached } from "@/features/notes/Attachments"
 
 /**
@@ -25,9 +25,12 @@ export function Composer({
   initialTitle = "",
   onCancel,
   onCreate,
+  boardModels,
 }: {
   agents: AgentInfo[]
   defaultAgent: AgentId | null
+  /** The board's per-agent model seeds, so "default" can say what it means. */
+  boardModels?: Partial<Record<AgentId, string>> | undefined
   /** A one-liner already typed into the board's bar, carried over on expand. */
   initialTitle?: string
   onCancel: () => void
@@ -42,7 +45,9 @@ export function Composer({
 }) {
   const [title, setTitle] = useState(initialTitle)
   const [body, setBody] = useState("")
-  const [agent, setAgent] = useState<AgentId | "">(defaultAgent ?? "")
+  // Derived, not seeded: the default may arrive after this opens.
+  const [picked, setPicked] = useState<AgentId | null>(null)
+  const agent = picked ?? defaultAgent
   const [model, setModel] = useState<string | null>(null)
   const [files, setFiles] = useState<Attached[]>([])
   const detail = useRef<HTMLTextAreaElement>(null)
@@ -50,7 +55,7 @@ export function Composer({
   const submit = (run: boolean) => {
     const t = title.trim()
     if (!t) return
-    onCreate(t, body.trim(), (agent || null) as AgentId | null, model, run, files)
+    onCreate(t, body.trim(), agent, model, run, files)
   }
 
   /**
@@ -162,15 +167,16 @@ export function Composer({
                   <Paperclip className="size-4" />
                 </button>
                 <AgentSelect
-                  value={agent || null}
+                  value={agent}
                   agents={agents}
-                  onChange={setAgent}
+                  onChange={setPicked}
                   className="w-[150px]"
                 />
                 <ModelSelect
-                  agent={agent || null}
+                  agent={agent}
                   value={model}
                   onChange={setModel}
+                  placeholder={defaultModelLabel(boardModels, agent)}
                   className="w-[176px]"
                 />
 

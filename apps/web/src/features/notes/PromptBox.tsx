@@ -27,6 +27,7 @@ export function PromptBox({
   controls,
   hint,
   busy,
+  blocked,
   autoFocus,
   rows = 2,
   maxRows = 12,
@@ -45,6 +46,11 @@ export function PromptBox({
   /** Replaces the ⌘↵ hint while there is something better to say. */
   hint?: string | null
   busy?: boolean
+  /**
+   * Why sending is not possible yet, said where you are looking. Sending
+   * anyway only earned a 400 and a banner at the other end of the window.
+   */
+  blocked?: string | null
   autoFocus?: boolean
   rows?: number
   maxRows?: number
@@ -230,7 +236,7 @@ export function PromptBox({
                 }
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault()
-                  if (!empty && !busy) onSubmit()
+                  if (!empty && !busy && !blocked) onSubmit()
                 }
                 // The board listens for j/k/c; typing must not steer it.
                 e.stopPropagation()
@@ -249,12 +255,13 @@ export function PromptBox({
             <button
               type="button"
               onClick={() => onSubmit()}
-              disabled={empty || busy}
+              disabled={empty || busy || !!blocked}
               aria-label="Send"
+              title={blocked ?? undefined}
               className={cn(
                 "mb-1 grid size-7 shrink-0 place-items-center rounded-full transition",
                 "disabled:cursor-not-allowed disabled:opacity-35",
-                empty || busy
+                empty || busy || blocked
                   ? "bg-muted text-muted-foreground"
                   : "bg-primary text-primary-foreground hover:opacity-90",
               )}
@@ -307,8 +314,13 @@ export function PromptBox({
 
       <div className="border-hairline flex flex-wrap items-center gap-1.5 border-t px-2.5 py-1.5">
         {controls}
-        <span className="text-muted-foreground/60 ml-auto pr-1 text-meta whitespace-nowrap">
-          {hint ?? "⌘↵ to send"}
+        <span
+          className={cn(
+            "ml-auto pr-1 text-meta whitespace-nowrap",
+            blocked ? "text-lemon" : "text-muted-foreground/60",
+          )}
+        >
+          {blocked ?? hint ?? "⌘↵ to send"}
         </span>
       </div>
     </div>

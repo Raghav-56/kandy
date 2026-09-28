@@ -1,6 +1,6 @@
 import { daemonToken } from "@/lib/daemon-token"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { KandyClient } from "@kandy/client"
+import { KandyClient, KandyError } from "@kandy/client"
 import {
   reduce,
   type ActivityFrame,
@@ -8,16 +8,33 @@ import {
   type KandyEvent,
   type TranscriptFrame,
 } from "@kandy/core"
+import { isUnreachable, UNREACHABLE } from "@/hooks/useDaemon"
 
 /** How many attributed events the Team page's activity list keeps. */
 const RECENT = 50
+
+/** Live frames kept for a run nobody has opened. */
+const LIVE_TAIL = 400
 
 /**
  * Snapshot, then stream. The reducer is the one in @kandy/core — the same code
  * the server projects with and the TUI will render with.
  */
-export function useBoard(boardId: string | null, opts: { hub?: boolean } = {}) {
+export function useBoard(
+  boardId: string | null,
+  opts: {
+    hub?: boolean
+    /** Bumped when the daemon comes back; everything is fetched afresh. */
+    epoch?: number
+    /** Told when a request or the stream finds nothing answering. */
+    onUnreachable?: () => void
+  } = {},
+) {
   const hub = opts.hub ?? false
+  const epoch = opts.epoch ?? 0
+  // A ref, so a new callback identity never tears down the stream.
+  const unreachable = useRef(opts.onUnreachable)
+  unreachable.current = opts.onUnreachable
   const client = useMemo(() => new KandyClient({ baseUrl: "/api", token: daemonToken }), [])
   const [view, setView] = useState<BoardView | null>(null)
   const [connected, setConnected] = useState(false)
@@ -53,6 +70,8 @@ export function useBoard(boardId: string | null, opts: { hub?: boolean } = {}) {
         if (cancelled) return
         setView(snapshot)
         seq.current = snapshot.seq
+        // Whatever went wrong before this snapshot — the daemon being gone
+        // included — is over.
         setError(null)
 
         // History from `/activity`; everything after the snapshot from the stream.
@@ -70,27 +89,43 @@ export function useBoard(boardId: string | null, opts: { hub?: boolean } = {}) {
             seq.current = e.seq
             setView((v) => (v ? reduce(v, e) : v))
           },
-          onError: () => setConnected(false),
+          onError: () => {
+            setConnected(false)
+            unreachable.current?.()
+          },
           onTranscript: (frame) => {
             setTranscript((t) => {
               const prev = t[frame.runId] ?? []
               if (prev.some((f) => f.seq === frame.seq)) return t
-              // An agent can talk for a long time. Keep the tail; the full
-              // record is on disk and one fetch away.
-              return { ...t, [frame.runId]: [...prev, frame].slice(-400) }
+              // An agent can talk for a long time. Keep the tail of runs no
+              // one is reading; the full record is on disk and one fetch away.
+              // A run someone opened keeps everything, or the backfill it
+              // fetched would be trimmed away again frame by frame.
+              const next = [...prev, frame]
+              const keep = fetched.current.has(frame.runId) ? next : next.slice(-LIVE_TAIL)
+              return { ...t, [frame.runId]: keep }
             })
           },
           onActivity: (frame) => setActivity((a) => ({ ...a, [frame.runId]: frame })),
         })
         setConnected(true)
       })
-      .catch((err: Error) => !cancelled && setError(err.message))
+      .catch((err: unknown) => {
+        if (cancelled) return
+        // The board list says a board is gone better than a banner can.
+        if (err instanceof KandyError && err.code === "board_not_found") return
+        if (isUnreachable(err)) {
+          unreachable.current?.()
+          return setError(UNREACHABLE)
+        }
+        setError(err instanceof Error ? err.message : String(err))
+      })
 
     return () => {
       cancelled = true
       close?.()
     }
-  }, [boardId, client, hub])
+  }, [boardId, client, hub, epoch])
 
   /**
    * Backfill a run's transcript from disk when its note is opened.
@@ -105,7 +140,16 @@ export function useBoard(boardId: string | null, opts: { hub?: boolean } = {}) {
       if (fetched.current.has(runId)) return
       fetched.current.add(runId)
       try {
-        const { frames } = await client.transcript(runId)
+        // Paged on the server; one page was the start of a long run and
+        // nothing after it.
+        const frames: TranscriptFrame[] = []
+        let after: number | null = 0
+        while (after !== null) {
+          const page: { frames: TranscriptFrame[]; nextAfter: number | null } =
+            await client.transcript(runId, after)
+          frames.push(...page.frames)
+          after = page.nextAfter !== null && page.nextAfter !== after ? page.nextAfter : null
+        }
         setTranscript((t) => {
           const live = t[runId] ?? []
           const seen = new Set(frames.map((f) => f.seq))
@@ -130,7 +174,12 @@ export function useBoard(boardId: string | null, opts: { hub?: boolean } = {}) {
       try {
         return await fn(client)
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err))
+        if (isUnreachable(err)) {
+          unreachable.current?.()
+          setError(UNREACHABLE)
+        } else {
+          setError(err instanceof Error ? err.message : String(err))
+        }
         return undefined
       }
     },

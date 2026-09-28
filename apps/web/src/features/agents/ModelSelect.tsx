@@ -73,6 +73,7 @@ function ModelFilter({
   onChange,
   onAdded,
   className,
+  label,
 }: {
   agent: AgentId
   options: string[]
@@ -81,6 +82,7 @@ function ModelFilter({
   onChange: (model: string | null) => void
   onAdded: (models: string[]) => void
   className?: string
+  label: string
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
@@ -153,6 +155,8 @@ function ModelFilter({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-label={`${label}: ${value ?? placeholder}`}
+        aria-expanded={open}
         className={cn(
           "border-input flex h-7 w-full items-center gap-1.5 rounded-lg border bg-transparent py-1 pr-2 pl-2.5 text-left transition-colors",
           className,
@@ -344,18 +348,35 @@ function Row({
   )
 }
 
+/**
+ * What "no model chosen" means for this agent on this board.
+ *
+ * A board can seed a model per agent in Settings, and a picker that still said
+ * "Agent default" hid the one fact you would want before pressing run.
+ */
+export function defaultModelLabel(
+  boardModels: Partial<Record<string, string>> | null | undefined,
+  agent: AgentId | null,
+): string {
+  const seeded = agent ? boardModels?.[agent] : undefined
+  return seeded ? `${seeded} (board default)` : "Agent default"
+}
+
 export function ModelSelect({
   agent,
   value,
   onChange,
   placeholder = "Agent default",
   className,
+  label = "Model",
 }: {
   agent: AgentId | null
   value: string | null
   onChange: (model: string | null) => void
   placeholder?: string
   className?: string
+  /** The accessible name; the visible value is the choice, not what it is. */
+  label?: string
 }) {
   // Seed from cache so a remount paints the full list immediately.
   const [models, setModels] = useState<string[]>(() => (agent ? (cache.get(agent) ?? []) : []))
@@ -382,6 +403,7 @@ export function ModelSelect({
         placeholder={placeholder}
         onChange={onChange}
         onAdded={setModels}
+        label={label}
         {...(className ? { className } : {})}
       />
     )
@@ -393,7 +415,7 @@ export function ModelSelect({
       onValueChange={(v) => onChange(v === DEFAULT ? null : v)}
       disabled={!agent}
     >
-      <SelectTrigger size="sm" className={className}>
+      <SelectTrigger size="sm" className={className} aria-label={`${label}: ${value ?? placeholder}`}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent className="max-h-[320px]">

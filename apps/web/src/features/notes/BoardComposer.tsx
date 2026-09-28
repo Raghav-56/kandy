@@ -3,9 +3,10 @@ import { Maximize2 } from "lucide-react"
 import type { AgentId, AgentInfo } from "@kandy/core"
 import { Hint } from "@/ui"
 import { AgentSelect } from "@/features/agents/AgentSelect"
-import { ModelSelect } from "@/features/agents/ModelSelect"
+import { defaultModelLabel, ModelSelect } from "@/features/agents/ModelSelect"
 import { PromptBox } from "@/features/notes/PromptBox"
 import type { Attached } from "@/features/notes/Attachments"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 /**
  * The board's own composer, pinned to the bottom.
@@ -25,26 +26,53 @@ export function BoardComposer({
   onCreate,
   onExpand,
   paths,
+  boardModels,
 }: {
   agents: AgentInfo[]
   defaultAgent: AgentId | null
-  onCreate: (title: string, agent: AgentId | null, model: string | null, files: Attached[]) => void
+  /** Resolves true once the note exists; until then the draft is kept. */
+  onCreate: (
+    title: string,
+    agent: AgentId | null,
+    model: string | null,
+    files: Attached[],
+  ) => Promise<boolean>
   /** Hand the draft to the full composer, rather than throwing it away. */
   onExpand: (draft: string) => void
   paths: { files: string[]; dirs: string[] }
+  /** The board's per-agent model seeds, so "default" can say what it means. */
+  boardModels?: Partial<Record<AgentId, string>> | undefined
 }) {
   const [draft, setDraft] = useState("")
-  const [agent, setAgent] = useState<AgentId | "">(defaultAgent ?? "")
+  /*
+   * Only what you chose. The default is not copied into state: after a reload
+   * the agent list arrives after this mounts, and a default read once at mount
+   * was still null — so the bar said "Choose an agent" and ⌘↵ only saved.
+   * Deriving it means the default lands whenever it is known, and never
+   * overrides a choice you made.
+   */
+  const [picked, setPicked] = useState<AgentId | null>(null)
+  const agent = picked ?? defaultAgent
   const [model, setModel] = useState<string | null>(null)
   const [files, setFiles] = useState<Attached[]>([])
+  const [sending, setSending] = useState(false)
   const bar = useRef<HTMLDivElement>(null)
+  const phone = useIsMobile()
 
-  const submit = () => {
+  const submit = async () => {
     const title = draft.trim()
-    if (!title) return
-    onCreate(title, (agent || null) as AgentId | null, model, files)
-    setDraft("")
-    setFiles([])
+    if (!title || sending) return
+    setSending(true)
+    try {
+      // Cleared only once the note exists: a daemon that was down used to
+      // take the text with it.
+      if (await onCreate(title, agent, model, files)) {
+        setDraft("")
+        setFiles([])
+      }
+    } finally {
+      setSending(false)
+    }
   }
 
   /*
@@ -92,29 +120,33 @@ export function BoardComposer({
           <PromptBox
             value={draft}
             onChange={setDraft}
-            onSubmit={submit}
+            onSubmit={() => void submit()}
+            busy={sending}
             files={files}
             onFiles={setFiles}
             rows={1}
             maxRows={8}
             paths={paths}
+            /* The @ tip only where it fits on one line: on a phone it wrapped,
+               and the second line was clipped behind a scrollbar. */
             placeholder={
-              paths.files.length > 0
+              paths.files.length > 0 && !phone
                 ? "What should the agent do?  @ to point at a file"
                 : "What should the agent do?"
             }
             controls={
               <>
                 <AgentSelect
-                  value={agent || null}
+                  value={agent}
                   agents={agents}
-                  onChange={setAgent}
+                  onChange={setPicked}
                   className="h-7 w-[132px] border-0 bg-transparent text-aux"
                 />
                 <ModelSelect
-                  agent={agent || null}
+                  agent={agent}
                   value={model}
                   onChange={setModel}
+                  placeholder={defaultModelLabel(boardModels, agent)}
                   className="h-7 w-[150px] border-0 bg-transparent text-aux"
                 />
                 <Hint text="Write it with detail">

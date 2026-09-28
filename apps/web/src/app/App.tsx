@@ -12,16 +12,20 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
   SidebarProvider,
+  SidebarTrigger,
 } from "@/ui"
 import { Backdrop } from "@/brand/Backdrop"
 import { Logo } from "@/brand/Logo"
 import { Composer } from "@/features/notes/Composer"
 import { BoardComposer } from "@/features/notes/BoardComposer"
 import { FirstRun } from "@/features/onboarding/FirstRun"
+import { NoAgentBanner } from "@/features/agents/NoAgentBanner"
 import { NewBoardDialog } from "@/features/boards/NewBoardDialog"
 import { myMachineOnline, readOnlyFor, SOLO, TeamProvider, type Me, type Team } from "@/features/team/team"
 import { MachineBanner, NotAdmitted, SetupHub, useHubSetup, useMembers } from "@/features/team/onboarding"
 import { useBoard } from "@/hooks/useBoard"
+import { useDaemon } from "@/hooks/useDaemon"
+import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { useTheme } from "@/hooks/useTheme"
 import { useRoute } from "@/hooks/useRoute"
 import { TooltipProvider } from "@/ui"
@@ -34,6 +38,18 @@ import { Sidebar, type View } from "./Sidebar"
 import { TriageList } from "./TriageList"
 
 const DETAIL_SIZE_KEY = "kandy.detail-size"
+
+/**
+ * Below this the note takes the whole width instead of sharing it.
+ *
+ * A percentage split cannot be right at every size: 34% of a phone is 125px,
+ * which set the title one letter per line and put the status chip over the
+ * header's buttons. Under this width the board and the note take turns.
+ */
+const NARROW = "(max-width: 1023px)"
+
+/** How long a note may be absent before the link to it is called dead. */
+const MISSING_GRACE_MS = 1_500
 
 /** How often to look for your machine while it is not connected. */
 const RUNNER_WAIT_MS = 15_000
@@ -178,8 +194,22 @@ export function App() {
     [go],
   )
 
-  const { view, connected, error, act, transcript, activity, recent, loadTranscript, clearError } =
-    useBoard(ready ? boardId : null, { hub: me.hub })
+  const daemon = useDaemon(client)
+  const narrow = useMediaQuery(NARROW)
+
+  /*
+   * A board link that names no board this daemon has.
+   *
+   * It used to spin on "Opening the board" forever, beside a sidebar that said
+   * "no repo yet" about a machine with several. Only decidable once the list
+   * is in — until then every id is plausible.
+   */
+  const boardMissing = boardsLoaded && !!boardId && !boards.some((b) => b.id === boardId)
+
+  const { view, error, act, transcript, activity, recent, loadTranscript, clearError } = useBoard(
+    ready && !boardMissing ? boardId : null,
+    { hub: me.hub, epoch: daemon.epoch, onUnreachable: daemon.report },
+  )
 
   /*
    * Asked first, and again from "Check again". An older daemon has no /me —
@@ -197,17 +227,31 @@ export function App() {
   }, [client])
   useEffect(() => {
     void loadMe()
-  }, [loadMe])
+  }, [loadMe, daemon.epoch])
 
+  const loadAgents = useCallback(
+    () =>
+      client
+        .agents()
+        .then((r) => setAgents(r.agents))
+        .catch(() => {}),
+    [client],
+  )
+
+  /* Fetched again when the daemon comes back: a page opened while it was down
+     has nothing, and one left open across a restart has a stale list. */
   useEffect(() => {
     if (!ready) return
-    void client.boards().then((r) => {
-      setBoards(r.boards)
-      setBoardsLoaded(true)
-      setBoardId((id) => id ?? r.boards[0]?.id ?? null, true)
-    })
-    void client.agents().then((r) => setAgents(r.agents))
-  }, [client, ready])
+    void client
+      .boards()
+      .then((r) => {
+        setBoards(r.boards)
+        setBoardsLoaded(true)
+        setBoardId((id) => id ?? r.boards[0]?.id ?? null, true)
+      })
+      .catch(() => daemon.report())
+    void loadAgents()
+  }, [client, ready, daemon.epoch, loadAgents])
 
   /*
    * Runner names, fetched when a note mentions a machine we cannot name.
@@ -326,10 +370,43 @@ export function App() {
 
   const note = view?.notes.find((n) => n.id === selected) ?? null
   const defaultAgent = agents.find((a) => a.installed && a.authed)?.id ?? null
+  const noAgent = agents.length > 0 && !defaultAgent
 
+  /*
+   * Every run of the open note, oldest first.
+   *
+   * A follow-up is a run of its own, and passing only the latest one's
+   * transcript made the conversation before it vanish the moment you steered.
+   */
+  const noteRuns = useMemo(
+    () =>
+      note && view
+        ? view.runs.filter((r) => r.noteId === note.id).sort((a, b) => a.startedAt - b.startedAt)
+        : [],
+    [note?.id, view?.runs],
+  )
   useEffect(() => {
-    if (note?.runId) void loadTranscript(note.runId)
-  }, [note?.runId, loadTranscript])
+    for (const r of noteRuns) void loadTranscript(r.id)
+  }, [noteRuns, loadTranscript, daemon.epoch])
+  const history = useMemo(
+    () => noteRuns.map((run) => ({ run, frames: transcript[run.id] ?? [] })),
+    [noteRuns, transcript],
+  )
+
+  /*
+   * A note link whose note is not on the board — deleted, or never there.
+   *
+   * Given a moment first: a note you just wrote is selected as soon as the
+   * daemon answers, which can be a beat before its event reaches the view.
+   */
+  const noteAbsent = !!selected && !!view && view.board.id === boardId && !note
+  const [noteMissing, setNoteMissing] = useState(false)
+  useEffect(() => {
+    setNoteMissing(false)
+    if (!noteAbsent) return
+    const t = setTimeout(() => setNoteMissing(true), MISSING_GRACE_MS)
+    return () => clearTimeout(t)
+  }, [noteAbsent, selected])
 
   // Open and close the pane with the note, keeping whatever width it was
   // dragged to — collapse/expand restores the last size, a resize would not.
@@ -340,7 +417,8 @@ export function App() {
     // saw, which after a reload is nothing.
     if (note) panel.resize(String(detailSize.current))
     else panel.collapse()
-  }, [note, detailPanel])
+    // `narrow`: the panel is remounted when the window widens past it.
+  }, [note, detailPanel, narrow])
 
   /** Ordered exactly as the list renders, so j/k match what the eye does. */
   const ordered = useMemo(() => view?.notes.map((n) => n.id) ?? [], [view])
@@ -407,6 +485,248 @@ export function App() {
     return <NotAdmitted me={me} onCheck={loadMe} />
   }
 
+  /* The board page with everything above and below it. Built once and placed
+     by the layout below — beside the note when there is room, under it when
+     there is not. */
+  const firstRun = setup.show ? (
+    /* On a hub the hub's own agents run nothing, so the solo first run would
+       talk about the wrong machine — an owner gets the hub's setup instead. */
+    <div className="mx-auto w-full max-w-[560px] px-6 pt-[12vh] pb-16">
+      <SetupHub setup={setup} onAddBoard={() => setNewBoard(true)} onInvite={inviteTeam} />
+    </div>
+  ) : (
+    <FirstRun agents={agents} onChooseRepo={() => setNewBoard(true)} />
+  )
+
+  const board = (
+    <main className="relative flex h-full w-full min-w-0 flex-col">
+      {/* Below md the sidebar is a sheet, and without this nothing on a
+          touch screen opened it — ⌘B was the only way to another board,
+          Settings or Usage. */}
+      <div className="border-hairline flex shrink-0 items-center gap-1 border-b px-1.5 py-0.5 md:hidden">
+        <SidebarTrigger className="size-11" aria-label="Open the sidebar" />
+        <span className="min-w-0 truncate text-ui font-medium">
+          {boards.find((b) => b.id === boardId)?.name ?? "kandy"}
+        </span>
+      </div>
+
+      {daemon.down && (
+        <div role="alert" className="border-berry/30 bg-berry-bg shrink-0 border-b px-4 py-2.5 text-aux">
+          <span className="text-berry font-medium">kandy isn't running.</span>
+          <span className="text-muted-foreground">
+            {" "}Start it again with <code className="text-ink font-mono">kandy</code> in a terminal —
+            this page reconnects by itself.
+          </span>
+        </div>
+      )}
+      <MachineBanner me={me} runners={runners} loaded={runnersLoaded} />
+      {page === "board" && view && noAgent && !readOnly && (
+        <NoAgentBanner agents={agents} onCheck={loadAgents} />
+      )}
+      {/* Unreachable is already said above, in a way that goes away on its own. */}
+      {((error && !daemon.down) || notice) && (
+        <button
+          onClick={() => {
+            clearError()
+            setNotice(null)
+          }}
+          className="shrink-0 border-b border-berry/30 bg-berry-bg px-4 py-2.5 text-left text-aux text-berry"
+        >
+          {daemon.down ? notice : (error ?? notice)} <span className="ml-2 text-faint">dismiss</span>
+        </button>
+      )}
+      {noteMissing && (
+        <div role="status" className="border-hairline bg-raised flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5 text-aux">
+          <span className="text-muted-foreground">
+            That note isn't on this board — it may have been deleted.
+          </span>
+          <Button size="sm" variant="outline" onClick={() => setSelected(null)}>
+            Back to the board
+          </Button>
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto",
+          // Only the board has a composer over it to fade against.
+          page === "board" && "fade-under-composer",
+        )}
+      >
+        {page === "team" && me.hub ? (
+          <TeamPage
+            client={client}
+            view={view}
+            me={me}
+            runners={runners}
+            recent={recent}
+            boardCount={boards.length}
+            focusAdd={focusAdd}
+            onFocusedAdd={focusedAdd}
+            onAddBoard={() => setNewBoard(true)}
+            onRunners={setRunners}
+          />
+        ) : boardMissing ? (
+          boards.length > 0 ? (
+            <Empty
+              className="pt-24"
+              icon={<Logo size={40} />}
+              title="Board not found"
+              body="There's no board at this link on this machine — it may have been removed."
+              action={
+                <Button onClick={() => setBoardId(boards[0]!.id)}>Open {boards[0]!.name}</Button>
+              }
+            />
+          ) : (
+            firstRun
+          )
+        ) : page === "usage" ? (
+          <UsagePage view={view} client={client} />
+        ) : page === "settings" ? (
+          <SettingsPage
+            view={view}
+            agents={agents}
+            client={client}
+            theme={theme}
+            onTheme={setTheme}
+            onSaved={() => void refreshBoards()}
+            onRemoved={() => {
+              setPage("board")
+              setSelected(null)
+              setBoardId(null)
+              void refreshBoards()
+            }}
+          />
+        ) : view ? (
+          <TriageList
+            view={view}
+            activity={activity}
+            selectedId={selected}
+            onSelect={setSelected}
+            onCompose={compose}
+            onDelete={(id) => {
+              // Close the detail pane if it is showing the note being removed.
+              setSelected((cur) => (cur === id ? null : cur))
+              void act((c) => c.deleteNote(id))
+            }}
+          />
+        ) : boardsLoaded && boards.length === 0 ? (
+          firstRun
+        ) : daemon.down ? (
+          <Empty
+            className="pt-24"
+            icon={<Logo size={40} />}
+            title="Waiting for kandy"
+            body="Nothing is answering at this address. Run kandy in a terminal and this page picks up where it was."
+          />
+        ) : (
+          <LoadingBlock className="pt-24" label="Opening the board" />
+        )}
+      </div>
+
+      {/* A viewer has nothing to write with, so the bar is not offered. */}
+      {page === "board" && view && !boardMissing && boards.length > 0 && !readOnly && (
+        <BoardComposer
+          agents={agents}
+          defaultAgent={defaultAgent}
+          paths={paths}
+          boardModels={view.board.models}
+          onExpand={(draft) => {
+            setHandoff(draft)
+            setComposing(true)
+          }}
+          onCreate={async (title, agent, model, files) => {
+            const column = view.columns[0]?.id
+            if (!column) return false
+            const created = await act((c) =>
+              c.createNote(
+                view.board.id,
+                column,
+                title,
+                "",
+                files.map((f) => ({ name: f.name, data: f.data })),
+              ),
+            )
+            if (!created) return false
+            if (created.rejected?.length)
+              setNotice(created.rejected.map((r) => r.reason).join("; "))
+            if (agent) await act((c) => c.assignNote(created.noteId, agent))
+            if (model) await act((c) => c.setModel(created.noteId, model))
+            // A one-liner with an agent picked is meant to go, not to sit.
+            if (agent) await runNote(created.noteId, agent)
+            return true
+          }}
+        />
+      )}
+    </main>
+  )
+
+  const detail = note && view && (
+    <NoteDetail
+      narrow={narrow}
+      offline={daemon.down}
+      onWiden={(wide) => detailPanel.current?.resize(wide ? "62" : "34")}
+      note={note}
+      view={view}
+      agents={agents}
+      frames={note.runId ? (transcript[note.runId] ?? []) : []}
+      history={history}
+      activity={note.runId ? activity[note.runId] : undefined}
+      forge={forge}
+      paths={paths}
+      prompts={view.prompts.filter((q) => q.noteId === note.id)}
+      onClose={() => setSelected(null)}
+      onRun={(agent) => void runNote(note.id, agent)}
+      onCancel={(runId) => void act((c) => c.cancelRun(runId))}
+      onAssign={(agent) => void act((c) => c.assignNote(note.id, agent))}
+      onPolicy={(policy) => void act((c) => c.setPolicy(note.id, policy))}
+      onModel={(model) => void act((c) => c.setModel(note.id, model))}
+      onEdit={async (patch) => (await act((c) => c.editNote(note.id, patch))) !== undefined}
+      onSteer={async (text, files) => {
+        const sent = await act((c) =>
+          c.message(
+            note.id,
+            text,
+            files?.map((f) => ({ name: f.name, data: f.data })),
+          ),
+        )
+        if (sent?.rejected?.length) setNotice(sent.rejected.map((r) => r.reason).join("; "))
+        return sent?.delivery
+      }}
+      loadStaged={async () => (await act((c) => c.attachments(note.id)))?.attachments ?? []}
+      onUnstage={async (name) =>
+        (await act((c) => c.unattach(note.id, name)))?.attachments ?? []
+      }
+      onReview={(decision) => void act((c) => c.reviewNote(note.id, decision))}
+      onAnswer={async (prompt, answer) => {
+        const res = await act((c) =>
+          c.respond(prompt.runId, prompt.requestId, answer.decision, {
+            ...(answer.scope ? { scope: answer.scope } : {}),
+            ...(answer.comment ? { comment: answer.comment } : {}),
+          }),
+        )
+        // The prompt is gone either way — the stream will drop it. Only an
+        // answer that arrived too late needs saying out loud, since the
+        // card vanishing would otherwise read as "done".
+        if (res && !res.answered) {
+          setNotice("That question was already answered or had timed out.")
+        }
+      }}
+      onEscalate={async () => {
+        await act((c) => c.escalateNote(note.id))
+      }}
+      onPrPreview={() => act((c) => c.prPreview(note.id))}
+      onOpenPr={async (draft) => {
+        await act((c) => c.openPr(note.id, draft))
+      }}
+      onDelete={() => {
+        setSelected(null)
+        void act((c) => c.deleteNote(note.id))
+      }}
+      loadDiff={() => act((c) => c.diff(note.id))}
+    />
+  )
+
   return (
     <TeamProvider value={team}>
     <TooltipProvider delayDuration={250}>
@@ -449,125 +769,24 @@ export function App() {
         them. Two hard-coded widths could not be right for both a one-line
         status check and a thousand-line diff, and the size is remembered per
         person rather than decided here.
+
+        Narrow windows are the exception: there the note covers the board
+        instead of squeezing beside it, and its back arrow returns you.
       */}
+      {narrow ? (
+        <div className="relative flex min-w-0 flex-1">
+          {board}
+          {detail && (
+            <div className="absolute inset-0 z-30 flex">{detail}</div>
+          )}
+        </div>
+      ) : (
       <ResizablePanelGroup
         orientation="horizontal"
         className="min-w-0 flex-1"
       >
         <ResizablePanel id="board" minSize="28">
-          <main className="relative flex h-full min-w-0 flex-col">
-        <MachineBanner me={me} runners={runners} loaded={runnersLoaded} />
-        {(error ?? notice) && (
-          <button
-            onClick={() => {
-              clearError()
-              setNotice(null)
-            }}
-            className="shrink-0 border-b border-berry/30 bg-berry-bg px-4 py-2.5 text-left text-aux text-berry"
-          >
-            {error ?? notice} <span className="ml-2 text-faint">dismiss</span>
-          </button>
-        )}
-
-        <div
-          className={cn(
-            "min-h-0 flex-1 overflow-y-auto",
-            // Only the board has a composer over it to fade against.
-            page === "board" && "fade-under-composer",
-          )}
-        >
-          {page === "team" && me.hub ? (
-            <TeamPage
-              client={client}
-              view={view}
-              me={me}
-              runners={runners}
-              recent={recent}
-              boardCount={boards.length}
-              focusAdd={focusAdd}
-              onFocusedAdd={focusedAdd}
-              onAddBoard={() => setNewBoard(true)}
-              onRunners={setRunners}
-            />
-          ) : page === "usage" ? (
-            <UsagePage view={view} client={client} />
-          ) : page === "settings" ? (
-            <SettingsPage
-              view={view}
-              agents={agents}
-              client={client}
-              theme={theme}
-              onTheme={setTheme}
-              onSaved={() => void refreshBoards()}
-              onRemoved={() => {
-                setPage("board")
-                setSelected(null)
-                setBoardId(null)
-                void refreshBoards()
-              }}
-            />
-          ) : view ? (
-            <TriageList
-              view={view}
-              activity={activity}
-              selectedId={selected}
-              onSelect={setSelected}
-              onCompose={compose}
-              onDelete={(id) => {
-                // Close the detail pane if it is showing the note being removed.
-                setSelected((cur) => (cur === id ? null : cur))
-                void act((c) => c.deleteNote(id))
-              }}
-            />
-          ) : boardsLoaded && boards.length === 0 ? (
-            /* On a hub the hub's own agents run nothing, so the solo first
-               run would talk about the wrong machine — an owner gets the
-               hub's setup instead. */
-            setup.show ? (
-              <div className="mx-auto w-full max-w-[560px] px-6 pt-[12vh] pb-16">
-                <SetupHub setup={setup} onAddBoard={() => setNewBoard(true)} onInvite={inviteTeam} />
-              </div>
-            ) : (
-              <FirstRun agents={agents} onChooseRepo={() => setNewBoard(true)} />
-            )
-          ) : (
-            <LoadingBlock className="pt-24" label="Opening the board" />
-          )}
-        </div>
-
-        {/* A viewer has nothing to write with, so the bar is not offered. */}
-        {page === "board" && view && boards.length > 0 && !readOnly && (
-          <BoardComposer
-            agents={agents}
-            defaultAgent={defaultAgent}
-            paths={paths}
-            onExpand={(draft) => {
-              setHandoff(draft)
-              setComposing(true)
-            }}
-            onCreate={async (title, agent, model, files) => {
-              const column = view.columns[0]?.id
-              if (!column) return
-              const created = await act((c) =>
-                c.createNote(
-                  view.board.id,
-                  column,
-                  title,
-                  "",
-                  files.map((f) => ({ name: f.name, data: f.data })),
-                ),
-              )
-              if (!created) return
-              if (created.rejected?.length)
-                setNotice(created.rejected.map((r) => r.reason).join("; "))
-              if (agent) await act((c) => c.assignNote(created.noteId, agent))
-              if (model) await act((c) => c.setModel(created.noteId, model))
-              // A one-liner with an agent picked is meant to go, not to sit.
-              if (agent) await runNote(created.noteId, agent)
-            }}
-          />
-        )}
-          </main>
+          {board}
         </ResizablePanel>
 
         {/*
@@ -591,75 +810,16 @@ export function App() {
           minSize="22"
           maxSize="78"
         >
-          {note && view && (
-            <NoteDetail
-          onWiden={(wide) => detailPanel.current?.resize(wide ? "62" : "34")}
-          note={note}
-          view={view}
-          agents={agents}
-          frames={note.runId ? (transcript[note.runId] ?? []) : []}
-          activity={note.runId ? activity[note.runId] : undefined}
-          forge={forge}
-          paths={paths}
-          prompts={view.prompts.filter((q) => q.noteId === note.id)}
-          onClose={() => setSelected(null)}
-          onRun={(agent) => void runNote(note.id, agent)}
-          onCancel={(runId) => void act((c) => c.cancelRun(runId))}
-          onAssign={(agent) => void act((c) => c.assignNote(note.id, agent))}
-          onPolicy={(policy) => void act((c) => c.setPolicy(note.id, policy))}
-          onModel={(model) => void act((c) => c.setModel(note.id, model))}
-          onEdit={async (patch) => (await act((c) => c.editNote(note.id, patch))) !== undefined}
-          onSteer={async (text, files) => {
-            const sent = await act((c) =>
-              c.message(
-                note.id,
-                text,
-                files?.map((f) => ({ name: f.name, data: f.data })),
-              ),
-            )
-            if (sent?.rejected?.length) setNotice(sent.rejected.map((r) => r.reason).join("; "))
-            return sent?.delivery
-          }}
-          loadStaged={async () => (await act((c) => c.attachments(note.id)))?.attachments ?? []}
-          onUnstage={async (name) =>
-            (await act((c) => c.unattach(note.id, name)))?.attachments ?? []
-          }
-          onReview={(decision) => void act((c) => c.reviewNote(note.id, decision))}
-          onAnswer={async (prompt, answer) => {
-            const res = await act((c) =>
-              c.respond(prompt.runId, prompt.requestId, answer.decision, {
-                ...(answer.scope ? { scope: answer.scope } : {}),
-                ...(answer.comment ? { comment: answer.comment } : {}),
-              }),
-            )
-            // The prompt is gone either way — the stream will drop it. Only an
-            // answer that arrived too late needs saying out loud, since the
-            // card vanishing would otherwise read as "done".
-            if (res && !res.answered) {
-              setNotice("That question was already answered or had timed out.")
-            }
-          }}
-          onEscalate={async () => {
-            await act((c) => c.escalateNote(note.id))
-          }}
-          onPrPreview={() => act((c) => c.prPreview(note.id))}
-          onOpenPr={async (draft) => {
-            await act((c) => c.openPr(note.id, draft))
-          }}
-          onDelete={() => {
-            setSelected(null)
-            void act((c) => c.deleteNote(note.id))
-          }}
-          loadDiff={() => act((c) => c.diff(note.id))}
-        />
-          )}
+          {detail}
         </ResizablePanel>
       </ResizablePanelGroup>
+      )}
 
       {composing && view && (
         <Composer
           agents={agents}
           defaultAgent={defaultAgent}
+          boardModels={view.board.models}
           initialTitle={handoff}
           onCancel={() => {
             setComposing(false)
