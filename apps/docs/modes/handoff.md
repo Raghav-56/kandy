@@ -47,8 +47,10 @@ machine, and Cursor on another was briefed and finished it on the same branch.
 
 ## What if it goes wrong
 
-- **Their machine is offline:** the handoff is refused — "that machine is not
-  connected" — and the note stays with you.
+- **Their machine is offline:** the handoff is refused — "bob@…'s machine is
+  offline — give it once it reconnects" — and the note stays with you. A machine
+  that drops out mid-run shows offline within seconds; if it's gone for 90
+  seconds its run is marked interrupted, and can be resumed.
 - **The push fails** (no rights, a protected branch): nothing moves, and the
   error says why.
 - **The branch isn't on the remote when they pick it up:** their runner says so

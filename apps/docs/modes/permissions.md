@@ -53,11 +53,15 @@ kandy consent revoke bob@company.com
 | `team` | anyone on the hub |
 | `nobody` | only my own notes |
 
-A note that's held shows on the board as a request, with who asked. Nothing is
-checked out and nothing runs until Alice answers:
+A note that's held shows on the board as a request, with who asked and what
+access it would run with — *full access* means it can run anything Alice can.
+`kandy status` lists the requests waiting on her too. Nothing is checked out and
+nothing runs until Alice answers:
 
 - **Run it** — this once.
 - **Always allow Bob** — and from then on, Bob's notes run without asking.
+  `kandy consent approve bob@company.com` does the same, and releases the notes
+  Bob already has waiting.
 - **Decline.**
 
 Only the owner of that machine can answer. A hub owner who isn't Alice gets

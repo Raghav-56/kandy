@@ -26,14 +26,16 @@ exactly what to do about it:
 
 | It checks | If not |
 | --- | --- |
-| Can this machine reach the hub? | "cannot reach it", plus whether Tailscale is up here |
+| Can this machine reach the hub? | "cannot reach it" — and, for a `*.ts.net` hub, whether Tailscale is up here |
 | Does the hub know who you are? | this machine isn't on the tailnet, or is a *tagged* device, which carries nobody's identity |
-| Has an owner added you? | "Nobody has added you yet — ask alice@…", with the command to give them. This machine is saved and connects the moment they do |
+| Has an owner added you? | "Nobody has added you yet — ask alice@…", with the command to give them. This machine is saved, its runner is started, and it connects within a minute of them adding you |
 | Which agents are signed in here? | lists the signed-out ones |
 | Which of the team's repositories are cloned here? | a ✓ per board — found by git remote, so your clone can be anywhere on your disk |
 
 Then it starts this machine's **runner** in the background and waits until the
-hub can see it.
+hub can see it. Joining again with a different address, token or `--repo`
+replaces the runner; repos you named before are kept unless you name new ones.
+A **viewer** is told what they can see, and no runner is started.
 
 ```
   hub     https://kandy-hub.your-tailnet.ts.net

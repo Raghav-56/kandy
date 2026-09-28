@@ -66,7 +66,9 @@ when it stops. A new hub prints its next three steps.
 
 ## Owning it
 
-**Whoever opens the hub first becomes its owner.** On a tailnet, "whoever can
+**Whoever opens the hub first becomes its owner** — by opening the board, or
+with `kandy join`. A health check, a script or a runner doesn't claim it, and the
+hub prints who became owner. On a tailnet, "whoever can
 reach it" is already someone your company let onto its network. The owner sees a
 checklist that ticks itself off:
 
@@ -111,7 +113,13 @@ accept a share are still identified by their own login.
 `kandy hub` with no flag runs with a single token instead of identities. There
 are no people — whoever holds the token is the one person — so it suits one
 person with two machines, not a team. Join it with
-`kandy join <url> --token <token>`; the token is in the hub's state directory.
+`kandy join <url> --token <token>`; the token is in the hub's state directory,
+and the hub's banner prints both commands. A wrong token is refused at join,
+with "that token was refused".
+
+It listens on `127.0.0.1` only. To reach it from your other machine, start it
+with the name that machine will use and an address it can reach:
+`KANDY_HOSTS=my-box.local kandy hub --bind 0.0.0.0`.
 
 ## What the hub stores
 
