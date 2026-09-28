@@ -44,6 +44,7 @@ export async function printHelp(topic?: string): Promise<number> {
 
   out(head("work"))
   out(row("kandy new <text>", "write a note without running it"))
+  out(row("kandy run [words]", "run the newest draft here, or the one that matches"))
   out(row("kandy ls [--all]", "what's open here"))
   out(row("kandy log", "what's happening, live"))
   out(row("kandy stats", "what this board has done"))
@@ -139,11 +140,12 @@ const TOPICS: Record<string, () => void | Promise<void>> = {
     out(head("notes"))
     out(row("--agent NAME", "which agent runs a note: claude, codex, cursor, opencode, aider"))
     out(row("--no-run", "write the note without starting it"))
+    out(row("--", "the rest is the note, even if it starts with -"))
     out(row("--all, -a", "include finished notes in ls"))
     out(row("--verbose, -v", "include agent chatter in log"))
     out(head("this machine"))
     out(row("--port N", "a daemon on another port (default 4477)"))
-    out(row("--slots N", "how many agents may run at once (serve, runner)"))
+    out(row("--slots N", "how many agents may run at once, when this command starts kandy"))
     out(row("--json", "machine-readable output (status, stats, serve, hub, runner)"))
     out(row("--dry-run", "what gc would remove, without removing it"))
     out(row("--force", "gc: remove more · update: even with notes running"))
@@ -177,6 +179,14 @@ const COMMANDS: Record<string, CommandHelp> = {
       "the rest is detail, and both go to the agent — put constraints and how to verify there.",
     ],
     examples: ['kandy new "Add a --json flag to serve\nPrint port and db path as JSON."'],
+  },
+  run: {
+    usage: "kandy run [text-or-id] [--agent a]",
+    does: [
+      "Run a draft on this repo's board: the newest one, or the one note whose id starts",
+      "with, or whose title contains, the words given. Also resumes an interrupted note.",
+    ],
+    examples: ["kandy run", "kandy run login flash --agent codex"],
   },
   ls: { usage: "kandy ls [--all]", does: ["What's open on this repo's board. --all includes finished notes."] },
   list: { usage: "kandy list [--all]", does: ["The same as kandy ls: what's open on this repo's board. --all includes finished notes."] },

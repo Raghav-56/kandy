@@ -11,6 +11,7 @@ kandy "fix the login flash"      # write a note in this repo, and an agent runs 
 kandy                            # the board, in this terminal (status when piped)
 kandy open                       # the board, in a browser
 kandy new "refactor the runner"  # write a note without running it
+kandy run [words]                # run the newest draft here, or the one that matches
 kandy ls [--all]                 # what's open here; --all includes finished work
 kandy log [--verbose]            # what's happening, live
 kandy stats [--json]             # what this board has done
@@ -18,7 +19,13 @@ kandy stats [--json]             # what this board has done
 
 `kandy "…"` runs with the last agent used on this board if it's still signed
 in, otherwise the first one that is. `--agent claude|codex|cursor|opencode|aider`
-picks one; `--no-run` writes without running.
+picks one; `--no-run` writes without running. An agent name kandy doesn't know,
+or one that isn't installed or signed in, is refused before anything is written.
+
+A single word kandy doesn't know as a command — `kandy stauts` — is refused with
+a guess at what you meant, rather than written as a note. To write a note that
+is one word or starts with a dash, use `kandy new`, or put `--` before it:
+`kandy -- "-v prints nothing"`.
 
 ## Teams
 
@@ -84,7 +91,12 @@ isn't what keeps your agents alive.
 
 To stop it, `kandy stop`. Notes that were running show as **interrupted**, and
 **Resume** carries on where they stopped — the worktree and the agent's session
-are kept. `kandy stop` then any command is how you restart kandy.
+are kept: `r` on the terminal board, or `kandy run <id>`. `kandy stop` then any
+command is how you restart kandy.
+
+If the daemon won't start, kandy shows the last lines of its log and where it
+is: `daemon.log` in kandy's state folder (`~/.local/state/kandy/` unless
+`XDG_STATE_HOME` says otherwise).
 
 `kandy update` asks GitHub for the newest release and, if it's newer, stops
 the running kandy (and your team runner) and installs it — then says what
