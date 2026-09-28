@@ -27,7 +27,7 @@ kandy — but it changes daily. [What that means](apps/docs/status.md).
 curl -fsSL https://hiteshbandhu.github.io/kandy/install.sh | sh
 ```
 
-On Windows, in PowerShell: `irm https://hiteshbandhu.github.io/kandy/install.ps1 | iex`. The script checks for Node 22+, installs
+On Windows, in PowerShell: `irm https://hiteshbandhu.github.io/kandy/install.ps1 | iex`. The script checks for Node 22.13+, installs
 the newest release, and asks the first-run questions. Then `cd your-repo && kandy`.
 
 Or by hand: `npm i -g https://github.com/hiteshbandhu/kandy/releases/latest/download/kandy.tgz` —

@@ -17,10 +17,11 @@ on the home page are its own board — but it is not something to depend on yet.
 - **Nobody has audited it.** The security model is written down in
   [Who decides what](/modes/permissions) and tested, but it hasn't been reviewed
   by anyone else. Keep a hub on your tailnet — never expose one to the internet.
-- **macOS and Linux first; Windows barely tried.** kandy installs and runs on
-  Windows 10, and a Windows machine has joined a team hub — but no note has run
-  there yet, the mouse doesn't work in Windows terminals, and a runner started
-  over SSH ends when the SSH session does.
+- **macOS and Linux first; Windows barely tried.** On Windows 10 the install
+  script has been run for real — refusing an old Node, then installing — along
+  with the everyday commands, and a Windows machine has joined a team hub. But
+  no note has run there yet, the mouse doesn't work in Windows terminals, and
+  the daemon or a runner started over SSH ends when the SSH session does.
 
 If something breaks, [open an issue](https://github.com/hiteshbandhu/kandy/issues)
 with what you ran and what it printed.
@@ -38,6 +39,7 @@ with what you ran and what it printed.
 | Handoff between machines | two clones and two runners on one machine: Claude on one, Cursor continuing on the other |
 | Consent, roles, invites | tested; used by very few people |
 | opencode, aider | written against their real output formats; never driven end to end |
+| Windows | Windows 10: the install script (old Node refused, then installed), `status`, `update --check`, writing a note, the no-agent and not-installed messages. Finding npm-installed agents is unit-tested only — no note has run |
 
 ## What doesn't work yet
 

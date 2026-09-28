@@ -19,6 +19,16 @@ from Node 22.13. Install a newer Node from [nodejs.org](https://nodejs.org) (or
 with `nvm install 22`, `fnm install 22`, `brew install node`), then run the
 install command again — with the new Node, so kandy is installed for it.
 
+On Windows, Node in *Program Files* is upgraded by its installer, which asks for
+an administrator's yes — run the LTS installer from [nodejs.org](https://nodejs.org),
+then open a new PowerShell window. With winget, refresh its list first; an old
+one can offer Node 18 as the newest LTS:
+
+```powershell
+winget source update
+winget upgrade OpenJS.NodeJS.LTS
+```
+
 Older versions of kandy printed
 `Error [ERR_UNKNOWN_BUILTIN_MODULE]: No such built-in module: node:sqlite`
 instead — also on Node 22.0 to 22.12. It means the same thing.
