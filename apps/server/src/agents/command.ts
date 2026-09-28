@@ -53,7 +53,11 @@ export function resolveCommand(
 export function findOnPath(bin: string, env: Env): string | null {
   const exts = (env["PATHEXT"] ?? env["Pathext"] ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean)
   // Already has one of them, or is a path: try it as given first.
-  const names = exts.some((e) => bin.toLowerCase().endsWith(e.toLowerCase())) ? [bin] : exts.map((e) => bin + e)
+  // Windows matches names without case; the lower-case spelling is tried too so
+  // the lookup means the same on a filesystem that doesn't (Linux CI, WSL).
+  const names = exts.some((e) => bin.toLowerCase().endsWith(e.toLowerCase()))
+    ? [bin]
+    : [...new Set(exts.flatMap((e) => [bin + e.toLowerCase(), bin + e]))]
   const dirs = /[\\/]/.test(bin) ? [""] : (env["PATH"] ?? env["Path"] ?? "").split(path.delimiter).filter(Boolean)
   for (const dir of dirs) {
     for (const name of names) {
