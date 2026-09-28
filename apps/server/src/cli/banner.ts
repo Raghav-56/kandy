@@ -140,12 +140,17 @@ export function sparkline(values: number[]): string {
 }
 
 /** Status dot + word, matching the web app's language. */
-export function statusTag(status: string): string {
+/** `failure` says why a failed note stopped — see `failureOf` in tui/board.ts. */
+export function statusTag(status: string, failure?: "interrupted" | "cancelled" | "failed"): string {
   switch (status) {
     case "blocked":
       return berry("● needs you")
     case "failed":
-      return berry("● failed")
+      return failure === "interrupted"
+        ? lemon("● interrupted")
+        : failure === "cancelled"
+          ? faint("● cancelled")
+          : berry("● failed")
     case "review":
       return mint("● review")
     case "running":

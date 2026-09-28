@@ -50,6 +50,7 @@ import {
   machineName,
   moveSelection,
   needsYou,
+  failureOf,
   noteClock,
   readyAgents,
   reconcileSelection,
@@ -343,6 +344,7 @@ export function App({ client, live, boards: initialBoards, boardId: initialBoard
     stage: focusNote && !focusNote.held ? stageOf(focusNote.status) : null,
     failed: focusNote?.status === "failed",
     decidable: !!focusNote && cannotDecide(focusNote, "merge") === null,
+    interrupted: !!view && focusNote?.status === "failed" && failureOf(runOf(view, focusNote)).kind === "interrupted",
     kanban: kanbanOn,
     owner: hub && owner,
     member: member !== null,
@@ -1496,7 +1498,10 @@ function noteHeader(
   const model = note.model ?? run?.model ?? (note.agent ? view.board.models[note.agent] : undefined) ?? null
   const meta: Seg[] = [
     { text: " " + g.char + " ", tone: g.tone, bold: true },
-    { text: note.held ? "held" : note.status, tone: g.tone === "plain" ? "plain" : g.tone },
+    {
+      text: note.held ? "held" : note.status === "failed" ? failureOf(run).kind : note.status,
+      tone: g.tone === "plain" ? "plain" : g.tone,
+    },
   ]
   const dot = (): Seg => ({ text: " · ", tone: "dim" })
   if (note.agent) meta.push(dot(), { text: agentLabel(note.agent), tone: "plain" })
@@ -1514,6 +1519,22 @@ function noteHeader(
     </Text>,
     <Segs key="nm" segs={meta} p={p} />,
   ]
+  // Why it stopped, in words — the reason was stored and never shown, so a
+  // note said "failed" and nothing else.
+  const why = note.status === "failed" ? failureOf(run) : null
+  if (why?.reason) {
+    rows.push(
+      <Segs
+        key="nf"
+        p={p}
+        segs={[
+          { text: "   ", tone: "plain" },
+          { text: truncate(why.reason, Math.max(8, width - 18)), tone: why.kind === "interrupted" ? "lemon" : "berry" },
+          { text: why.kind === "interrupted" ? "  r resumes" : "  r retries", tone: "dim" },
+        ]}
+      />,
+    )
+  }
   const now = run && LIVE_RUN.has(run.status) ? activity[run.id] : undefined
   if (now) {
     rows.push(

@@ -8,6 +8,7 @@ import {
   AGENTS,
   AGENT_NAMES,
   notesIn,
+  wasInterrupted,
   type AgentId,
   type AgentInfo,
   type BoardView,
@@ -128,6 +129,24 @@ export function runOf(view: BoardView, note: Note): Run | undefined {
   return note.runId ? view.runs.find((r) => r.id === note.runId) : undefined
 }
 
+/**
+ * Why a failed note stopped, in the three ways that ask different things of you.
+ *
+ * The model has one note status for all of them, `failed`. But a run the
+ * daemon was stopped under was not the agent's doing — its worktree and
+ * session are intact and it resumes — and one you cancelled is not a failure
+ * at all. Saying "failed" for both, with no reason, sent people looking for a
+ * bug that was not there. Derived from the run, so nothing new is stored.
+ */
+export type Failure = { kind: "interrupted" | "cancelled" | "failed"; reason: string | null }
+
+export function failureOf(run: Pick<Run, "status" | "error"> | undefined | null): Failure {
+  if (wasInterrupted(run)) return { kind: "interrupted", reason: "kandy stopped while this was running — it resumes where it left off" }
+  if (run?.status === "cancelled") return { kind: "cancelled", reason: null }
+  const first = run?.error?.split("\n").find((l) => l.trim())?.trim() ?? null
+  return { kind: "failed", reason: first }
+}
+
 export function runsOf(view: BoardView, noteId: string): Run[] {
   return view.runs.filter((r) => r.noteId === noteId).sort((a, b) => a.startedAt - b.startedAt)
 }
@@ -154,8 +173,12 @@ export function glyph(view: BoardView, note: Note, tick = 0): Glyph {
       return { char: "●", tone: "mint" }
     case "done":
       return note.outcome === "discarded" ? { char: "–", tone: "dim" } : { char: "✓", tone: "dim" }
-    case "failed":
+    case "failed": {
+      const kind = failureOf(runOf(view, note)).kind
+      if (kind === "interrupted") return { char: "↻", tone: "lemon" }
+      if (kind === "cancelled") return { char: "✗", tone: "dim" }
       return { char: "✗", tone: "berry" }
+    }
     case "draft":
       return { char: "·", tone: "dim" }
   }

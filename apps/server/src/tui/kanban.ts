@@ -9,7 +9,7 @@
  * Pure functions over a `BoardView`. Nothing here knows about Ink.
  */
 import { notesIn, type BoardView, type Column, type Lane, type Note, type RunnerInfo } from "@kandy/core"
-import { diffstat, glyph, isLive, machineName, matches, noteClock } from "./board.js"
+import { diffstat, failureOf, glyph, isLive, machineName, matches, noteClock, runOf } from "./board.js"
 import type { Tone } from "./theme.js"
 import { textWidth, truncate, wrap } from "./text.js"
 import type { Seg } from "./transcript.js"
@@ -284,7 +284,8 @@ export function stateWord(view: BoardView, note: Note, now = Date.now()): string
     case "review":
       return "review"
     case "failed":
-      return "failed"
+      // "interrupted", "cancelled" or "failed": each asks something different.
+      return failureOf(runOf(view, note)).kind
     case "done":
       return note.outcome === "discarded" ? "discarded" : "merged"
   }
