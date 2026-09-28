@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.0-alpha.9 — clearer first steps, and a quieter Windows installer
+
+September 2026. **Extremely experimental** — see [Status](/status). Update:
+
+```sh
+kandy update
+```
+
+- **With no agent installed, kandy says so** and offers opencode, which runs
+  free models with no account — instead of telling you to sign in to agents you
+  don't have. Sign-in commands are named only for the agents you do have.
+- **The Windows installer stops cleanly.** When it can't install — Node too old,
+  say — it says why and what to do, without a red PowerShell error after it.
+  An old kandy that can't run is recognised, and the Node hint puts the
+  nodejs.org installer first, since winget's list can be years out of date.
+- **An unreachable team hub on Tailscale** asks whether Tailscale is up here
+  *and* whether the hub's machine is on.
+- **Docs:** what has been tried on Windows 10, and how to get a new enough Node
+  there. → [Status](/status)
+
 ## 0.2.0-alpha.8 — merges that land where they say, and teams that tell the truth
 
 September 2026. **Extremely experimental** — see [Status](/status). Install or
