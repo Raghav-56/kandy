@@ -8,7 +8,10 @@ kandy skill
 ```
 
 That copies it to `~/.claude/skills/kandy/SKILL.md`, making it available in
-every repository rather than just this checkout.
+every repository. The skill comes with kandy, so run `kandy skill` again after
+an update to get the newest version of it. If it says `cannot find the skill
+to install`, your kandy is older than the skill's packaging — `kandy update`,
+then run it again.
 
 ## What it does
 

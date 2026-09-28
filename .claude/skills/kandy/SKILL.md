@@ -82,5 +82,6 @@ work happens in a separate process; you will not see it finish. Point them at
 - It does not merge or open pull requests. Those are decisions a person makes on
   the board, after reading the diff.
 - It cannot answer whether a run succeeded, from here. Check `kandy ls`.
-- Notes run with repo-only permissions unless the user chose full access on the
-  board. An agent that cannot run your test command is expected, not broken.
+- Notes run with full access unless the user chose repo only (at first run, or
+  on the board). Under repo only an agent that cannot run your test command is
+  expected, not broken.

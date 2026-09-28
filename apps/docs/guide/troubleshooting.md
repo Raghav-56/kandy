@@ -12,15 +12,35 @@ wedged states, and notes that were running can be resumed.
 
 ## Installing and starting
 
-### `kandy needs Node 22 or newer — this is Node 20…`
+### `kandy needs Node 22.13 or newer — this is Node 20…`
 
-kandy keeps its board in Node's built-in SQLite, which arrived in Node 22.
-Install a newer Node from [nodejs.org](https://nodejs.org) (or with `nvm install
-22`, `fnm install 22`, `brew install node`), then run the install command again.
+kandy keeps its board in Node's built-in SQLite, which works without a flag
+from Node 22.13. Install a newer Node from [nodejs.org](https://nodejs.org) (or
+with `nvm install 22`, `fnm install 22`, `brew install node`), then run the
+install command again — with the new Node, so kandy is installed for it.
 
 Older versions of kandy printed
 `Error [ERR_UNKNOWN_BUILTIN_MODULE]: No such built-in module: node:sqlite`
-instead. It means the same thing.
+instead — also on Node 22.0 to 22.12. It means the same thing.
+
+### `Don't run this as root or with sudo`
+
+The install script stops here when it's run with `sudo`. kandy keeps its board
+in your home folder and runs agents as you, so install it as you: run the
+command again without `sudo`. If npm then fails with `EACCES`, see the next
+entry. In a container where root is the only user, set `KANDY_ALLOW_ROOT=1`.
+
+### `running scripts is disabled on this system` (Windows)
+
+PowerShell's execution policy refuses the small scripts npm installs, `kandy`
+among them. Allow scripts you've installed yourself, once:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+Then run the install command again. The install script says this itself when it
+sees the policy.
 
 ### The install fails with `EACCES: permission denied`
 
@@ -45,6 +65,14 @@ export PATH="$(npm prefix -g)/bin:$PATH"
 ```
 
 Put the `export` line in `~/.zshrc` or `~/.bashrc` to keep it.
+
+### `updated … but kandy on your PATH is still …`
+
+`kandy update` installed the new version, but another kandy comes first on your
+`PATH` — usually one installed with a different Node (nvm, fnm, Homebrew and a
+system Node side by side). It names the one your shell runs and where the new
+one went. Remove the old one (`npm rm -g kandy` with the Node that installed
+it), or put the new one's `bin` folder first on `PATH`.
 
 ### `could not reach the kandy daemon`
 
@@ -84,11 +112,12 @@ git init && git add -A && git commit -m "Start"
 
 A repository needs at least one commit — a note's branch starts from it.
 
-### `no board here — run kandy in this repo once to create one`
+### `no board for this repo yet`
 
-`kandy ls` and friends work on the board for the repository you're in, and this
-one hasn't got one yet. Run `kandy` here, or write a note with `kandy "…"`,
-and it's created.
+`kandy ls`, `kandy stats` and `kandy gc` work on the board for the repository
+you're in, and this one hasn't got one yet. Run `kandy` here, or write a note
+with `kandy "…"`, and it's created. `kandy skills` and `kandy mcp` say the same
+thing as `no board here — run kandy in this repo once to create one`.
 
 ### The first-run questions never appeared — or I picked the wrong answer
 

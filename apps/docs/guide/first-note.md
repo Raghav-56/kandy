@@ -49,12 +49,19 @@ Want to change course mid-run? Send it a message — see
 
 ## Permissions
 
-Every note starts **repo only**: the agent edits files freely, and when it
-wants to run a shell command, Claude Code puts the question to you on the board
-— allow it once, allow that kind of thing for this note, or deny it with a note
-saying what to do instead. Other agents can't ask yet, so a refused command
-shows as **blocked**, with a one-click way to continue with more access.
+A note starts with its board's access: **full access** unless you chose
+otherwise when you first ran kandy, or in the board's
+[settings](/guide/settings#agent-access).
 
-**Full access** lets it run anything without asking. A worktree bounds what it
-can damage *inside the repository* — it does nothing about your home directory
-or the network. It's a per-note choice, and kandy never makes it for you.
+**Full access** lets the agent run anything without asking. A worktree bounds
+what it can damage *inside the repository* — it does nothing about your home
+directory or the network.
+
+**Repo only**: the agent edits files freely, and when it wants to run a shell
+command, Claude Code puts the question to you on the board — allow it once,
+allow that kind of thing for this note, or deny it with a note saying what to do
+instead. Other agents can't ask yet, so a refused command shows as **blocked**,
+with a one-click way to continue with more access.
+
+You can switch any one note either way — <kbd>p</kbd> in the terminal board.
+Switching to full access asks first.

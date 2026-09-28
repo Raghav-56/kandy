@@ -56,8 +56,9 @@ not `npm i -g kandy`, which is someone else's package.
   that resumes its session in the same worktree.
 - **Review** — a diff against the commit it branched from, then merge (`--no-ff`)
   or discard. Conflicts are reported, never guessed at.
-- **Permissions** — per note: *repo only* (edit files, most shell refused) or
-  *full access* (run anything). Your call, stated plainly, never defaulted up.
+- **Permissions** — *full access* (run anything; the default, chosen at first
+  run) or *repo only* (edit files; shell commands are asked about or refused).
+  Set per board, changeable per note.
 
 ## Architecture
 
@@ -104,8 +105,9 @@ one process to run and one URL to open.
 
 `serve` takes `--port N` and `--slots N` (how many agents may run at once).
 Pass `--json` to print a single JSON object once the daemon is listening, with
-`port`, `dbPath`, and `slots` fields, for example:
-`{"port":4477,"dbPath":"/home/user/.local/state/kandy/kandy.db","slots":4}`.
+`url`, `port`, `slots`, `db`, `tokenPath`, `webBuilt` and `pid` fields, for example:
+`{"url":"http://127.0.0.1:4477","port":4477,"slots":4,"db":"/home/user/.local/state/kandy/kandy.db","tokenPath":"/home/user/.local/state/kandy/token","webBuilt":true,"pid":12345}`.
+The token itself is never printed — it's in the file at `tokenPath`.
 
 ```sh
 node apps/server/dist/cli.js            # the board, in this terminal
@@ -114,8 +116,8 @@ pnpm --filter @kandy/web dev            # work ON the UI, with HMR, on :5477
 
 Then open the board, create one against a repo, and write a note.
 
-Requires Node >= 22, pnpm, and at least one agent CLI installed and logged in
-(`claude` or `codex`). kandy never reads or stores your credentials — it spawns
+Requires Node >= 22.13, pnpm, and at least one agent CLI installed and logged in
+(`claude`, `codex`, `cursor-agent`, `opencode` or `aider`). kandy never reads or stores your credentials — it spawns
 the CLI you already authenticated, and the child inherits it.
 
 ## Tests

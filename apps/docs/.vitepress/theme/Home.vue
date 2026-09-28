@@ -79,7 +79,7 @@ const MODES = [
         <span class="kh-copy">{{ copied === INSTALL ? "Copied" : "Copy" }}</span>
       </div>
       <p class="kh-then">
-        then <code>cd your-repo &amp;&amp; kandy</code> <span class="kh-sep">·</span> Node 22+
+        then <code>cd your-repo &amp;&amp; kandy</code> <span class="kh-sep">·</span> Node 22.13+
         <span class="kh-sep">·</span> Windows (early): <code>{{ INSTALL_WIN }}</code>
       </p>
 

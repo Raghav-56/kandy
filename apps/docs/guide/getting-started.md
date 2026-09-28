@@ -21,7 +21,7 @@ You need three things kandy doesn't install for you.
 | | Check | Why |
 | --- | --- | --- |
 | **macOS or Linux** | — | Windows installs and runs, but has barely been tried ([Status](/status)). |
-| **Node 22 or newer** | `node --version` | kandy stores its board with Node's built-in SQLite, which arrived in 22. |
+| **Node 22.13 or newer** | `node --version` | kandy stores its board with Node's built-in SQLite, which needs no flag from 22.13. |
 | **git** | `git --version` | Every note runs in its own git worktree, on its own branch. |
 
 And **at least one coding agent, installed and signed in**. kandy has no login
@@ -55,10 +55,11 @@ irm https://hiteshbandhu.github.io/kandy/install.ps1 | iex
 
 :::
 
-The script checks you have Node 22 or newer, installs the newest release from
+The script checks you have Node 22.13 or newer, installs the newest release from
 GitHub, and then asks two questions: how you'll use kandy (just you, joining a
 team, or starting a hub), and what agents may do — **full access** (the
 default) or **repo only**. It asks only once; running it again just updates.
+Run it as yourself, not with `sudo` — it stops if you do.
 You can read it first: [install.sh](https://hiteshbandhu.github.io/kandy/install.sh) · [install.ps1](https://hiteshbandhu.github.io/kandy/install.ps1).
 
 Rather not pipe a script into a shell? The same thing by hand:
@@ -78,7 +79,9 @@ kandy --version
 ```
 
 To **update**, `kandy update` — or run the install command again. Either
-stops a running kandy first, so the next command starts the new version. To **remove** it,
+stops a running kandy and your team runner first, so the next command starts the
+new version; notes that were running show as interrupted, and Resume carries on.
+`kandy update` asks first when notes are running. To **remove** it,
 `npm rm -g kandy` — your boards stay in `~/.local/state/kandy` until you delete
 that too.
 
@@ -229,9 +232,11 @@ each other. Four run at a time by default.
 
 ## 7. Answer its question
 
-A few seconds in, the note stopped: **needs you**. Every note
-starts **repo only** — the agent edits files freely, but a shell command is put
-to you first. Here it wanted to run the tests:
+With **full access** — what setup picks unless you choose otherwise — the agent
+runs what it needs and you won't see this step. Under **repo only** (chosen at
+setup, or set on the board) the agent edits files freely, but a shell command is
+put to you first. This run was made under repo only, so a few seconds in the
+note stopped: **needs you**. It wanted to run the tests:
 
 <p class="k-shot"><img src="/shots/start/terminal-ask.webp" alt="A note in the terminal waiting on you: Claude Code wants to run npm test, with a to allow once and D to deny"></p>
 
