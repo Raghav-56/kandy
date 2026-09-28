@@ -1,4 +1,4 @@
-import type { NoteStatus } from "@kandy/core"
+import type { Note, NoteStatus } from "@kandy/core"
 
 /**
  * The candy status language.
@@ -47,3 +47,21 @@ export const GROUPS: { key: string; title: string; statuses: NoteStatus[] }[] = 
   { key: "backlog", title: "Backlog", statuses: ["draft"] },
   { key: "done", title: "Done", statuses: ["done"] },
 ]
+
+/**
+ * The look for one note, rather than for its status.
+ *
+ * `done` covers both verdicts, and "Done" on a note whose work was thrown away
+ * read as if it had landed. The TUI already says ✓ merged / – discarded; this
+ * is the same distinction in the same words.
+ */
+export function lookOf(note: Pick<Note, "status" | "outcome">): Look {
+  const look = LOOK[note.status]
+  if (note.status !== "done" || !note.outcome) return look
+  return { ...look, label: note.outcome === "discarded" ? "– Discarded" : "✓ Merged" }
+}
+
+/** Whether a note's changes still stand — a discarded note's diff went with it. */
+export function changesStand(note: Pick<Note, "outcome">): boolean {
+  return note.outcome !== "discarded"
+}

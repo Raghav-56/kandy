@@ -144,7 +144,9 @@ export function TriageList({
                 run={view.runs.find((r) => r.id === note.runId)}
                 activity={note.runId ? activity[note.runId] : undefined}
                 selected={selectedId === note.id}
-                statusImplied={g.statuses.length === 1}
+                /* "Done" names the status but not the verdict — merged and
+                   discarded look alike without it. */
+                statusImplied={g.statuses.length === 1 && g.key !== "done"}
                 onSelect={onSelect}
                 onRequestDelete={requestDelete}
               />

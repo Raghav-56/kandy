@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import type { AgentId, AgentInfo, Board, BoardView } from "@kandy/core"
 import { Kbd } from "@/ui"
 import { AgentMark, agentLabel } from "@/features/agents/AgentMark"
-import { LOOK } from "@/features/notes/status"
+import { lookOf } from "@/features/notes/status"
 import { cn } from "@/lib/utils"
 
 export type Command = {
@@ -64,7 +64,7 @@ export function CommandPalette({
     }
 
     for (const n of view?.notes ?? []) {
-      const look = LOOK[n.status]
+      const look = lookOf(n)
       out.push({
         id: `note-${n.id}`,
         label: n.title,
@@ -129,9 +129,19 @@ export function CommandPalette({
         same reason. The scrim still fades, because that is the part that would
         look broken snapping in.
       */}
-      <div className="w-[min(620px,100%)] overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl shadow-black/60">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        className="w-[min(620px,100%)] overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl shadow-black/60"
+      >
         <input
           autoFocus
+          role="combobox"
+          aria-label="Search notes, repos and actions"
+          aria-expanded="true"
+          aria-controls="palette-results"
+          aria-activedescendant={results[cursor] ? `palette-${results[cursor].id}` : undefined}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search notes, repos, actions…"
@@ -153,7 +163,7 @@ export function CommandPalette({
           }}
         />
 
-        <div className="max-h-[46vh] overflow-y-auto py-1.5">
+        <div id="palette-results" role="listbox" className="max-h-[46vh] overflow-y-auto py-1.5">
           {results.length === 0 && (
             <p className="px-4 py-6 text-center text-aux text-faint">Nothing matches.</p>
           )}
@@ -161,9 +171,17 @@ export function CommandPalette({
             const header = c.group !== lastGroup ? c.group : null
             lastGroup = c.group
             return (
-              <div key={c.id}>
-                {header && <p className="label px-4 pb-1 pt-2.5">{header}</p>}
+              <div key={c.id} role="presentation">
+                {header && (
+                  <p role="presentation" className="label px-4 pb-1 pt-2.5">
+                    {header}
+                  </p>
+                )}
                 <button
+                  id={`palette-${c.id}`}
+                  role="option"
+                  aria-selected={i === cursor}
+                  tabIndex={-1}
                   onMouseEnter={() => setCursor(i)}
                   onClick={() => choose(c)}
                   className={cn(

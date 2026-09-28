@@ -5,7 +5,7 @@ import { ActivityLine, Button, CopyLink, Hint, StatusPill } from "@/ui"
 import { AgentMark } from "@/features/agents/AgentMark"
 import { PrBadge } from "@/features/notes/PrBadge"
 import { HeldCallout, RunnerChip } from "@/features/team/team"
-import { LOOK } from "@/features/notes/status"
+import { changesStand, lookOf } from "@/features/notes/status"
 import { cn, cost, duration } from "@/lib/utils"
 import { useTick } from "@/hooks/useTick"
 
@@ -43,7 +43,7 @@ export const NoteRow = memo(function NoteRow({
   /** Opens the board's confirm dialog; the row never deletes on its own. */
   onRequestDelete: (note: Note) => void
 }) {
-  const look = LOOK[note.status]
+  const look = lookOf(note)
   const live = note.status === "running" || note.status === "queued"
   const settled = note.status === "done"
   useTick(live)
@@ -69,6 +69,8 @@ export const NoteRow = memo(function NoteRow({
            standalone property, which a transform transition never sees. */
         "transition-[background-color,scale] duration-150 ease-[var(--ease-out)] active:scale-[0.96]",
         selected ? "bg-accent" : "hover:bg-accent/50",
+        // Room for the row's controls, which stay visible without hover.
+        "[@media(hover:none)]:pr-16 max-md:[@media(hover:none)]:pr-24",
         settled && !selected && "opacity-65 hover:opacity-100",
       )}
     >
@@ -89,7 +91,7 @@ export const NoteRow = memo(function NoteRow({
                 "shrink-0 text-meta tabular-nums transition-opacity",
                 /* Steps aside on hover rather than being covered up — the
                    delete button sits in this corner. */
-                "group-hover/row:opacity-0",
+                "group-hover/row:opacity-0 [@media(hover:none)]:hidden",
                 live ? "text-lemon" : "text-muted-foreground/60",
               )}
             >
@@ -122,7 +124,7 @@ export const NoteRow = memo(function NoteRow({
               </StatusPill>
             )}
 
-            {note.stat && note.stat.files > 0 && (
+            {note.stat && note.stat.files > 0 && changesStand(note) && (
               <Hint text={`${note.stat.files} file${note.stat.files > 1 ? "s" : ""} changed`}>
                 <span className="text-meta tabular-nums">
                   <span className="text-mint">+{note.stat.insertions}</span>{" "}
@@ -158,14 +160,18 @@ export const NoteRow = memo(function NoteRow({
         className={cn(
           "absolute right-2.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5 transition",
           /* Hidden until wanted, but never unreachable: keyboard focus inside
-             brings the whole group back. */
+             brings the whole group back. A touch screen has no hover to want
+             them with — and invisible buttons there were still tappable — so
+             without hover they simply show, at a finger's size on a phone. */
           "opacity-0 group-hover/row:opacity-100 focus-within:opacity-100",
+          "[@media(hover:none)]:right-1 [@media(hover:none)]:opacity-100",
         )}
       >
         <CopyLink
           path={`/b/${note.boardId}/n/${note.id}`}
           label="Copy link to this note"
           size="icon-xs"
+          className={TOUCH}
         />
 
         <Hint text="Delete note">
@@ -175,7 +181,7 @@ export const NoteRow = memo(function NoteRow({
             size="icon-xs"
             onClick={() => onRequestDelete(note)}
             aria-label={`Delete note: ${note.title}`}
-            className="hover:bg-berry/12 hover:text-berry"
+            className={cn("hover:bg-berry/12 hover:text-berry", TOUCH)}
           >
             <Trash2 className="size-3" />
           </Button>
@@ -189,6 +195,9 @@ export const NoteRow = memo(function NoteRow({
     </div>
   )
 })
+
+/** A 44px target where the pointer is a finger: phone width and no hover. */
+const TOUCH = "max-md:[@media(hover:none)]:size-11"
 
 /** "3 min" — how long a run has said nothing. */
 export function quietFor(since: number): string {
