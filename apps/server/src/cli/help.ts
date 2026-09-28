@@ -56,6 +56,7 @@ export async function printHelp(topic?: string): Promise<number> {
   out(head("what agents can reach"))
   out(row("kandy skills", "skills in this repo, and which runs can see them"))
   out(row("kandy mcp", "MCP servers every agent on this board gets"))
+  out(row("kandy skill", "teach your own agent to queue work on kandy"))
 
   out(head("this machine"))
   out(row("kandy status", "daemon or team, repos, agents"))
@@ -135,15 +136,31 @@ const TOPICS: Record<string, () => void | Promise<void>> = {
   },
 
   flags() {
-    out(head("flags"))
-    out(row("--agent claude|codex|cursor|…", "which agent runs a note"))
+    out(head("notes"))
+    out(row("--agent NAME", "which agent runs a note: claude, codex, cursor, opencode, aider"))
     out(row("--no-run", "write the note without starting it"))
+    out(row("--all, -a", "include finished notes in ls"))
+    out(row("--verbose, -v", "include agent chatter in log"))
+    out(head("this machine"))
     out(row("--port N", "a daemon on another port (default 4477)"))
-    out(row("--all", "include finished notes in ls"))
-    out(row("--verbose", "include agent chatter in log"))
-    out(row("--json", "machine-readable output (status, stats, serve)"))
-    out(row("--dry-run / --force", "what gc would do / let it remove more"))
-    out(row("--slots N", "how many agents may run at once"))
+    out(row("--slots N", "how many agents may run at once (serve, runner)"))
+    out(row("--json", "machine-readable output (status, stats, serve, hub, runner)"))
+    out(row("--dry-run", "what gc would remove, without removing it"))
+    out(row("--force", "gc: remove more · update: even with notes running"))
+    out(row("--check", "update: only say whether there is a newer release"))
+    out(head("teams"))
+    out(row("--hub URL", "runner: the hub to run notes for"))
+    out(row("--token T", "join, runner: the hub's token, when it has no Tailscale"))
+    out(row("--repo PATH", "join, runner: a clone to run notes in (repeatable)"))
+    out(row("--role R", "invite: member (default), viewer or owner"))
+    out(row("--tailscale", "hub: serve on your tailnet, know people by their login"))
+    out(row("--bind ADDR", "hub: the address to listen on (default 127.0.0.1)"))
+    out(row("--https-port N", "hub --tailscale: the port to serve on (default 443)"))
+    out(head("capabilities"))
+    out(row("--skill NAME", "skills add: just this skill from the repo"))
+    out(row("--url URL", "mcp add: a remote server"))
+    out(row('--header "K: V"', "mcp add --url: a header (repeatable)"))
+    out(row("--env K=V", "mcp add: an environment variable (repeatable)"))
     out()
   },
 }
@@ -162,6 +179,23 @@ const COMMANDS: Record<string, CommandHelp> = {
     examples: ['kandy new "Add a --json flag to serve\nPrint port and db path as JSON."'],
   },
   ls: { usage: "kandy ls [--all]", does: ["What's open on this repo's board. --all includes finished notes."] },
+  list: { usage: "kandy list [--all]", does: ["The same as kandy ls: what's open on this repo's board. --all includes finished notes."] },
+  board: {
+    usage: "kandy board [--port N]",
+    does: [
+      "The board, in this terminal — what plain kandy opens. In a repo with no board yet, it",
+      "makes one. kandy help board lists the keys.",
+    ],
+  },
+  tui: { usage: "kandy tui [--port N]", does: ["The same as kandy board: the board, in this terminal. kandy help board lists the keys."] },
+  skill: {
+    usage: "kandy skill",
+    does: [
+      "Copy the kandy skill to ~/.claude/skills/kandy, so an agent you talk to in any repo can",
+      "queue notes, check on them and review them for you. Run it again after an update to",
+      "get the newest version. Not the same as kandy skills, which lists this repo's skills.",
+    ],
+  },
   log: { usage: "kandy log [--verbose]", does: ["Tail what the board is doing, live. --verbose includes agent chatter."] },
   stats: { usage: "kandy stats [--json]", does: ["What this board has done: runs, cost, time, what landed."] },
   open: { usage: "kandy open", does: ["Open the board in a browser — the team hub's, if this machine joined one."] },
@@ -188,16 +222,26 @@ const COMMANDS: Record<string, CommandHelp> = {
     ],
   },
   hub: {
-    usage: "kandy hub --tailscale [--port N]",
+    usage: "kandy hub --tailscale [--port N] [--https-port N] [--bind addr] [--json]",
     does: [
       "Start a team's board on this machine. It runs no agents and holds no keys. With",
       "--tailscale it serves itself on your tailnet and knows people by their login.",
+      "--https-port   the port tailscale serves it on (default 443)",
+      "--bind         the address it listens on (default 127.0.0.1; KANDY_BIND)",
+      "--json         one line of JSON when it's up, for a script",
       "See also: docker compose up (compose.yaml), and kandy help teams.",
     ],
   },
   runner: {
-    usage: "kandy runner [--hub url] [--repo path]",
-    does: ["Run the notes given to this machine. kandy join starts one for you; this is the same, in the foreground."],
+    usage: "kandy runner [--hub url] [--token t] [--repo path] [--slots N] [--json]",
+    does: [
+      "Run the notes given to this machine. kandy join starts one for you; this is the same, in the foreground.",
+      "--hub     the hub (default: the one you joined; KANDY_HUB)",
+      "--token   the hub's token, for a hub without Tailscale (KANDY_HUB_TOKEN)",
+      "--repo    a clone to run notes in; repeat it for more",
+      "--slots   how many agents may run at once (default 4)",
+      "--json    one line of JSON once it's connected, and no status lines",
+    ],
   },
   skills: {
     usage: "kandy skills [add <owner/repo> [--skill s] | remove <name> | commit]",
@@ -215,10 +259,13 @@ const COMMANDS: Record<string, CommandHelp> = {
     ],
   },
   update: {
-    usage: "kandy update [--check]",
+    usage: "kandy update [--check] [--force]",
     does: [
-      "Install the newest release over this one, stopping the running kandy first.",
-      "--check only says whether there is a newer one.",
+      "Install the newest release over this one. The running kandy is stopped first, and",
+      "notes it's running show as interrupted — so with notes running it asks, and without",
+      "a terminal to ask in it needs --force. Your team runner is started again after.",
+      "--check only says whether there is a newer one: exit 0 up to date, 10 newer one out,",
+      "1 couldn't tell.",
     ],
   },
   serve: { usage: "kandy serve [--port N] [--slots N] [--json]", does: ["Run this machine's daemon in the foreground. Other commands start it for you."] },

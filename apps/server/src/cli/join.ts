@@ -253,7 +253,7 @@ export async function cmdConsent(args: string[]): Promise<number> {
     if (verb === "revoke") store.revoke(arg)
     else store.approve(arg)
   } else if (verb !== undefined) {
-    out(dim("  usage: ") + "kandy consent [nobody | approved | team]   ·   kandy consent revoke <email>")
+    out(dim("  usage: ") + "kandy consent [nobody | approved | team]   ·   kandy consent approve|revoke <email>")
     return 1
   }
 

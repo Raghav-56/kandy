@@ -500,12 +500,16 @@ export async function cmdGc(opts: {
  * since the whole idea is queueing work from wherever you happen to be.
  */
 export async function cmdSkillInstall(): Promise<number> {
-  const source = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "../../../../.claude/skills/kandy/SKILL.md",
-  )
-  if (!existsSync(source)) {
-    out(berry("  cannot find the skill to install") + dim(`\n  looked in ${source}`))
+  // An install carries it in dist/skill (the build copies it there); a
+  // source checkout has it at the repo root.
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const candidates = [
+    path.resolve(here, "../skill/SKILL.md"),
+    path.resolve(here, "../../../../.claude/skills/kandy/SKILL.md"),
+  ]
+  const source = candidates.find((p) => existsSync(p))
+  if (!source) {
+    out(berry("  cannot find the skill to install") + dim(`\n  looked in ${candidates.join(", ")}`))
     return 1
   }
 
