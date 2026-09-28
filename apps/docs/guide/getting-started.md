@@ -293,10 +293,13 @@ Three ways to finish a note:
 
 | | Terminal | Browser | What happens |
 | --- | --- | --- | --- |
-| **Merge** | <kbd>M</kbd> | **Merge into main** | The branch is merged into your current branch, on this machine. Nothing is pushed. |
+| **Merge** | <kbd>M</kbd> | **Merge into main** | The branch is merged into the branch the note started from, in your checkout, on this machine. Nothing is pushed. |
 | **Open a PR** | — | **Open a PR** | Pushes the branch and opens a pull request. Shown instead of Merge when the repo is on GitHub and the [`gh` CLI](https://cli.github.com) is signed in. |
 | **Send it back** | <kbd>R</kbd> | the box under the note | Say what to change. The same agent carries on, in the same worktree and the same session. |
-| **Discard** | <kbd>X</kbd> | **Discard** | Deletes the branch and its worktree. The note stays, so you can run it again. |
+| **Discard** | <kbd>X</kbd> | **Discard** | Removes its worktree. The branch stays on this machine, unpushed, in case you want the work back. The note stays, so you can run it again. |
+
+Merge and discard are for a note that has stopped — in review, or failed — and
+left a branch with commits on it.
 
 Each asks first and says exactly what it will do:
 
@@ -316,8 +319,11 @@ git log --oneline -2
 
 The first is the merge, the second the note's commit. Your checkout was never
 touched while the agent worked. Now that the work has landed, the note's
-worktree is removed; its branch is kept, because in a repo with no remote it's
-the only copy.
+worktree and its branch are removed — every commit on it is in `main` now.
+
+Merge lands on the branch the note started from, so your checkout has to be on
+it: if you've switched to another branch, or you're partway through a merge or
+rebase, kandy says so and merges nothing.
 
 ## 10. Where next
 

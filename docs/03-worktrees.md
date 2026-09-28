@@ -36,8 +36,12 @@ On `run.finished`:
 
 On `review.decided`:
 
-- `merge` → merge or rebase onto the base branch, then `git worktree remove`.
-- `discard` → `git worktree remove --force` and delete the branch.
+- `merge` → merge into the base branch in the user's checkout (refused unless it is on
+  that branch and not mid merge/rebase/cherry-pick; never pushed), then `git worktree
+  remove` and delete the merged branch.
+- `discard` → `git worktree remove --force`, keeping the branch locally and unpushed so
+  the work can be recovered.
+- Both only for a note that has stopped (`review` or `failed`) with a branch that has commits.
 - `revise` → keep everything, start a new run in the *same* worktree, resuming the agent's
   session so it retains context.
 

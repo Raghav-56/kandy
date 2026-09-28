@@ -21,19 +21,28 @@ There are exactly two destinations and a bin, so "merge" never means two
 different things:
 
 **Merge** (<kbd>M</kbd> in the terminal, **Merge into main** in the browser)
-merges the branch into the branch your checkout is on, on this machine. Nothing
-is pushed, and your working tree is not touched. The note's checkout is then
-tidied away — unless something in it is uncommitted, in which case it is kept,
-because it may be the only copy. In the browser, Merge is offered when there's
-nowhere to open a pull request; in a GitHub repo, work leaves through a PR.
+merges the branch into the branch the note started from, in your checkout, on
+this machine. Nothing is pushed. Your checkout has to be on that branch, and not
+partway through a merge, rebase or cherry-pick — otherwise kandy says what's in
+the way and merges nothing. Once it lands, the note's checkout and its branch
+are tidied away — unless something in the checkout is uncommitted, in which case
+it is kept, because it may be the only copy. In the browser, Merge is offered
+when there's nowhere to open a pull request; in a GitHub repo, work leaves
+through a PR.
 
 **Open a PR** pushes the branch and opens a pull request. This is the first
 thing kandy does that leaves your machine. It needs the
 [`gh` CLI](https://cli.github.com), signed in. The note lands here
 automatically once the PR is merged on GitHub.
 
-**Discard** (<kbd>X</kbd>) deletes the branch and its worktree. The note stays,
-so you can run it again.
+**Discard** (<kbd>X</kbd>) removes the note's worktree. Its branch stays on this
+machine, unpushed, so the work can be recovered — the note says which branch,
+and `git branch -D kandy/note_…` deletes it for good. The note stays, so you can
+run it again.
+
+Merge and discard are for a note that has stopped — in **review**, or
+**failed** — and has a branch with commits on it. While a note runs they aren't
+offered; send it a message, or cancel it first.
 
 Each asks first, and the question states what will happen to *that* branch —
 which branch, how many files, where it lands. A confirmation that carries no
@@ -43,7 +52,13 @@ information is a speed bump, and people learn to click through those.
 
 A conflicting merge is reported, never guessed at. The merge is aborted, the
 repository is left clean, and the branch is intact — you have a worktree and an
-editor, and resolving it on your behalf is how trust dies.
+editor, and resolving it on your behalf is how trust dies. kandy names the
+files that conflicted.
+
+A merge can also be stopped before it starts by your own uncommitted changes to
+files the branch touches. kandy tells the two apart: a conflict names the
+conflicting files; uncommitted changes in the way say *would be overwritten*,
+and committing or stashing them is all it takes.
 
 ## Sending it back
 

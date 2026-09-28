@@ -112,6 +112,15 @@ git init && git add -A && git commit -m "Start"
 
 A repository needs at least one commit — a note's branch starts from it.
 
+### `this repository has no commits yet — make a first commit, then try again`
+
+The repository is there but empty: a note's branch starts from a commit, and
+there isn't one. Commit what you have, then run the note again:
+
+```sh
+git add -A && git commit -m "Start"
+```
+
 ### `no board for this repo yet`
 
 `kandy ls`, `kandy stats` and `kandy gc` work on the board for the repository
@@ -242,16 +251,49 @@ window resets. It's your plan's limit, not kandy's.
 
 ## Reviewing and landing
 
-### Merge says there's a conflict
+### `merge conflict in … — nothing was merged`
 
 Your branch moved on while the agent worked, and both changed the same lines.
-kandy leaves everything as it was — the note, its branch and its worktree — and
-tells you. Either send it back with <kbd>R</kbd> ("rebase on main and resolve
-the conflict") or resolve it yourself:
+kandy undoes the attempt and leaves everything as it was — the note, its branch
+and its worktree — and names the files. Either send it back with <kbd>R</kbd>
+("merge main and resolve the conflict") or resolve it yourself:
 
 ```sh
 git merge kandy/note_…     # the branch name is on the note
 ```
+
+### `your uncommitted changes to … would be overwritten`
+
+Not a conflict with the agent's work: files you've changed and not committed in
+your checkout are ones the branch changes too, and git won't merge over them.
+Nothing was merged. Commit or stash them (`git stash`), then merge again.
+
+### `your checkout is on …, not main` · `detached HEAD` · `in the middle of a rebase`
+
+Merge lands a note on the branch it started from, in your checkout — so your
+checkout has to be on that branch, and not partway through a merge, rebase,
+cherry-pick or revert. kandy says which and merges nothing. Switch back
+(`git switch main`), or finish or abort what's in progress, then merge again.
+
+### Merge and discard aren't offered
+
+They're for a note that has stopped — in **review**, or **failed** — and left a
+branch with commits on it. A running note can be messaged or cancelled; a note
+whose run made no branch has nothing to merge or discard, so run it again or
+delete it.
+
+### I discarded a note and want the work back
+
+Discard removes the note's worktree but keeps its branch on this machine,
+unpushed. The note says which branch; merge it or check it out as you would any
+other:
+
+```sh
+git branch --list 'kandy/*'     # every note's branch still here
+git merge kandy/note_…
+```
+
+`git branch -D kandy/note_…` deletes one for good.
 
 ### There's no *Open a PR* button
 
