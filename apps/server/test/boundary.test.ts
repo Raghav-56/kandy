@@ -61,6 +61,7 @@ test("the local workshop is the runner's calls, answered as plain data", async (
   // routes could come to depend on without anyone noticing.
   const runner = {
     worktreeOf: () => undefined,
+    isRunning: () => false,
     cancel: (runId: string) => runId === "run_live",
   }
   const workshop = new LocalWorkshop(runner as never)

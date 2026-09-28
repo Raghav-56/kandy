@@ -12,6 +12,7 @@ import {
   id,
   isEphemeral,
   notesIn,
+  cannotDecide,
   type AgentId,
   type BoardView,
   type ErrorCode,
@@ -1029,7 +1030,7 @@ async function noteAction(
       const b = await json<{ agent?: AgentId }>(req)
       const agent = b?.agent ?? note.agent
       if (!agent) return fail(res, 400, "bad_request", "note has no agent assigned")
-      if (note.status === "running" || note.status === "queued")
+      if (note.status === "running" || note.status === "queued" || note.status === "blocked")
         return fail(res, 409, "invalid_transition", `note is already ${note.status}`)
 
       const runId = await deps.workshop.request(view.board.id, noteId, agent)
@@ -1069,13 +1070,27 @@ async function noteAction(
     case "review": {
       const b = await json<{ decision: "merge" | "discard" | "revise"; comment?: string }>(req)
       if (!b?.decision) return fail(res, 400, "bad_request", "decision required")
+      if (b.decision !== "merge" && b.decision !== "discard" && b.decision !== "revise")
+        return fail(res, 400, "bad_request", "decision must be merge, discard or revise")
+
+      const refusal = cannotDecide(note, b.decision)
+      if (refusal) return fail(res, 409, "invalid_transition", `can't ${b.decision} this note: ${refusal}`)
 
       // `revise` is steering, not a verdict: keep the worktree and the
-      // session, hand the agent the comment, and let it keep going.
+      // session, hand the agent the comment, and let it keep going. The
+      // decision is only written once the run is asked for, and it leaves
+      // the note's status to that run's own events — it used to set `draft`
+      // on top of them, so a working note looked like one nobody had run.
       if (b.decision === "revise") {
         if (!b.comment?.trim())
           return fail(res, 400, "bad_request", "revise needs a comment saying what to change")
-        const delivery = await deps.workshop.steer(view.board.id, noteId, b.comment.trim())
+        let delivery
+        try {
+          delivery = await deps.workshop.steer(view.board.id, noteId, b.comment.trim())
+        } catch (err) {
+          const e = err as { status?: number; message?: string }
+          return fail(res, e.status ?? 400, "bad_request", e.message ?? String(err))
+        }
         const e = emit(deps, event("review.decided", { noteId, decision: "revise", comment: b.comment }))
         return send(res, 200, { ok: true, seq: e.seq, delivery })
       }
@@ -1106,21 +1121,28 @@ async function noteAction(
             }
           : { decision: "discard" },
       )
+      // Nothing was touched, and the note stays in review. The reason leads
+      // with what went wrong and ends with what to do, and is short enough
+      // for a one-line status bar.
+      if (outcome.checkout === "refused") return fail(res, 409, "worktree_failed", outcome.reason)
       if (outcome.checkout === "conflict") {
-        // Leave everything exactly as it was. A conflict is the user's
-        // call, and they still have the branch and the worktree.
-        return fail(
-          res,
-          409,
-          "worktree_failed",
-          `merge conflict on ${outcome.branch} — resolve it yourself, the branch is intact:\n${outcome.conflict}`,
-        )
+        // A runner from before `refused`: its reason is git's own output,
+        // of which the first line is the part worth a status bar.
+        const first = outcome.conflict.split("\n").find((l) => l.trim()) ?? ""
+        return fail(res, 409, "worktree_failed", `could not merge ${outcome.branch} — nothing changed: ${first}`)
       }
       // What the disk did is written down here, where the log is: the
       // checkout going is an event, and one it could not safely take is a
       // line on the run's transcript saying why it is still there.
       if (outcome.checkout === "removed") {
         emit(deps, event("note.reclaimed", { noteId }))
+        if (outcome.branchKept && note.runId) {
+          deps.engine.say(
+            note.runId,
+            "system",
+            `the branch ${outcome.branchKept} stays on this machine — \`git branch -D ${outcome.branchKept}\` deletes it`,
+          )
+        }
       } else if (outcome.checkout === "kept" && note.runId) {
         deps.engine.say(note.runId, "system", `kept the checkout: ${outcome.reason}`)
       }

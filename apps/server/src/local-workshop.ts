@@ -66,6 +66,12 @@ export class LocalWorkshop implements Workshop {
   // -------------------------------------------------------------------------
 
   async request(boardId: string, noteId: string, agent: AgentId): Promise<string> {
+    // Two agents in one worktree write over each other. The route checks the
+    // note's status too, but the status is the log's view of things, and
+    // this is the machine that would actually start the second one.
+    if (this.runner.isRunning(noteId)) {
+      throw Object.assign(new Error("it is already running — wait for it to finish, or cancel it"), { status: 409 })
+    }
     return this.runner.request(boardId, noteId, agent)
   }
 
@@ -159,30 +165,42 @@ export class LocalWorkshop implements Workshop {
   }
 
   async review(repoPath: string, noteId: string, verdict: Verdict): Promise<Reviewed> {
+    // A verdict on a note that is still being written would land half of it,
+    // and the agent would carry on in a checkout that was just taken away.
+    if (this.runner.isRunning(noteId)) {
+      return { checkout: "refused", reason: "it is still running — wait for it to finish, or cancel it" }
+    }
     const wt = this.runner.worktreeOf(noteId)
+    if (!wt && verdict.decision === "merge") {
+      return { checkout: "refused", reason: "there is no checkout of this note on this machine, so nothing to merge" }
+    }
     let outcome: Reviewed = { checkout: "none" }
+    let into: string | null = null
     if (wt) {
       if (verdict.decision === "merge") {
-        const result = await mergeBranch(repoPath, wt.branch, verdict.land)
-        if (!result.merged) {
-          // Leave everything exactly as it was. A conflict is the user's
-          // call, and they still have the branch and the worktree.
-          return { checkout: "conflict", branch: wt.branch, conflict: result.conflict ?? "" }
-        }
+        // Into the branch the note was started from, which is the one the
+        // confirmation named. A worktree adopted after a restart never
+        // recorded it, and lands where the confirmation said instead.
+        into = wt.baseBranch ?? (await landingBranch(wt.path))
+        const result = await mergeBranch(repoPath, wt.branch, verdict.land, into)
+        // Leave everything exactly as it was. They still have the branch and
+        // the worktree, and the reason says what to do.
+        if (!result.merged) return { checkout: "refused", reason: result.reason }
       }
       /*
        * Both verdicts end the same way, and that way used to lose work: the
        * worktree was force-removed and the branch deleted, so discarding a
-       * note destroyed the agent's commits and anything uncommitted, with
-       * nothing pushed first. Push, then delete — and if either cannot be
-       * done safely, keep the checkout and say why.
+       * note destroyed the agent's commits and anything uncommitted. Neither
+       * pushes: the checkout goes, and the local branch stays unless the
+       * merge just made it redundant — see retireWorktree. If the checkout
+       * cannot go safely, it is kept and the reason said.
        */
-      const retired = await retireWorktree(repoPath, wt).catch(
+      const retired = await retireWorktree(repoPath, wt, { push: false, into }).catch(
         (err: unknown) => ({ removed: false as const, reason: String(err) }),
       )
       if (retired.removed) {
         this.runner.forget(noteId)
-        outcome = { checkout: "removed" }
+        outcome = retired.branchKept ? { checkout: "removed", branchKept: wt.branch } : { checkout: "removed" }
       } else {
         outcome = { checkout: "kept", reason: retired.reason }
       }

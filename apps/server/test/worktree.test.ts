@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, existsSync, readFileSync, realpathSync } fr
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-import { carryInto, checkRepo, commitLeftovers, createWorktree, diffNumbers, isDirty, mergeBranch, removeWorktree } from "../dist/worktree.js"
+import { carryInto, checkRepo, commitLeftovers, createWorktree, diff, diffNumbers, isDirty, mergeBranch, removeWorktree } from "../dist/worktree.js"
 import { commitTrailers } from "../dist/attribution.js"
 
 /** A real repository, because the thing under test is git behaviour. */
@@ -117,11 +117,141 @@ test("a conflicting merge is reported and leaves the repo clean", async () => {
 
   const result = await mergeBranch(dir, wt.branch, {
     note: { id: "note_f", title: "Conflict on purpose", body: "" },
-  })
+  }, "main")
   assert.equal(result.merged, false)
-  assert.ok(result.conflict)
+  if (result.merged) return
+  assert.equal(result.why, "conflict")
+  assert.deepEqual(result.files, ["README.md"])
+  // What happened and what to do, first — a status bar cuts off the rest.
+  assert.match(result.reason, /^merge conflict in README\.md — nothing was merged and kandy\/\S+ is intact/)
+  assert.match(result.reason, /merge main and resolve/)
+  // And not the whole commit message git was handed.
+  assert.doesNotMatch(result.reason, /Conflict on purpose/)
   // A half-merge the user has to discover on their own is worse than a refusal.
   assert.equal(await isDirty(dir), false)
+  await removeWorktree(dir, wt.path, true)
+})
+
+/** A commit on a note's branch, so there is something to merge. */
+function commitIn(cwd: string, file: string, text: string) {
+  writeFileSync(path.join(cwd, file), text)
+  execFileSync("git", ["add", "-A"], { cwd })
+  execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", file], { cwd })
+}
+
+const note = (id: string) => ({ note: { id, title: "Land it", body: "" } })
+
+test("a merge refuses a checkout on another branch, and changes nothing", async () => {
+  // It used to merge into whatever was checked out: a teammate's note landed
+  // on someone's personal branch while the button said "main".
+  const dir = repo()
+  const wt = await createWorktree(dir, "note_away", "away")
+  commitIn(wt.path, "AWAY.md", "x\n")
+  execFileSync("git", ["checkout", "-qb", "feature"], { cwd: dir })
+  const before = gitOut(dir, "rev-parse", "HEAD")
+
+  const r = await mergeBranch(dir, wt.branch, note("note_away"), "main")
+  assert.equal(r.merged, false)
+  assert.equal(!r.merged && r.why, "elsewhere")
+  assert.match(!r.merged ? r.reason : "", /^your checkout is on feature, not main — switch it to main/)
+  assert.equal(gitOut(dir, "rev-parse", "HEAD"), before)
+  assert.equal(gitOut(dir, "rev-parse", "--abbrev-ref", "HEAD"), "feature", "never switches branches for you")
+})
+
+test("a merge refuses a detached HEAD, where the commit would belong to no branch", async () => {
+  const dir = repo()
+  const wt = await createWorktree(dir, "note_detached", "detached")
+  commitIn(wt.path, "D.md", "x\n")
+  execFileSync("git", ["checkout", "-q", "--detach"], { cwd: dir })
+
+  const r = await mergeBranch(dir, wt.branch, note("note_detached"), "main")
+  assert.equal(!r.merged && r.why, "elsewhere")
+  assert.match(!r.merged ? r.reason : "", /detached HEAD — check out main/)
+})
+
+test("a merge leaves the user's own half-finished merge alone", async () => {
+  // A failed merge is undone with `git merge --abort`. That used to run
+  // whatever was in progress — including a merge the user was in the middle of.
+  const dir = repo()
+  const wt = await createWorktree(dir, "note_mid", "mid")
+  commitIn(wt.path, "MID.md", "x\n")
+
+  execFileSync("git", ["checkout", "-qb", "theirs"], { cwd: dir })
+  commitIn(dir, "README.md", "# demo\ntheirs\n")
+  execFileSync("git", ["checkout", "-q", "main"], { cwd: dir })
+  commitIn(dir, "README.md", "# demo\nmine\n")
+  assert.throws(() => execFileSync("git", ["merge", "-q", "theirs"], { cwd: dir, stdio: "ignore" }))
+
+  const r = await mergeBranch(dir, wt.branch, note("note_mid"), "main")
+  assert.equal(!r.merged && r.why, "busy")
+  assert.match(!r.merged ? r.reason : "", /^your checkout is in the middle of a merge/)
+  // Theirs to finish.
+  assert.ok(existsSync(path.join(dir, ".git", "MERGE_HEAD")))
+})
+
+test("a merge blocked by the user's uncommitted files says which", async () => {
+  const dir = repo()
+  const wt = await createWorktree(dir, "note_dirty_main", "dirty")
+  commitIn(wt.path, "README.md", "# demo\nfrom the agent\n")
+  writeFileSync(path.join(dir, "README.md"), "# demo\nmy edit, not committed\n")
+
+  const r = await mergeBranch(dir, wt.branch, note("note_dirty_main"), "main")
+  assert.equal(!r.merged && r.why, "dirty")
+  assert.match(!r.merged ? r.reason : "", /^your uncommitted changes to README\.md would be overwritten — commit or stash them/)
+  // Their edit is still there.
+  assert.match(readFileSync(path.join(dir, "README.md"), "utf8"), /my edit/)
+})
+
+test("a branch with nothing on it is not merged, so it is not counted as landed", async () => {
+  const dir = repo()
+  const wt = await createWorktree(dir, "note_nothing", "nothing")
+  const r = await mergeBranch(dir, wt.branch, note("note_nothing"), "main")
+  assert.equal(!r.merged && r.why, "empty")
+})
+
+test("a repository with no commits says so, instead of git's 'ambiguous argument'", async () => {
+  const dir = realpathSync(mkdtempSync(path.join(tmpdir(), "kandy-empty-")))
+  execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir })
+
+  const check = await checkRepo(dir)
+  assert.equal(check.isRepo, true)
+  assert.match(check.error ?? "", /no commits yet — make a first commit/)
+  await assert.rejects(createWorktree(dir, "note_empty_repo", "first"), /no commits yet — make a first commit/)
+})
+
+test(".kandy/ is excluded even where info/exclude is missing", async () => {
+  // A clone made without templates has no info/exclude, and the write used
+  // to fail silently — every later run then saw a dirty repo.
+  const dir = repo()
+  execFileSync("rm", ["-rf", path.join(dir, ".git", "info")])
+  const wt = await createWorktree(dir, "note_noinfo", "thing")
+  assert.match(readFileSync(path.join(dir, ".git", "info", "exclude"), "utf8"), /^\/\.kandy\/$/m)
+  assert.equal(await isDirty(dir), false)
+  await removeWorktree(dir, wt.path, true)
+})
+
+test(".kandy/ is excluded when the board is itself a linked worktree", async () => {
+  // Its .git is a file, so .git/info/exclude is not a path at all.
+  const main = repo()
+  const linked = path.join(realpathSync(mkdtempSync(path.join(tmpdir(), "kandy-linked-"))), "wt")
+  execFileSync("git", ["worktree", "add", "-q", "-b", "side", linked], { cwd: main })
+  const wt = await createWorktree(linked, "note_linked", "thing")
+  assert.equal(await isDirty(linked), false)
+  await removeWorktree(linked, wt.path, true)
+})
+
+test("a diff too big to hold says so, rather than coming back empty", async () => {
+  // Past the buffer, the diff used to reject, and review showed 0 files.
+  const dir = repo()
+  const wt = await createWorktree(dir, "note_huge", "huge")
+  const line = "x".repeat(99) + "\n"
+  writeFileSync(path.join(wt.path, "HUGE.txt"), line.repeat(340_000)) // ~34MB
+  commitIn(wt.path, "SMALL.md", "y\n")
+
+  const text = await diff(wt)
+  assert.match(text, /^diff --git a\/diff too large to show \(2 files changed\)/)
+  assert.match(text, /git diff main\.\.\.HEAD/)
+  assert.equal((await diffNumbers(wt)).files, 2)
   await removeWorktree(dir, wt.path, true)
 })
 
@@ -266,11 +396,14 @@ test("a merge commit is unsigned by default and signed on request", async () => 
 })
 
 /*
- * Retiring a finished note's checkout: push first, then delete.
+ * Retiring a finished note's checkout: the local branch goes only once its
+ * work is somewhere else — the remote, for a merged pull request, or the base
+ * branch, for a local merge. A review never pushes.
  *
  * What these replace: discarding a note force-removed its worktree and deleted
- * its branch, so the agent's commits and anything uncommitted were gone with
- * nothing pushed. Every case below is a way that could have lost work.
+ * its branch, so the agent's commits and anything uncommitted were gone. Every
+ * case below is a way that could have lost work, or put it where it was not
+ * wanted.
  */
 import { retireWorktree } from "../dist/worktree.js"
 
@@ -294,7 +427,44 @@ async function workOn(dir: string, id: string) {
   return wt
 }
 
-test("a finished note is pushed, then its checkout and local branch go", async () => {
+test("a discarded note is never pushed: its branch stays on this machine", async () => {
+  // Discard used to push rejected work to the shared remote while the
+  // dialog said it was thrown away. It is recoverable here, and nowhere else.
+  const { dir, remote } = repoWithRemote()
+  const wt = await workOn(dir, "note_discard")
+
+  const r = await retireWorktree(dir, wt, { push: false })
+  assert.deepEqual(r, { removed: true, pushed: false, branchKept: true })
+  assert.equal(existsSync(wt.path), false)
+  assert.notEqual(gitOut(dir, "branch", "--list", wt.branch), "", "the work must survive somewhere")
+  assert.equal(gitOut(remote, "branch", "--list", wt.branch), "")
+})
+
+test("a merged note is not pushed, and its branch goes because main has it", async () => {
+  const { dir, remote } = repoWithRemote()
+  const wt = await workOn(dir, "note_merged")
+  assert.equal((await mergeBranch(dir, wt.branch, note("note_merged"), "main")).merged, true)
+
+  const r = await retireWorktree(dir, wt, { push: false, into: "main" })
+  assert.deepEqual(r, { removed: true, pushed: false, branchKept: false })
+  assert.equal(gitOut(dir, "branch", "--list", wt.branch), "")
+  assert.equal(gitOut(remote, "branch", "--list", wt.branch), "")
+})
+
+test("a pushed note prefers origin over a remote that sorts first", async () => {
+  const { dir, remote } = repoWithRemote()
+  const other = realpathSync(mkdtempSync(path.join(tmpdir(), "kandy-remote-")))
+  execFileSync("git", ["init", "-q", "--bare"], { cwd: other })
+  execFileSync("git", ["remote", "add", "aaa", other], { cwd: dir })
+  const wt = await workOn(dir, "note_origin")
+
+  const r = await retireWorktree(dir, wt)
+  assert.equal(r.removed && r.pushed, true)
+  assert.notEqual(gitOut(remote, "branch", "--list", wt.branch), "")
+  assert.equal(gitOut(other, "branch", "--list", wt.branch), "")
+})
+
+test("a note whose pull request merged is pushed, then its checkout and local branch go", async () => {
   const { dir, remote } = repoWithRemote()
   const wt = await workOn(dir, "note_push")
 

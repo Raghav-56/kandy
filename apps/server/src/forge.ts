@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import type { Forge, PullRequest } from "@kandy/core"
+import { remoteName } from "./worktree.js"
 
 const exec = promisify(execFile)
 
@@ -86,8 +87,12 @@ export async function openPr(
   body: string,
   draft: boolean,
 ): Promise<PullRequest> {
-  // -u so the branch tracks origin; re-pushing an existing branch is a no-op.
-  await exec("git", ["push", "-u", "origin", branch], { cwd: repoPath, timeout: 120_000 })
+  // The remote every other push of kandy's goes to, so a handed-over branch
+  // and its pull request are never on two different remotes. -u so the
+  // branch tracks it; re-pushing an existing branch is a no-op.
+  const remote = await remoteName(repoPath)
+  if (!remote) throw new Error("this repository has no remote to push the branch to")
+  await exec("git", ["push", "-u", remote, branch], { cwd: repoPath, timeout: 120_000 })
 
   const args = ["pr", "create", "--head", branch, "--title", title, "--body", body]
   if (draft) args.push("--draft")

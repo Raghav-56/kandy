@@ -55,7 +55,10 @@ export interface Workshop {
   // Run control — the runner itself.
   // -------------------------------------------------------------------------
 
-  /** Queue a run. Resolves to the run's id before it has started. */
+  /**
+   * Queue a run. Resolves to the run's id before it has started.
+   * Rejects with a 409 while the note already has one here, live or queued.
+   */
   request(boardId: string, noteId: string, agent: AgentId): Promise<string>
 
   /** Talk to the live agent, or queue a follow-up that resumes it. */
@@ -196,13 +199,20 @@ export type Verdict =
 /**
  * What became of the checkout.
  *
- * - `none`: the runner held no checkout for the note, so there was nothing to do.
- * - `conflict`: the merge did not apply. Nothing was touched.
+ * - `none`: the runner held no checkout for the note, so there was nothing to
+ *   do. Only a discard can end this way; a merge with nothing to merge is
+ *   `refused`.
+ * - `refused`: nothing was touched, and `reason` says why in words for the
+ *   person who asked — a conflict, their checkout on another branch, their
+ *   uncommitted files in the way. The note stays in review.
+ * - `conflict`: what a runner from before `refused` existed says instead.
  * - `removed`: the checkout is gone, which the log should hear about.
+ *   `branchKept` names the local branch left behind to recover the work from.
  * - `kept`: it could not be retired safely, and `reason` says why.
  */
 export type Reviewed =
   | { checkout: "none" }
+  | { checkout: "refused"; reason: string }
   | { checkout: "conflict"; branch: string; conflict: string }
-  | { checkout: "removed" }
+  | { checkout: "removed"; branchKept?: string }
   | { checkout: "kept"; reason: string }

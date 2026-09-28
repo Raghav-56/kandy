@@ -14,26 +14,47 @@ export async function git(cwd: string, ...args: string[]): Promise<string> {
   return stdout.trim()
 }
 
+/** Output bigger than `git`'s buffer. The command worked; we just can't hold it. */
+function tooBig(err: unknown): boolean {
+  return (err as { code?: unknown })?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+}
+
+/**
+ * Where git keeps one of its own files for this checkout.
+ *
+ * Asked of git rather than assumed to be `.git/<name>`: in a linked worktree
+ * or a submodule `.git` is a file pointing elsewhere, and the path it implies
+ * does not exist. Relative answers are relative to `cwd`.
+ */
+async function gitPath(cwd: string, name: string): Promise<string> {
+  return path.resolve(cwd, await git(cwd, "rev-parse", "--git-path", name))
+}
+
+/** The message for a repository with nothing to branch from. */
+export const NO_COMMITS = "this repository has no commits yet — make a first commit, then try again"
+
 /**
  * Our worktree directory lives inside the repo so git can share the object
  * store. That makes the repo dirty, which would trip the repo_dirty guard on
  * every run after the first.
  *
- * Exclude it via .git/info/exclude rather than the tracked .gitignore — it is
- * our bookkeeping, not something to commit into the user's project.
+ * Exclude it via info/exclude rather than the tracked .gitignore — it is our
+ * bookkeeping, not something to commit into the user's project. The file is
+ * found through git, and made if it is missing: a repo cloned without
+ * templates has no info/exclude, and a linked worktree's lives in the main
+ * repository's git directory.
  */
-function ensureExcluded(repoPath: string): void {
-  const gitDir = path.join(repoPath, ".git")
-  const exclude = path.join(gitDir, "info", "exclude")
+async function ensureExcluded(repoPath: string): Promise<void> {
   const entry = "/.kandy/"
   try {
+    const exclude = await gitPath(repoPath, "info/exclude")
     mkdirSync(path.dirname(exclude), { recursive: true })
-    const current = readFileSync(exclude, "utf8")
+    const current = existsSync(exclude) ? readFileSync(exclude, "utf8") : ""
     if (current.split("\n").some((l) => l.trim() === entry)) return
-    appendFileSync(exclude, `\n# added by kandy\n${entry}\n`)
+    appendFileSync(exclude, `${current && !current.endsWith("\n") ? "\n" : ""}# added by kandy\n${entry}\n`)
   } catch {
-    // A worktree or submodule has a .git *file*, not a directory. Not fatal —
-    // the user will see .kandy/ as untracked, which is ugly but not wrong.
+    // Not fatal — the user will see .kandy/ as untracked, which is ugly but
+    // not wrong.
   }
 }
 
@@ -77,13 +98,16 @@ export async function createWorktree(
 ): Promise<Worktree> {
   // Resolve the base commit now and record it. A note queued at 2pm must not
   // silently rebase onto whatever main looks like when a slot frees up.
-  const baseRef = await git(repoPath, "rev-parse", "HEAD")
+  // A repository with no commits has no HEAD to branch from, and git says so
+  // as "ambiguous argument 'HEAD'" — true, and no help to anyone.
+  const baseRef = await git(repoPath, "rev-parse", "--verify", "--quiet", "HEAD^{commit}").catch(() => "")
+  if (!baseRef) throw new Error(NO_COMMITS)
   // Detached HEAD has no branch to land on; fall back to the pinned commit.
   const baseBranch = await git(repoPath, "rev-parse", "--abbrev-ref", "HEAD")
     .then((b) => (b && b !== "HEAD" ? b : null))
     .catch(() => null)
 
-  ensureExcluded(repoPath)
+  await ensureExcluded(repoPath)
   const root = worktreeRoot(repoPath)
   mkdirSync(root, { recursive: true })
 
@@ -131,7 +155,10 @@ function against(wt: Worktree): string {
 }
 
 export async function diffStat(wt: Worktree): Promise<string> {
-  return git(wt.path, "diff", "--stat", against(wt))
+  return git(wt.path, "diff", "--stat", against(wt)).catch(async (err: unknown) => {
+    if (!tooBig(err)) throw err
+    return git(wt.path, "diff", "--shortstat", against(wt))
+  })
 }
 
 /**
@@ -151,10 +178,31 @@ export async function diffNumbers(wt: Worktree): Promise<DiffStat> {
   }
 }
 
+/**
+ * The whole diff, or a stand-in saying it is too big to show.
+ *
+ * A diff past the buffer used to reject, and the run that asked for it
+ * recorded nothing at all — so the biggest change an agent ever made arrived
+ * in review as "0 files changed". The stand-in is shaped like a one-file diff
+ * so every viewer draws it as a row, and it says where to read the real one.
+ */
 export async function diff(wt: Worktree): Promise<string> {
-  return git(wt.path, "diff", against(wt)).catch(() =>
-    git(wt.path, "diff", `${wt.baseRef}...HEAD`),
-  )
+  const range = against(wt)
+  try {
+    return await git(wt.path, "diff", range).catch((err: unknown) => {
+      if (tooBig(err)) throw err
+      return git(wt.path, "diff", `${wt.baseRef}...HEAD`)
+    })
+  } catch (err) {
+    if (!tooBig(err)) throw err
+    const { files } = await diffNumbers(wt)
+    const title = `diff too large to show (${files.toLocaleString("en-US")} ${files === 1 ? "file" : "files"} changed)`
+    return [
+      `diff --git a/${title} b/${title}`,
+      "@@ too large to show @@",
+      ` Read it with git in the note's worktree: git diff ${range}`,
+    ].join("\n")
+  }
 }
 
 export async function removeWorktree(repoPath: string, dir: string, force = false): Promise<void> {
@@ -177,33 +225,152 @@ export async function removeWorktree(repoPath: string, dir: string, force = fals
  * composeCommitMessage. The note is required for that reason: a merge commit
  * is the one commit that survives the branch being deleted, so it is the last
  * place that can still say what the work was.
+ *
+ * The merge happens in the user's own checkout, so before touching it this
+ * checks that it is fit to merge into, and refuses — changing nothing — when
+ * it is not:
+ *
+ * - It must be on `into`, the branch the note was started from and the one
+ *   the confirmation named. Merging into whatever happens to be checked out
+ *   put a teammate's note on someone's personal branch, and on a detached
+ *   HEAD it made a commit no branch pointed at. Switching branches for them
+ *   is not ours to do either: their checkout is theirs.
+ * - It must not be halfway through a merge, rebase, cherry-pick or revert of
+ *   its own. A failed merge is undone with `git merge --abort`, and that
+ *   must only ever undo a merge this started.
+ *
+ * `reason` is written to be read in a one-line status bar: what happened
+ * first, then what to do.
  */
 export async function mergeBranch(
   repoPath: string,
   branch: string,
   land: { note: CommitNote; facts?: CommitFacts; trailers?: readonly string[] },
-): Promise<{ merged: boolean; conflict?: string }> {
-  try {
-    const message = withTrailers(
-      composeCommitMessage(land.note, land.facts),
-      land.trailers ?? [],
+  into: string | null = null,
+): Promise<Merge> {
+  const busy = await midOperation(repoPath)
+  if (busy) {
+    return refused("busy", `your checkout is in the middle of a ${busy} — finish or abort it, then merge again`)
+  }
+
+  const current = await git(repoPath, "symbolic-ref", "--quiet", "--short", "HEAD").catch(() => "")
+  if (!current) {
+    return refused(
+      "elsewhere",
+      `your checkout is on a detached HEAD — check out ${into ?? "the branch to merge into"}, then merge again`,
     )
+  }
+  if (into && current !== into) {
+    return refused(
+      "elsewhere",
+      `your checkout is on ${current}, not ${into} — switch it to ${into}, then merge again`,
+    )
+  }
+
+  // A branch whose every commit is already on `current` would "merge" as a
+  // no-op, and the note would be counted as landed work.
+  const ahead = Number(await git(repoPath, "rev-list", "--count", `${current}..${branch}`).catch(() => "0"))
+  if (!ahead) {
+    return refused("empty", `nothing to merge — ${branch} has no commits that ${current} does not have`)
+  }
+
+  const message = withTrailers(composeCommitMessage(land.note, land.facts), land.trailers ?? [])
+  try {
     await git(repoPath, "merge", "--no-ff", "-m", message, branch)
     return { merged: true }
   } catch (err) {
-    // Leave the repo clean rather than parked in a half-merge the user has to
-    // discover on their own.
-    await git(repoPath, "merge", "--abort").catch(() => {})
-    return { merged: false, conflict: err instanceof Error ? err.message : String(err) }
+    const e = err as { stdout?: string; stderr?: string; message?: string }
+    // Only a merge this started can have left MERGE_HEAD: there was none a
+    // moment ago, or it would have been refused above.
+    if (existsSync(await gitPath(repoPath, "MERGE_HEAD"))) {
+      const files = (await git(repoPath, "diff", "--name-only", "--diff-filter=U").catch(() => ""))
+        .split("\n")
+        .filter(Boolean)
+      // Leave the repo clean rather than parked in a half-merge the user has
+      // to discover on their own.
+      await git(repoPath, "merge", "--abort").catch(() => {})
+      return refused(
+        "conflict",
+        `merge conflict in ${listFiles(files)} — nothing was merged and ${branch} is intact. ` +
+          `Send it back asking the agent to merge ${current} and resolve the conflict, or merge it yourself`,
+        files,
+      )
+    }
+
+    // Refused before it began: the user's own uncommitted files are in the way.
+    const output = `${e.stderr ?? ""}\n${e.stdout ?? ""}`
+    if (/would be overwritten by merge/.test(output)) {
+      const files = output
+        .split("\n")
+        .filter((l) => /^\t\S/.test(l))
+        .map((l) => l.trim())
+      return refused(
+        "dirty",
+        `your uncommitted changes to ${listFiles(files)} would be overwritten — commit or stash them, then merge again`,
+        files,
+      )
+    }
+
+    const why = (e.stderr || e.message || String(err))
+      .split("\n")
+      .map((l) => l.replace(/^(fatal|error):\s*/, "").trim())
+      .find((l) => l && !l.startsWith("Command failed"))
+    return refused("failed", `could not merge ${branch}: ${why ?? "git refused"}`)
   }
 }
 
 /**
- * The branch a local merge of this worktree would land on: whatever the main
- * checkout has out right now, since that is where `mergeBranch` merges.
+ * How a merge went. `why` is for code; `reason` is for a person.
+ *
+ * - `busy`: the checkout is mid-merge/rebase/cherry-pick/revert.
+ * - `elsewhere`: it is not on the branch the note lands on.
+ * - `empty`: the branch has nothing to merge.
+ * - `conflict`: the merge was tried, conflicted, and was undone.
+ * - `dirty`: the user's uncommitted files are in the way.
+ * - `failed`: anything else git refused.
+ */
+export type Merge =
+  | { merged: true }
+  | {
+      merged: false
+      why: "busy" | "elsewhere" | "empty" | "conflict" | "dirty" | "failed"
+      reason: string
+      files?: string[]
+    }
+
+function refused(why: Extract<Merge, { merged: false }>["why"], reason: string, files?: string[]): Merge {
+  return { merged: false, why, reason, ...(files?.length ? { files } : {}) }
+}
+
+/** A few file names, then a count — a status bar is one line. */
+function listFiles(files: readonly string[]): string {
+  if (!files.length) return "some files"
+  const shown = files.slice(0, 3).join(", ")
+  return files.length > 3 ? `${shown} and ${files.length - 3} more` : shown
+}
+
+/** What the checkout is in the middle of, if anything. */
+async function midOperation(repoPath: string): Promise<string | null> {
+  const markers: [string, string][] = [
+    ["MERGE_HEAD", "merge"],
+    ["rebase-merge", "rebase"],
+    ["rebase-apply", "rebase"],
+    ["CHERRY_PICK_HEAD", "cherry-pick"],
+    ["REVERT_HEAD", "revert"],
+  ]
+  for (const [name, what] of markers) {
+    if (existsSync(await gitPath(repoPath, name))) return what
+  }
+  return null
+}
+
+/**
+ * The branch a local merge of this worktree would land on, when its own base
+ * branch is not known: whatever the main checkout has out right now.
  *
  * For worktrees adopted after a restart, whose base branch was never logged —
- * without it the board could only say "merge into the base branch".
+ * without it the board could only say "merge into the base branch". A
+ * worktree that knows its base branch lands there or nowhere; see mergeBranch.
  */
 export async function landingBranch(worktreePath: string): Promise<string | null> {
   try {
@@ -386,7 +553,12 @@ export async function originOf(repoPath: string): Promise<string | null> {
   return normalizeRemote(await git(repoPath, "remote", "get-url", name).catch(() => ""))
 }
 
-async function remoteName(repoPath: string): Promise<string | null> {
+/**
+ * The remote kandy pushes to: `origin`, or the first remote if there is no
+ * `origin`. One answer for every push — a handoff, a pull request, a merged
+ * PR's branch — so a branch never lands on two remotes by two rules.
+ */
+export async function remoteName(repoPath: string): Promise<string | null> {
   const remotes = (await git(repoPath, "remote").catch(() => "")).split("\n").map((r) => r.trim()).filter(Boolean)
   return remotes.includes("origin") ? "origin" : (remotes[0] ?? null)
 }
@@ -438,7 +610,7 @@ export async function continueBranch(
     : ""
   if (!local && !tracked) return null
 
-  ensureExcluded(repoPath)
+  await ensureExcluded(repoPath)
   const root = worktreeRoot(repoPath)
   mkdirSync(root, { recursive: true })
   const dir = path.join(root, noteId)
@@ -509,7 +681,9 @@ export async function checkRepo(p: string): Promise<{
       suggestedSetup: guessSetup(root),
       suggestedCarry: guessCarry(root),
       remote: await originOf(root),
-      error: null,
+      // Still a repository, and a fine board once it has a commit — but every
+      // run would fail until then, so say so now rather than at the first one.
+      error: head ? null : NO_COMMITS,
     }
   } catch {
     return { ...base, exists: true, error: "not a git repository" }
@@ -563,25 +737,32 @@ export type Retired =
 /**
  * Put a finished note's checkout away without losing a line of its work.
  *
- * The rule is the one that makes deleting safe: **push first, then delete.**
- * Once the branch is on the remote, the checkout is only a place the work
- * happened, and it can go.
+ * The rule is the one that makes deleting safe: **the local branch goes only
+ * once its work is somewhere else.** The checkout is only a place the work
+ * happened; the branch is the work.
  *
  * This replaces two paths that disagreed and one that lost work. Discarding a
  * note force-removed its worktree and deleted its branch — so the agent's
- * commits *and* anything uncommitted were gone, with nothing pushed first. A
- * merged PR force-removed the worktree too, and never told the log, so the
- * note went on naming a directory that no longer existed.
+ * commits *and* anything uncommitted were gone. A merged PR force-removed the
+ * worktree too, and never told the log, so the note went on naming a
+ * directory that no longer existed.
  *
  * In order, and each step can stop the next:
  *
  * 1. Uncommitted changes → keep everything. Nothing here commits on anyone's
  *    behalf, and `--force` is never used.
- * 2. A remote exists → push the branch. If the push fails, keep everything:
- *    the checkout might be the only copy.
+ * 2. With `push` (a pull request that merged: the branch is already the
+ *    remote's business) and a remote → push the branch. If the push fails,
+ *    keep everything: the checkout might be the only copy.
  * 3. Remove the worktree.
- * 4. Delete the local branch *only* if it reached the remote. With no remote,
- *    the local branch is the only copy of the work, so it stays.
+ * 4. Delete the local branch only if it has nothing on it, reached the
+ *    remote, or is already part of `into` — a local merge. Otherwise it is
+ *    the only copy of the work, and it stays.
+ *
+ * A review never pushes. A merge made here is on the user's branch, and what
+ * they push is up to them; a discard is work somebody decided against, and
+ * a shared remote is the last place it belongs. It stays on this machine as a
+ * local branch, where it can be recovered and nobody else has to see it.
  *
  * A branch with nothing on it beyond its base has nothing to lose, and is not
  * pushed — a remote full of empty branches is its own kind of mess.
@@ -589,6 +770,7 @@ export type Retired =
 export async function retireWorktree(
   repoPath: string,
   wt: { path: string; branch: string; baseRef: string },
+  opts: { push?: boolean; into?: string | null } = { push: true },
 ): Promise<Retired> {
   if (existsSync(wt.path) && (await isDirty(wt.path))) {
     return { removed: false, reason: "uncommitted changes in the checkout" }
@@ -597,7 +779,7 @@ export async function retireWorktree(
   const ahead = Number(
     (await git(repoPath, "rev-list", "--count", `${wt.baseRef}..${wt.branch}`).catch(() => "0")).trim(),
   )
-  const remote = (await git(repoPath, "remote").catch(() => "")).split("\n").map((r) => r.trim()).find(Boolean)
+  const remote = opts.push ? await remoteName(repoPath) : null
 
   let pushed = false
   if (ahead > 0 && remote) {
@@ -612,9 +794,12 @@ export async function retireWorktree(
 
   if (existsSync(wt.path)) await removeWorktree(repoPath, wt.path)
 
-  // Nothing on it, or safely on the remote: the local branch is clutter.
-  // Unpushed work with no remote to send it to: the local branch is the work.
-  const branchKept = ahead > 0 && !pushed
+  // Nothing on it, safely on the remote, or merged: the local branch is
+  // clutter. Anything else: the local branch is the work.
+  const merged =
+    !!opts.into &&
+    (await git(repoPath, "merge-base", "--is-ancestor", wt.branch, opts.into).then(() => true).catch(() => false))
+  const branchKept = ahead > 0 && !pushed && !merged
   if (!branchKept) await deleteBranch(repoPath, wt.branch)
 
   return { removed: true, pushed, branchKept }
