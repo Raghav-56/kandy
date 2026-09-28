@@ -26,6 +26,8 @@ export type Handlers = Record<string, (...args: never[]) => Promise<unknown>>
 const SILENCE_MS = 45_000
 /** Well inside the hub's one-minute limit for a silent runner. */
 const CHECK_IN_MS = 20_000
+/** Between tries once the hub has said no, rather than "not now". */
+const REFUSED_MS = 60_000
 
 export class HubLink {
   private stopped = false
@@ -48,6 +50,8 @@ export class HubLink {
       silenceMs?: number
       /** How often to tell the hub this runner is still here. */
       checkInMs?: number
+      /** How long to wait after the hub refuses this runner outright. */
+      refusedMs?: number
     },
   ) {
     this.ready = new Promise((r) => (this.markReady = r))
@@ -65,6 +69,14 @@ export class HubLink {
       } catch (err) {
         if (this.stopped) return
         this.opts.onStatus?.("offline", err instanceof Error ? err.message : String(err))
+        /*
+         * Refused — a wrong token, someone not added yet, a viewer — is not a
+         * network blip, and no amount of retrying fast will change it. Asking
+         * once a minute still connects soon after an owner adds this person,
+         * which is what `kandy join` promised.
+         */
+        const code = (err as { status?: number }).status
+        if (code === 401 || code === 403) delay = this.opts.refusedMs ?? REFUSED_MS
       }
       if (this.stopped) return
       await new Promise((r) => setTimeout(r, delay))
@@ -106,7 +118,16 @@ export class HubLink {
       signal: this.controller.signal,
       headers: { ...this.opts.headers, accept: "text/event-stream" },
     })
-    if (!res.ok || !res.body) throw new Error(`stream refused: ${res.status} ${await res.text().catch(() => "")}`)
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => "")
+      let why = text
+      try {
+        why = (JSON.parse(text) as { error?: { message?: string } }).error?.message ?? text
+      } catch {
+        // Not ours — a proxy's page. Said as it came.
+      }
+      throw Object.assign(new Error(`stream refused: ${why || res.status}`), { status: res.status })
+    }
     this.opts.onStatus?.("online")
 
     /*
@@ -194,7 +215,7 @@ export class HubLink {
       body: JSON.stringify(body),
     })
     const json = (await res.json().catch(() => null)) as T & { error?: { message?: string } }
-    if (!res.ok) throw new Error(json?.error?.message ?? `${path}: ${res.status}`)
+    if (!res.ok) throw Object.assign(new Error(json?.error?.message ?? `${path}: ${res.status}`), { status: res.status })
     return json
   }
 

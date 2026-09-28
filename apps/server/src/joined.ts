@@ -74,6 +74,36 @@ export function clearRunner(pid: number): void {
   if (runnerPid() === pid) rmSync(PID, { force: true })
 }
 
+/**
+ * What the runner last heard from its hub.
+ *
+ * Written on every change, by a runner in the background whose output nobody
+ * is watching, so `kandy status` can say "the hub refused this machine's
+ * token" instead of a bare "not connected".
+ */
+export type RunnerStatus = { state: "online" | "offline"; why: string | null; at: number }
+
+const STATUS = path.join(STATE_DIR, "runner-status.json")
+
+export function saveRunnerStatus(s: RunnerStatus): void {
+  try {
+    mkdirSync(STATE_DIR, { recursive: true })
+    writeFileSync(STATUS, JSON.stringify(s) + "\n")
+  } catch {
+    // A status line is a courtesy; a runner must not fall over for it.
+  }
+}
+
+export function runnerStatus(): RunnerStatus | null {
+  try {
+    const s = JSON.parse(readFileSync(STATUS, "utf8")) as Partial<RunnerStatus>
+    if (s.state !== "online" && s.state !== "offline") return null
+    return { state: s.state, why: typeof s.why === "string" ? s.why : null, at: typeof s.at === "number" ? s.at : 0 }
+  } catch {
+    return null
+  }
+}
+
 /** The background runner's pid, if it is alive. */
 export function runnerPid(): number | null {
   try {

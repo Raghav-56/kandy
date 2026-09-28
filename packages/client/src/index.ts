@@ -26,7 +26,7 @@ import type {
   SkillInfo,
 } from "@kandy/core"
 import { EVENT_TYPES } from "@kandy/core"
-import { installEventSource } from "./sse.js"
+import { installEventSource, NodeEventSource } from "./sse.js"
 
 export { installEventSource, NodeEventSource, SseDecoder, type SseMessage } from "./sse.js"
 
@@ -59,9 +59,35 @@ export class KandyClient {
     this.token = opts.token
   }
 
-  private async req<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const token = method === "GET" || method === "HEAD" ? undefined
-      : typeof this.token === "function" ? await this.token() : this.token
+  /** The token, fetched once per client rather than once per request. */
+  private held: Promise<string | undefined> | null = null
+
+  private bearer(): Promise<string | undefined> {
+    const t = this.token
+    if (typeof t !== "function") return Promise.resolve(t)
+    this.held ??= Promise.resolve()
+      .then(() => t())
+      .catch((err: unknown) => {
+        this.held = null
+        throw err
+      })
+    return this.held
+  }
+
+  private async req<T>(method: string, path: string, body?: unknown, retried = false): Promise<T> {
+    /*
+     * On every request, reads included. A daemon answers reads on loopback
+     * without one, but a hub reached from another machine does not — and a
+     * client that kept its token back on GETs could join nothing. A read
+     * whose token cannot be had still goes, bare: that is all it ever was.
+     */
+    const reading = method === "GET" || method === "HEAD"
+    let token: string | undefined
+    try {
+      token = await this.bearer()
+    } catch (err) {
+      if (!reading) throw err
+    }
     const res = await fetch(this.baseUrl + path, {
       method,
       headers: {
@@ -70,6 +96,12 @@ export class KandyClient {
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     })
+    // A token held from before a daemon restart may be stale: ask once more.
+    if (res.status === 401 && !retried && typeof this.token === "function") {
+      this.held = null
+      await res.body?.cancel().catch(() => {})
+      return this.req<T>(method, path, body, true)
+    }
     const json = (await res.json()) as unknown
     if (!res.ok) {
       const e = (json as { error?: { code?: string; message?: string; detail?: unknown } }).error
@@ -179,6 +211,17 @@ export class KandyClient {
       admitted: boolean
       /** Who can add people, so "ask an owner" can name one. */
       owners: string[]
+      /**
+       * Whether this request proved who it is — by Tailscale, or by a token
+       * that checked out. A hub's own machine may read without either, and a
+       * runner there could still not write; `kandy join` asks this to tell.
+       * Absent from daemons older than the field.
+       */
+      authenticated?: boolean
+      /** Whether this hub knows people by identity, rather than by one token. */
+      identity?: boolean
+      /** Not admitted because an owner took them off the hub, not because nobody added them yet. */
+      removed?: boolean
     }>("GET", "/me")
   }
   /** The latest events someone can be named for, newest first. */
@@ -367,7 +410,16 @@ export class KandyClient {
     url.searchParams.set("after", String(after))
 
     installEventSource()
-    const es = new EventSource(url)
+    // Outside a browser the stream carries the token too, for a hub reached
+    // from another machine. A browser's EventSource cannot send headers, and
+    // needs none: its page came from the daemon it is talking to.
+    const es: Pick<EventSource, "addEventListener" | "close" | "onerror"> =
+      origin === undefined && this.token
+        ? (new NodeEventSource(url, async () => {
+            const t = await this.bearer().catch(() => undefined)
+            return t ? { authorization: `Bearer ${t}` } : {}
+          }) as unknown as EventSource)
+        : new EventSource(url)
     const handler = (ev: MessageEvent) => {
       try {
         const frame = JSON.parse(ev.data) as StreamFrame

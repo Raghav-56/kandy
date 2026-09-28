@@ -91,7 +91,11 @@ export class NodeEventSource {
   private controller: AbortController | null = null
   private closed = false
 
-  constructor(url: string | URL) {
+  constructor(
+    url: string | URL,
+    /** Asked on every (re)connect, so a credential can change underneath. */
+    private readonly headers: () => Promise<Record<string, string>> = async () => ({}),
+  ) {
     this.url = url
     void this.loop()
   }
@@ -134,6 +138,7 @@ export class NodeEventSource {
     const res = await fetch(this.url, {
       signal: controller.signal,
       headers: {
+        ...(await this.headers()),
         accept: "text/event-stream",
         ...(resume ? { "last-event-id": resume } : {}),
       },

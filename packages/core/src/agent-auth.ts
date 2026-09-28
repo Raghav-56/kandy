@@ -53,6 +53,12 @@ export function isAuthFailure(text: string | null | undefined): boolean {
  */
 export const INTERRUPTED = "daemon restarted while this run was in flight"
 
+/**
+ * The same, on a team: the runner holding the run went offline and did not
+ * come back. Its checkout is on that machine, untouched, and resumes there.
+ */
+export const MACHINE_LOST = "its machine went offline while this run was in flight"
+
 export function wasInterrupted(run: { error: string | null } | null | undefined): boolean {
-  return run?.error === INTERRUPTED
+  return run?.error === INTERRUPTED || run?.error === MACHINE_LOST
 }

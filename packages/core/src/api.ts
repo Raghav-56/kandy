@@ -344,6 +344,8 @@ export const ERROR_CODES = [
   "no_branch",
   "run_not_live",
   "invalid_transition",
+  /** The machine that would do it is offline, or did not answer in time. */
+  "unavailable",
   "internal",
 ] as const
 export type ErrorCode = (typeof ERROR_CODES)[number]

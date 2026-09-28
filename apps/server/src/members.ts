@@ -33,6 +33,8 @@ import type { Person } from "./identity.js"
  */
 export class Members {
   private members = new Map<string, Member>()
+  /** People an owner took off, so being refused can say so rather than "ask to be added". */
+  private removed = new Set<string>()
 
   constructor(private readonly engine: Engine) {
     for (let after = 0; ; ) {
@@ -49,6 +51,7 @@ export class Members {
   private apply(e: KandyEvent): void {
     switch (e.type) {
       case "member.added":
+        this.removed.delete(normalEmail(e.data.email))
         this.members.set(normalEmail(e.data.email), {
           email: normalEmail(e.data.email),
           role: e.data.role,
@@ -63,6 +66,7 @@ export class Members {
       }
       case "member.removed":
         this.members.delete(normalEmail(e.data.email))
+        this.removed.add(normalEmail(e.data.email))
         break
     }
   }
@@ -76,11 +80,26 @@ export class Members {
     return this.members.get(normalEmail(email))?.role ?? null
   }
 
+  /** Whether an owner took this person off the hub — as against nobody having added them yet. */
+  wasRemoved(email: string | null): boolean {
+    return email !== null && this.removed.has(normalEmail(email))
+  }
+
+  /** Whether nobody owns this hub yet, so the next person to claim it will. */
+  unclaimed(): boolean {
+    return this.members.size === 0
+  }
+
   /**
    * Who this person is on this hub, admitting them if they are the first.
    *
    * Returns their role, or null for someone who is on the tailnet but not
    * on the team.
+   *
+   * Only for a person arriving on purpose — opening the board, `kandy join`.
+   * Whatever else reaches the hub first (a health check, a runner, a script)
+   * must not walk off with it; the HTTP layer decides which requests those
+   * are and uses `roleOf` for the rest.
    */
   arrive(person: Person): Role | null {
     const known = this.roleOf(person.email)

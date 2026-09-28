@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -10,8 +10,8 @@ import { client, ensureUp, hubFor } from "./daemon.js"
 import type { Reclaimable } from "../gc.js"
 import { findReclaimable, findStrippable, strip, heldBack, humanBytes, reclaim } from "../gc.js"
 import { originOf } from "../worktree.js"
-import { STATE_DIR } from "../paths.js"
 import { preferredPolicy } from "./setup.js"
+import { teamStatus } from "./join.js"
 import { failureOf } from "../tui/board.js"
 import { notInstalled, SIGN_IN } from "../agents/hints.js"
 
@@ -254,31 +254,28 @@ export async function cmdStatus(opts: { port: number; json?: boolean }): Promise
   if (!up) return 1
 
   const api = client(opts.port)
-  const [{ boards }, { agents }] = await Promise.all([api.boards(), api.agents()])
 
   if (hub) {
     // On a team the questions are different: who am I here, and is my
     // machine actually taking work — a runner that is down means my notes
     // sit waiting for a machine that never arrives.
-    const [me, { runners }] = await Promise.all([api.me(), api.runners()])
-    // This machine's own runner, by the id it keeps — not by email, which a
-    // hub with no identity does not have.
-    const myId = (() => {
-      try {
-        return readFileSync(path.join(STATE_DIR, "runner-id"), "utf8").trim()
-      } catch {
-        return null
-      }
-    })()
-    const mine = runners.filter((r) => r.runnerId === myId)
+    const me = await api.me()
     out(`  ${dim("team")}   ${bold(me.email ?? "the only person")}${me.role ? dim(` · ${me.role}`) : ""}`)
-    out(
-      `  ${dim("runner")} ${mine.some((r) => r.online) ? mint("connected") : lemon("not connected")}` +
-        dim(`  · ${runners.filter((r) => r.online).length} machine(s) online on the hub`),
-    )
-    if (!me.admitted) out(lemon("  nobody has added you yet") + dim(` — ask ${me.owners.join(", ") || "an owner"}`))
+    // Not added yet: the hub will not show boards or machines, and saying why
+    // is the whole answer. The runner connects by itself once someone does.
+    if (!me.admitted) {
+      out(lemon("  nobody has added you yet") + dim(` — ask ${me.owners.join(", ") || "an owner"}`))
+      out()
+      return 0
+    }
+    const { runners } = await api.runners()
+    // This machine's runner — and why not, when it is not — and anyone
+    // waiting on this machine's owner to say yes.
+    await teamStatus(api, runners)
     out()
   }
+
+  const [{ boards }, { agents }] = await Promise.all([api.boards(), api.agents()])
 
   out(`  ${dim("repos")}`)
   for (const b of boards) out(`    ${bold(b.name)} ${dim(b.repoPath)}`)

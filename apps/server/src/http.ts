@@ -31,7 +31,7 @@ import { coerceAttribution, commitTrailers, prBody } from "./attribution.js"
 import { authorized } from "./auth.js"
 import type { Identity } from "./identity.js"
 import type { Members } from "./members.js"
-import type { Runners } from "./hub.js"
+import { whose, type Runners } from "./hub.js"
 
 const VERSION = kandyVersion()
 const STARTED = Date.now()
@@ -141,7 +141,7 @@ export function createHttpServer(deps: ServerDeps) {
         if (res.headersSent) return void res.end()
         return send(res, status, {
           ok: false,
-          error: { code: status === 403 ? "forbidden" : status === 404 ? "note_not_found" : "bad_request", message: (err as Error).message },
+          error: { code: codeFor(status), message: (err as Error).message },
         })
       }
       console.error("[http]", err)
@@ -225,6 +225,17 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
    * through but no owner has admitted is told exactly who they are and who to
    * ask — an empty board would be a worse answer.
    */
+  /*
+   * GET /health answers anyone the Host check let through, before any gate.
+   * It is how `kandy join` and a container's health check learn the hub is
+   * up at all — which has to be answerable before anyone is let in, or "you
+   * have not been added yet" reads as "cannot reach it". It says nothing
+   * about any board.
+   */
+  if ((req.method === "GET" || req.method === "HEAD") && routed === "/health") {
+    return send(res, 200, { version: VERSION, uptime: Date.now() - STARTED, pid: process.pid })
+  }
+
   let actor: ActorId | null = null
   if (deps.identity && deps.members && !local) {
     const person = deps.identity.identify(req)
@@ -236,7 +247,14 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
         "no Tailscale identity on this request. Tagged devices and anything that did not come through tailscale serve are refused.",
       )
     }
-    const role = deps.members.arrive(person)
+    /*
+     * The first person in owns the hub — but only a person arriving on
+     * purpose: the board asking who it is (`/me`, `/auth/token`), or
+     * `kandy join`, which asks the same. A health check, a runner, a script
+     * poking `/boards` got there first on a real hub and took it.
+     */
+    const claiming = req.method === "GET" && (routed === "/me" || routed === "/auth/token")
+    const role = claiming ? deps.members.arrive(person) : deps.members.roleOf(person.email)
     if (!role) {
       /*
        * On the tailnet, not on the team — yet. Two questions still get an
@@ -255,15 +273,26 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
       if (req.method === "GET" && (routed === "/me" || routed === "/auth/token")) {
         res.setHeader("Cache-Control", "no-store")
         const owners = deps.members.list().filter((m) => m.role === "owner").map((m) => m.email)
+        const removed = deps.members.wasRemoved(person.email)
         return send(
           res,
           200,
           routed === "/me"
-            ? { hub: true, email: person.email, name: person.name, role: null, admitted: false, owners }
+            ? { hub: true, email: person.email, name: person.name, role: null, admitted: false, owners, authenticated: true, identity: true, removed }
             : { token: "", identity: { email: person.email, name: person.name, role: null } },
         )
       }
-      return fail(res, 403, "forbidden", `you are ${person.email}, and nobody has added you to this hub yet — ask one of its owners`)
+      const owners = deps.members.list().filter((m) => m.role === "owner").map((m) => m.email).join(", ")
+      return fail(
+        res,
+        403,
+        "forbidden",
+        deps.members.unclaimed()
+          ? `you are ${person.email}, and nobody owns this hub yet — open it in a browser, or run kandy join, to take it`
+          : deps.members.wasRemoved(person.email)
+            ? `you are ${person.email}, and you were removed from this hub — ask ${owners || "one of its owners"} if that is a mistake`
+            : `you are ${person.email}, and nobody has added you to this hub yet — ask ${owners || "one of its owners"}`,
+      )
     }
     actor = person.email
     if (routed === "/auth/token") {
@@ -294,9 +323,22 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
   // anyone the Host allowlist let through. It is a public build artifact; the
   // data behind it is what this gate protects.
   const reading = req.method === "GET" || req.method === "HEAD"
-  const open = reading && (routed === "/health" || (apiPath === null && isBundleAsset(url.pathname)))
+  const open = reading && apiPath === null && isBundleAsset(url.pathname)
+  const presented = Boolean(req.headers.authorization)
+  const tokenOk = presented && authorized(req.headers.authorization, deps.token)
 
-  if (actor === null && !open && !(local && reading) && !authorized(req.headers.authorization, deps.token)) {
+  /*
+   * A token that is presented is checked, even where none is needed. Loopback
+   * reads skip the token for the caller who sends none — the single-player
+   * board — but one who sends the wrong one is told so: otherwise `kandy
+   * join` on the hub's own machine took any token, said "You're in", and left
+   * a runner refused on every write with nobody to see why.
+   */
+  if (actor === null && !open && presented && !tokenOk) {
+    res.setHeader("WWW-Authenticate", "Bearer")
+    return fail(res, 401, "unauthorized", "that token was refused — check it with whoever runs this hub")
+  }
+  if (actor === null && !open && !(local && reading) && !tokenOk) {
     res.setHeader("WWW-Authenticate", "Bearer")
     return send(res, 401, { ok: false, error: { code: "unauthorized", message: "Valid bearer token required" } })
   }
@@ -323,6 +365,11 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
       // have nobody to keep out.
       admitted: true,
       owners: deps.members?.list().filter((m) => m.role === "owner").map((m) => m.email) ?? [],
+      // Past the gate is not the same as proven: a loopback read needs no
+      // token, but the runner `kandy join` is about to start writes, and will.
+      authenticated: actor !== null || tokenOk,
+      identity: Boolean(deps.members),
+      removed: false,
     })
   }
 
@@ -398,6 +445,11 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
         ? deps.runners.pick(view.board.id, b.to.trim().toLowerCase())
         : null
     if (!target || !target.online) {
+      // A machine that is theirs but asleep is a different answer from one
+      // they never connected: the first fixes itself, the second needs a join.
+      const who = b?.to?.trim().toLowerCase()
+      const asleep = target ?? deps.runners.list().find((r) => who && r.owner === who && r.boards.includes(view.board.id))
+      if (asleep) return fail(res, 409, "unavailable", `${whose(asleep)} is offline — give it once it reconnects`)
       return fail(res, 409, "invalid_transition", b?.to ? `${b.to} has no machine connected with this repository` : "that machine is not connected")
     }
     if (!target.boards.includes(view.board.id)) {
@@ -446,7 +498,7 @@ async function handle(deps: ServerDeps, req: IncomingMessage, res: ServerRespons
       return send(res, 200, { ok: true, seq: deps.engine.head(), runId: runId || null })
     } catch (err) {
       const e = err as { status?: number; message?: string }
-      return fail(res, e.status ?? 502, "bad_request", e.message ?? String(err))
+      return fail(res, e.status ?? 502, codeFor(e.status ?? 502), e.message ?? String(err))
     }
   }
 
@@ -1256,6 +1308,20 @@ async function json<T>(req: IncomingMessage): Promise<T | null> {
 function send(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "content-type": "application/json" })
   res.end(JSON.stringify(body))
+}
+
+/**
+ * The code for an error that only carried a status. A runner that is offline
+ * or did not answer is not the caller's mistake, and calling it `bad_request`
+ * sent people looking for what they had typed wrong.
+ */
+function codeFor(status: number): ErrorCode {
+  if (status === 401) return "unauthorized"
+  if (status === 403) return "forbidden"
+  if (status === 404) return "note_not_found"
+  if (status === 409) return "invalid_transition"
+  if (status === 502 || status === 503 || status === 504) return "unavailable"
+  return "bad_request"
 }
 
 function fail(res: ServerResponse, status: number, code: ErrorCode, message: string) {

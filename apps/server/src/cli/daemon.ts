@@ -143,7 +143,7 @@ async function ensureJoined(hub: Joined): Promise<boolean> {
   } catch {
     process.stderr.write(
       berry(`  cannot reach ${hub.url}`) +
-        dim(" — is Tailscale up? (tailscale status)\n") +
+        dim(/\.ts\.net(:\d+)?(\/|$)/i.test(hub.url.replace(/^https?:\/\//, "")) ? " — is Tailscale up? (tailscale status)\n" : " — is the hub running?\n") +
         dim("  Your own board meanwhile: KANDY_LOCAL=1 kandy   ·   off the team for good: kandy leave\n"),
     )
     return false

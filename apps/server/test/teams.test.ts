@@ -6,8 +6,10 @@ import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-import { RUNNER_PROTOCOL, event } from "@kandy/core"
-import { SseDecoder } from "@kandy/client"
+import { RUNNER_PROTOCOL, event, wasInterrupted } from "@kandy/core"
+import { KandyClient, SseDecoder } from "@kandy/client"
+import { hubUrl, inviteMessage } from "../dist/cli/join.js"
+import { tokenHubSteps } from "../dist/cli/roles.js"
 import { Engine } from "../dist/engine.js"
 import { Runners } from "../dist/hub.js"
 import { createHttpServer, parseHosts } from "../dist/http.js"
@@ -27,9 +29,9 @@ import { Store } from "../dist/store.js"
 
 const TAILNET = "hub.tail1234.ts.net"
 
-async function tailnetHub() {
+async function tailnetHub(opts: { graceMs?: number } = {}) {
   const engine = new Engine(new Store(path.join(mkdtempSync(path.join(tmpdir(), "kandy-team-")), "k.db")))
-  const runners = new Runners(engine)
+  const runners = new Runners(engine, opts.graceMs)
   const members = new Members(engine)
   const server = createHttpServer({
     engine,
@@ -105,6 +107,9 @@ test("the first person in owns the hub; the next is told who they are and who to
       role: "owner",
       admitted: true,
       owners: ["alice@example.com"],
+      authenticated: true,
+      identity: true,
+      removed: false,
     })
 
     const bob = await h.as("bob@example.com")("/boards")
@@ -120,8 +125,11 @@ test("the first person in owns the hub; the next is told who they are and who to
       role: null,
       admitted: false,
       owners: ["alice@example.com"],
+      authenticated: true,
+      identity: true,
+      removed: false,
     })
-    assert.match((await bob.json()).error.message, /you are bob@example\.com.*ask one of its owners/)
+    assert.match((await bob.json()).error.message, /you are bob@example\.com.*nobody has added you.*ask alice@example\.com/)
 
     const add = await h.as("alice@example.com")("/members", { method: "POST", body: { email: "bob@example.com", role: "member" } })
     assert.equal(add.status, 200)
@@ -359,4 +367,234 @@ test("the page loads over https, as tailscale serve delivers it", async () => {
   } finally {
     h.close()
   }
+})
+
+// ── machines that go away ─────────────────────────────────────────────────
+
+/** Poll until `ok`, for the moments a socket closing takes a tick to be heard. */
+async function until(ok: () => boolean, ms = 3000) {
+  const end = Date.now() + ms
+  while (!ok()) {
+    if (Date.now() > end) throw new Error("timed out waiting")
+    await new Promise((r) => setTimeout(r, 20))
+  }
+}
+
+/** A board with one note, and Alice and Bob on the hub. */
+async function team(h: Awaited<ReturnType<typeof tailnetHub>>) {
+  await h.as("alice@example.com")("/me")
+  await h.as("alice@example.com")("/members", { method: "POST", body: { email: "bob@example.com", role: "member" } })
+  h.engine.emit(event("board.created", { boardId: "b1", name: "demo", repoPath: "/repo" }))
+  h.engine.emit(event("column.created", { columnId: "c1", boardId: "b1", name: "Todo", pos: "a0" }))
+  h.engine.emit(event("note.created", { noteId: "n1", boardId: "b1", columnId: "c1", title: "t", body: "", pos: "a0" }))
+}
+
+test("a runner that says hello again still goes offline when it leaves", async () => {
+  /*
+   * The runner re-announces right after attaching and every minute after.
+   * That used to swap its entry for a new one, and the stream's close
+   * handler then marked the discarded copy offline — so every machine was
+   * "online" for good, and work given to a closed laptop waited two minutes
+   * to be told "bad request".
+   */
+  const h = await tailnetHub()
+  try {
+    await team(h)
+    const stop = await runnerOf(h, "bob@example.com", "bob-mbp-00001", ["b1"], () => null)
+    const again = await h.as("bob@example.com")("/runner/hello", {
+      method: "POST",
+      body: { protocol: RUNNER_PROTOCOL, runnerId: "bob-mbp-00001", name: "bob-laptop", os: "darwin", agents: [], boards: ["b1"] },
+    })
+    assert.equal(again.status, 200)
+    assert.equal(h.runners.get("bob-mbp-00001")?.online, true, "a hello does not disconnect anyone")
+
+    stop()
+    await until(() => h.runners.get("bob-mbp-00001")?.online === false)
+
+    const give = await h.as("alice@example.com")("/notes/n1/give", { method: "POST", body: { to: "bob@example.com" } })
+    assert.equal(give.status, 409)
+    assert.match((await give.json()).error.message, /bob@example\.com's machine is offline/)
+
+    // A note already placed there is refused at once, and not as the caller's mistake.
+    h.runners.place("n1", "bob-mbp-00001", "bob@example.com")
+    const started = Date.now()
+    const run = await h.as("bob@example.com")("/notes/n1/run", { method: "POST", body: { agent: "claude" } })
+    assert.equal(run.status, 503)
+    const err = (await run.json()).error
+    assert.equal(err.code, "unavailable")
+    assert.match(err.message, /bob@example\.com's machine is offline/)
+    assert.ok(Date.now() - started < 1000, "no two-minute wait for a machine known to be gone")
+  } finally {
+    h.close()
+  }
+})
+
+test("a run on a machine that does not come back is interrupted, not running forever", async () => {
+  const h = await tailnetHub({ graceMs: 50 })
+  try {
+    await team(h)
+    const stop = await runnerOf(h, "bob@example.com", "bob-mbp-00001", ["b1"], () => null)
+    h.runners.place("n1", "bob-mbp-00001", "bob@example.com")
+    h.engine.emit(event("run.requested", { runId: "r1", noteId: "n1", agent: "claude" }))
+    h.engine.emit(event("run.started", { runId: "r1", noteId: "n1", worktree: "/w", branch: "kandy/n1", baseRef: "abc", pid: 1 }))
+    assert.equal(h.engine.view("b1")!.notes[0]!.status, "running")
+
+    stop()
+    await until(() => h.engine.view("b1")!.notes[0]!.status !== "running")
+    const run = h.engine.view("b1")!.runs.find((r) => r.id === "r1")!
+    assert.equal(run.status, "failed")
+    assert.equal(wasInterrupted(run), true, "offered as Resume, not as the agent's failure")
+  } finally {
+    h.close()
+  }
+})
+
+test("a machine back within the grace period keeps its runs", async () => {
+  const h = await tailnetHub({ graceMs: 300 })
+  try {
+    await team(h)
+    const stop = await runnerOf(h, "bob@example.com", "bob-mbp-00001", ["b1"], () => null)
+    h.runners.place("n1", "bob-mbp-00001", "bob@example.com")
+    h.engine.emit(event("run.requested", { runId: "r1", noteId: "n1", agent: "claude" }))
+    h.engine.emit(event("run.started", { runId: "r1", noteId: "n1", worktree: "/w", branch: "kandy/n1", baseRef: "abc", pid: 1 }))
+    stop()
+    await until(() => h.runners.get("bob-mbp-00001")?.online === false)
+    const back = await runnerOf(h, "bob@example.com", "bob-mbp-00001", ["b1"], () => null)
+    await new Promise((r) => setTimeout(r, 450))
+    assert.equal(h.engine.view("b1")!.notes[0]!.status, "running")
+    back()
+  } finally {
+    h.close()
+  }
+})
+
+// ── who owns a new hub ────────────────────────────────────────────────────
+
+test("a health check reaches a hub before anyone is let in, and claims nothing", async () => {
+  const h = await tailnetHub()
+  try {
+    // A probe from a tagged device, and one from a person: both answered.
+    assert.equal((await h.as(null)("/health")).status, 200)
+    assert.equal((await h.as("mallory@example.com")("/health")).status, 200)
+    // Nor does a script reading the board take the hub.
+    const poke = await h.as("mallory@example.com")("/boards")
+    assert.equal(poke.status, 403)
+    assert.match((await poke.json()).error.message, /nobody owns this hub yet/)
+    assert.deepEqual(h.members.list(), [])
+
+    // Opening the board — which asks who it is — does.
+    assert.equal((await (await h.as("alice@example.com")("/me")).json()).role, "owner")
+    // And /health tells an outsider nothing about the boards.
+    const health = await (await h.as("bob@example.com")("/health")).json()
+    assert.deepEqual(Object.keys(health).sort(), ["pid", "uptime", "version"])
+  } finally {
+    h.close()
+  }
+})
+
+test("someone taken off the hub is told so, not asked to be added", async () => {
+  const h = await tailnetHub()
+  try {
+    await team(h)
+    await h.as("alice@example.com")("/members", { method: "POST", body: { email: "bob@example.com", role: null } })
+    const me = await (await h.as("bob@example.com")("/me")).json()
+    assert.equal(me.admitted, false)
+    assert.equal(me.removed, true)
+    const boards = await h.as("bob@example.com")("/boards")
+    assert.match((await boards.json()).error.message, /you were removed from this hub — ask alice@example\.com/)
+  } finally {
+    h.close()
+  }
+})
+
+// ── a hub with a token and no people ──────────────────────────────────────
+
+async function tokenHub() {
+  const engine = new Engine(new Store(path.join(mkdtempSync(path.join(tmpdir(), "kandy-token-")), "k.db")))
+  const runners = new Runners(engine)
+  const token = "e".repeat(64)
+  const server = createHttpServer({
+    engine,
+    workshop: new RemoteWorkshop(engine, runners, null),
+    workshopFor: (a: string | null) => new RemoteWorkshop(engine, runners, a),
+    prs: { refresh: async () => {} } as never,
+    token,
+    runners,
+    hosts: parseHosts("hub.example.com"),
+  })
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r))
+  const port = (server.address() as AddressInfo).port
+  /** From another machine: arrived under a name that is not loopback. */
+  const remote = (p: string, bearer?: string) =>
+    send(port, p, "GET", { host: "hub.example.com", ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) })
+  return { token, port, url: `http://127.0.0.1:${port}`, remote, close: () => server.close() }
+}
+
+test("a token hub can be read from another machine with its token", async () => {
+  const h = await tokenHub()
+  try {
+    assert.equal((await h.remote("/boards", h.token)).status, 200)
+    assert.equal((await h.remote("/me", h.token)).status, 200)
+    assert.equal((await h.remote("/health")).status, 200)
+    const none = await h.remote("/boards")
+    assert.equal(none.status, 401)
+    const wrong = await h.remote("/boards", "f".repeat(64))
+    assert.equal(wrong.status, 401)
+    assert.match((await wrong.json()).error.message, /that token was refused/)
+  } finally {
+    h.close()
+  }
+})
+
+test("the client sends its token on reads, and a wrong one is refused even on the hub's machine", async () => {
+  /*
+   * On the hub's own machine a read needs no token, so `kandy join` with a
+   * wrong one used to say "You're in" and leave a runner refused on every
+   * write, with nothing in its log to say why.
+   */
+  const h = await tokenHub()
+  try {
+    const right = await new KandyClient({ baseUrl: h.url, token: () => h.token }).me()
+    assert.equal(right.authenticated, true, "the token went with the GET")
+
+    await assert.rejects(new KandyClient({ baseUrl: h.url, token: () => "f".repeat(64) }).me(), /that token was refused/)
+
+    const none = await new KandyClient({ baseUrl: h.url, token: () => "" }).me()
+    assert.equal(none.authenticated, false, "read, but not proven — join must ask for a token")
+    assert.equal(none.identity, false)
+  } finally {
+    h.close()
+  }
+})
+
+// ── the words people are given ────────────────────────────────────────────
+
+test("a hub url typed without a scheme gets the one it serves", () => {
+  assert.equal(hubUrl("127.0.0.1:4530"), "http://127.0.0.1:4530")
+  assert.equal(hubUrl("localhost:4530/"), "http://localhost:4530")
+  assert.equal(hubUrl("192.168.1.20:4530"), "http://192.168.1.20:4530")
+  assert.equal(hubUrl("kandy-hub.tail1234.ts.net"), "https://kandy-hub.tail1234.ts.net")
+  assert.equal(hubUrl("http://kandy.example.com"), "http://kandy.example.com")
+})
+
+test("an invite says the role, and to clone from the same remote", () => {
+  const member = inviteMessage("https://hub.tail1.ts.net", { role: "member", remotes: ["git@github.com:acme/web.git"], tailnet: true })
+  assert.match(member[0]!, /as a member/)
+  assert.ok(member.some((l: string) => l.includes("git clone git@github.com:acme/web.git")))
+  const viewer = inviteMessage("https://hub.tail1.ts.net", { role: "viewer", remotes: ["git@github.com:acme/web.git"] })
+  assert.match(viewer[0]!, /as a viewer/)
+  assert.equal(viewer.some((l: string) => l.includes("git clone")), false, "nothing runs for a viewer, so nothing to clone")
+})
+
+test("a token hub's banner says how to join from here and from elsewhere, consistently", () => {
+  const plain = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "")
+  const loop = tokenHubSteps({ port: 4530, bind: "127.0.0.1", hosts: new Set(), fresh: true }).map(plain).join("\n")
+  assert.match(loop, /on this machine: +kandy join http:\/\/127\.0\.0\.1:4530 --token "\$\(cat /)
+  assert.match(loop, /answers only on this machine/)
+  assert.match(loop, /KANDY_HOSTS=.* kandy hub --bind 0\.0\.0\.0/)
+  assert.doesNotMatch(loop, /has one person/)
+
+  const open = tokenHubSteps({ port: 4530, bind: "0.0.0.0", hosts: new Set(["box.lan"]), fresh: true }).map(plain).join("\n")
+  assert.match(open, /on another machine: +kandy join http:\/\/box\.lan:4530 --token <the token in /)
+  assert.doesNotMatch(open, /answers only on this machine/)
 })

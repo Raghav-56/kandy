@@ -107,3 +107,33 @@ test("the hub drops a runner it hasn't heard from, even if its connection looks 
   server.closeAllConnections()
   server.close()
 })
+
+test("a runner the hub refuses says why, and waits before asking again", async () => {
+  // A wrong token, someone not added yet, a viewer: none of it changes in ten
+  // seconds, and a runner hammering the hub about it buried the reason in
+  // its log — when it said anything at all.
+  let hellos = 0
+  const server = http.createServer((req, res) => {
+    if (req.url === "/runner/hello") hellos++
+    res.writeHead(401, { "content-type": "application/json" })
+    res.end(JSON.stringify({ ok: false, error: { code: "unauthorized", message: "that token was refused" } }))
+  })
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r))
+  const { port } = server.address() as AddressInfo
+  const said: string[] = []
+  const link = new HubLink({
+    hub: `http://127.0.0.1:${port}`,
+    headers: {},
+    hello: () => ({ runnerId: "r1", name: "test", os: "test", agents: [], boards: [], version: "0" }) as never,
+    handlers: {} as never,
+    log: new RemoteLog(async () => {}, async () => [], 1),
+    onStatus: (_s: string, why?: string) => void said.push(why ?? ""),
+    refusedMs: 400,
+  })
+  void link.start()
+  await new Promise((r) => setTimeout(r, 300))
+  link.stop()
+  server.close()
+  assert.equal(hellos, 1, "no second try inside the refused wait")
+  assert.match(said[0] ?? "", /that token was refused/)
+})

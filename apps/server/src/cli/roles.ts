@@ -10,7 +10,7 @@ import { Runners } from "../hub.js"
 import { createHttpServer, parseHosts } from "../http.js"
 import { tailscaleIdentity } from "../identity.js"
 import { Members } from "../members.js"
-import { clearRunner, markRunner } from "../joined.js"
+import { clearRunner, markRunner, saveRunnerStatus } from "../joined.js"
 import { STATE_DIR, TOKEN_PATH } from "../paths.js"
 import { Permissions } from "../permission.js"
 import type { PrWatch } from "../prwatch.js"
@@ -147,28 +147,37 @@ export async function runHub(opts: {
   } else {
     process.stdout.write(banner(reach))
     out(`  ${faint("role")}   ${dim("hub — keeps the board, runs nothing; each person's machine runs their notes")}`)
-    // The token is named by where it lives, never printed: stdout ends up in
-    // logs, and a hub's token is the whole of its lock. `serve --json` keeps
-    // it out of its output for the same reason.
-    const join = `kandy join ${reach}${identity ? "" : ` --token "$(cat ${TOKEN_PATH})"`}`
     /*
      * A hub nobody has opened yet is the moment someone needs to be told what
      * to do, in order — so a fresh one says it as steps. After that the same
-     * three facts are all anyone needs from a restart.
+     * facts are all anyone needs from a restart.
      */
     const fresh = engine.head() === 0
-    if (fresh) {
-      out()
-      out(`  ${mint("New hub.")} ${faint("Three steps:")}`)
-      out(`    ${bold("1")}  open ${bold(reach)}${identity ? faint(" — the first person to open it owns it") : ""}`)
-      out(`    ${bold("2")}  on your laptop, and each teammate's:  ${bold(join)}`)
-      out(`    ${bold("3")}  ${identity ? "add people on the Team page, or: kandy invite <email>" : "share that command — a hub with no Tailscale has one person: whoever holds the token"}`)
+    if (identity) {
+      const join = `kandy join ${reach}`
+      if (fresh) {
+        out()
+        out(`  ${mint("New hub.")} ${faint("Three steps:")}`)
+        out(`    ${bold("1")}  open ${bold(reach)}${faint(" — the first person to open it owns it")}`)
+        out(`    ${bold("2")}  on your laptop, and each teammate's:  ${bold(join)}`)
+        out(`    ${bold("3")}  add people on the Team page, or: kandy invite <email>`)
+      } else {
+        out(`  ${faint("join")}   ${dim(join)}`)
+        out(`  ${faint("who")}    ${dim("whoever Tailscale says; owners admit people on the Team page")}`)
+      }
     } else {
-      out(`  ${faint("join")}   ${dim(join)}`)
-      if (identity) out(`  ${faint("who")}    ${dim("whoever Tailscale says; owners admit people on the Team page")}`)
+      for (const line of tokenHubSteps({ port: opts.port, bind: opts.bind, hosts, fresh })) out(line)
     }
     out()
   }
+
+  // Who took an unowned hub is worth a line where whoever runs it will look:
+  // it is the one moment the hub trusted someone because they came first.
+  engine.bus.subscribe((f) => {
+    if ("kind" in f || f.type !== "member.added" || f.data.role !== "owner" || f.actor !== f.data.email) return
+    if (opts.json) out(JSON.stringify({ owner: f.data.email }))
+    else out(`  ${mint("owner")}  ${bold(f.data.email)} ${dim("opened the hub first, and owns it")}`)
+  })
 
   const shutdown = async () => {
     if (opts.tailscale) await unserve(opts.httpsPort)
@@ -178,6 +187,50 @@ export async function runHub(opts: {
   }
   process.on("SIGINT", () => void shutdown())
   process.on("SIGTERM", () => void shutdown())
+}
+
+/**
+ * What a hub with no Tailscale tells whoever started it.
+ *
+ * It has no people — whoever holds the token is the one person — and, bound
+ * to loopback as it is by default, it answers only on this machine. Both are
+ * said, with what it takes to join from another machine, because the old
+ * banner told teammates to run a `$(cat …)` that only works on this one, at an
+ * address only this one can reach.
+ *
+ * The token is never printed: stdout ends up in logs, and a hub's token is
+ * the whole of its lock. It is named by its file, quoted so a path with a
+ * space in it survives being pasted.
+ */
+export function tokenHubSteps(o: { port: number; bind: string; hosts: ReadonlySet<string>; fresh: boolean }): string[] {
+  const file = shellQuote(TOKEN_PATH)
+  const here = `kandy join http://127.0.0.1:${o.port} --token "$(cat ${file})"`
+  const named = [...o.hosts][0]
+  const address = named ? `http://${/:\d+$/.test(named) ? named : `${named}:${o.port}`}` : "<its address>"
+  const elsewhere = `kandy join ${address} --token <the token in ${file}>`
+  const loopback = o.bind === "127.0.0.1" || o.bind === "::1" || o.bind === "localhost"
+  const reach = loopback
+    ? "it answers only on this machine — to reach it from another, start it with KANDY_HOSTS=<this machine's name> kandy hub --bind 0.0.0.0, on a network you trust"
+    : named
+      ? null
+      : "other machines are refused until KANDY_HOSTS names this machine the way they reach it"
+  const lines: string[] = []
+  if (o.fresh) {
+    lines.push("", `  ${mint("New hub.")} ${faint("No Tailscale, so no people: whoever holds the token is you.")}`)
+    lines.push(`    ${bold("1")}  on this machine:     ${bold(here)}`)
+    lines.push(`    ${bold("2")}  on another machine:  ${bold(elsewhere)}`)
+    if (reach) lines.push(`       ${faint(reach)}`)
+  } else {
+    lines.push(`  ${faint("join")}   ${dim(here)}`)
+    lines.push(`  ${faint("  or")}   ${dim(elsewhere)}`)
+    if (reach) lines.push(`         ${faint(reach)}`)
+  }
+  return lines
+}
+
+/** Quoted for a POSIX shell, so a path with a space or a quote pastes as one word. */
+function shellQuote(s: string): string {
+  return /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`
 }
 
 // ── the runner ────────────────────────────────────────────────────────────
@@ -366,6 +419,7 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
     return accept ? workshop.request(boardId, noteId, agent as never) : ""
   }) as never
 
+  let lastSaid = ""
   link = new HubLink({
     hub,
     headers,
@@ -373,7 +427,18 @@ export async function runRunner(opts: { hub: string; token: string; slots: numbe
     handlers,
     log,
     onStatus: (s, why) => {
-      if (!opts.json) out(s === "online" ? `  ${mint("connected")} ${dim(hub)}` : `  ${lemon("offline")} ${dim(why ?? "")}`)
+      /*
+       * Always said, and said once per change. `kandy join` starts this with
+       * --json and its output going to runner.log, and a runner that was
+       * refused used to print nothing there — then retry forever. Repeating
+       * the same refusal every ten seconds would bury it instead.
+       */
+      const said = `${s}:${why ?? ""}`
+      if (said === lastSaid) return
+      lastSaid = said
+      saveRunnerStatus({ state: s, why: why ?? null, at: Date.now() })
+      if (opts.json) out(JSON.stringify({ status: s, ...(why ? { why } : {}), at: new Date().toISOString() }))
+      else out(s === "online" ? `  ${mint("connected")} ${dim(hub)}` : `  ${lemon("offline")} ${dim(why ?? "")}`)
     },
   })
   void link.start()

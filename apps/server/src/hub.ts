@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import {
   COMMAND_EVENT,
+  MACHINE_LOST,
   RUNNER_PROTOCOL,
   event,
   id,
@@ -43,11 +44,24 @@ type Pending = {
 /** Three missed check-ins (runners send one every 20s). */
 const STALE_MS = 60_000
 
+/**
+ * Long enough for a Wi-Fi blip or a hub restart to reconnect and carry on;
+ * short enough that a laptop shut for the night does not leave its notes
+ * reading "running" until morning.
+ */
+const LOST_GRACE_MS = 90_000
+
 export class Runners {
   private runners = new Map<RunnerId, Connected>()
   private pending = new Map<string, Pending>()
+  /** Runners that dropped, and when what they were running gives up on them. */
+  private lost = new Map<RunnerId, ReturnType<typeof setTimeout>>()
 
-  constructor(private readonly engine: Engine) {
+  constructor(
+    private readonly engine: Engine,
+    /** How long a machine may be gone before what it was running is called interrupted. */
+    private readonly graceMs = LOST_GRACE_MS,
+  ) {
     /*
      * A runner can vanish without its connection closing — a process killed
      * with its terminal, a laptop that slept — and a proxy in between (such
@@ -85,17 +99,22 @@ export class Runners {
     const known = this.runners.get(h.runnerId)
     if (known && known.owner !== owner) throw status(403, "that runner belongs to someone else")
 
-    this.runners.set(h.runnerId, {
-      runnerId: h.runnerId,
+    const said = {
       name: String(h.name ?? "").slice(0, 120) || h.runnerId,
       os: String(h.os ?? "").slice(0, 40),
-      owner,
       agents: Array.isArray(h.agents) ? h.agents : [],
-      boards: Array.isArray(h.boards) ? h.boards.filter((b) => typeof b === "string") : [],
-      online: known?.online ?? false,
+      boards: Array.isArray(h.boards) ? h.boards.filter((b): b is string => typeof b === "string") : [],
       lastSeen: Date.now(),
-      stream: known?.stream ?? null,
-    })
+    }
+    /*
+     * Updated in place, never replaced. A runner says hello again right after
+     * its stream opens and every minute after that, and the stream's close
+     * handler holds the entry it attached to: swap in a new object and that
+     * handler marks a discarded copy offline, leaving the machine "online"
+     * for good — work given to it, and runs on it, waiting on nobody.
+     */
+    if (known) Object.assign(known, said)
+    else this.runners.set(h.runnerId, { runnerId: h.runnerId, owner, online: false, stream: null, ...said })
     return { ok: true, protocol: RUNNER_PROTOCOL, owner }
   }
 
@@ -133,6 +152,9 @@ export class Runners {
     r.stream = res
     r.online = true
     r.lastSeen = Date.now()
+    // Back in time: whatever it was running may still be running.
+    clearTimeout(this.lost.get(runnerId))
+    this.lost.delete(runnerId)
 
     // Domain events only. Transcripts are for people, and a runner wrote them.
     const unsubscribe = this.engine.bus.subscribe((f) => {
@@ -143,10 +165,14 @@ export class Runners {
     req.on("close", () => {
       clearInterval(beat)
       unsubscribe()
-      if (r.stream !== res) return
-      r.stream = null
-      r.online = false
-      r.lastSeen = Date.now()
+      // By id, not the `r` captured above: that is the live entry only because
+      // hello() updates in place, and this is the line that must not quietly
+      // depend on it.
+      const now = this.runners.get(runnerId)
+      if (!now || now.stream !== res) return
+      now.stream = null
+      now.online = false
+      now.lastSeen = Date.now()
       // Anything this runner was asked and never answered will never be
       // answered by this connection. Failing it now beats a caller waiting
       // two minutes to learn the machine went to sleep.
@@ -154,8 +180,9 @@ export class Runners {
         if (p.runnerId !== runnerId) continue
         clearTimeout(p.timer)
         this.pending.delete(cid)
-        p.reject(status(503, `${r.name} went offline`))
+        p.reject(status(503, `${whose(now)} went offline`))
       }
+      this.lose(runnerId)
     })
   }
 
@@ -236,18 +263,50 @@ export class Runners {
     }
   }
 
+  /**
+   * A machine went away. If it comes back within the grace period nothing is
+   * said; if not, every run it held is finished as interrupted — which the
+   * board offers to resume, in the same checkout, once the machine is back.
+   */
+  private lose(runnerId: RunnerId): void {
+    clearTimeout(this.lost.get(runnerId))
+    const timer = setTimeout(() => {
+      this.lost.delete(runnerId)
+      if (!this.runners.get(runnerId)?.stream) this.interrupt(runnerId)
+    }, this.graceMs)
+    timer.unref?.()
+    this.lost.set(runnerId, timer)
+  }
+
+  /** Finish every live run on notes placed on this runner. Public for tests. */
+  interrupt(runnerId: RunnerId): void {
+    for (const b of this.engine.projections.boards()) {
+      const view = this.engine.view(b.id)
+      if (!view) continue
+      const here = new Set(view.notes.filter((n) => n.runner === runnerId).map((n) => n.id))
+      for (const run of view.runs) {
+        if (!here.has(run.noteId)) continue
+        if (run.status !== "starting" && run.status !== "running" && run.status !== "blocked") continue
+        this.engine.emit(
+          event("run.finished", { runId: run.id, noteId: run.noteId, status: "failed", exitCode: null, error: MACHINE_LOST }),
+          null,
+        )
+      }
+    }
+  }
+
   // ── what the hub asks ───────────────────────────────────────────────────
 
   /** Ask one runner to do one thing, and wait for its answer. */
   call<T = unknown>(runnerId: RunnerId, op: string, args: unknown[], timeoutMs = CALL_TIMEOUT_MS): Promise<T> {
     const r = this.runners.get(runnerId)
-    if (!r?.stream) return Promise.reject(status(503, `${r?.name ?? runnerId} is offline`))
+    if (!r?.stream) return Promise.reject(status(503, offline(r ?? null, runnerId)))
 
     const cid = id("cmd")
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(cid)
-        reject(status(504, `${r.name} did not answer ${op}`))
+        reject(status(504, `${whose(r)} did not answer in time (${op}) — it may be asleep or stuck; try again once it is back`))
       }, timeoutMs)
       this.pending.set(cid, { runnerId, resolve: resolve as (v: unknown) => void, reject, timer })
       r.stream!.write(`event: ${COMMAND_EVENT}\ndata: ${JSON.stringify({ id: cid, op, args })}\n\n`)
@@ -306,6 +365,16 @@ export class Runners {
     }
     return null
   }
+}
+
+/** "bob@example.com's machine", or the machine's own name on a hub with no people. */
+export function whose(r: { name: string; owner: ActorId | null }): string {
+  return r.owner ? `${r.owner}'s machine` : r.name
+}
+
+/** Why a runner cannot be asked anything right now. */
+export function offline(r: { name: string; owner: ActorId | null } | null, runnerId: string): string {
+  return r ? `${whose(r)} is offline — try again once it reconnects` : `machine ${runnerId} is not connected`
 }
 
 function write(res: ServerResponse, f: StreamFrame) {
