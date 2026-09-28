@@ -1,8 +1,8 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { notesIn, reduce, reduceAll } from "../dist/reduce.js"
-import type { BoardView } from "../dist/domain.js"
+import { cannotDecide, notesIn, reduce, reduceAll } from "../dist/reduce.js"
+import type { BoardView, Note } from "../dist/domain.js"
 import type { KandyEvent, PendingEvent } from "../dist/events.js"
 
 const BOARD = "board_1"
@@ -237,4 +237,46 @@ test("a quiet run is marked, cleared when it speaks, and cleared when it ends", 
   assert.equal(spoke.runs[0]!.quietSince, null)
   const ended = reduce(quiet, ev({ type: "run.finished", data: { runId, noteId, status: "failed", exitCode: null, error: "x" } }))
   assert.equal(ended.runs[0]!.quietSince, null)
+})
+
+test("sending a note back leaves it running, not a draft beside its own run", () => {
+  // The route asks for the run first and records the decision after it, so
+  // the decision lands on a note that is already queued or running. It used
+  // to set `draft` on top, and `r run` then started a second agent in the
+  // same checkout.
+  const { v, noteId } = withNote()
+  const reviewed = reduceAll(v, [
+    ev({ type: "run.requested", data: { runId: "run_1", noteId, agent: "claude" } }),
+    ev({ type: "run.started", data: { runId: "run_1", noteId, worktree: "/wt", branch: "b", baseRef: "abc", pid: 1 } }),
+    ev({ type: "run.finished", data: { runId: "run_1", noteId, status: "succeeded", exitCode: 0, error: null } }),
+  ])
+  const sent = reduceAll(reviewed, [
+    ev({ type: "run.requested", data: { runId: "run_2", noteId, agent: "claude" } }),
+    ev({ type: "run.started", data: { runId: "run_2", noteId, worktree: "/wt", branch: "b", baseRef: "abc", pid: 2 } }),
+    ev({ type: "review.decided", data: { noteId, decision: "revise", comment: "smaller" } }),
+  ])
+  assert.equal(sent.notes[0]!.status, "running")
+  assert.equal(sent.notes[0]!.outcome, null)
+})
+
+test("a verdict is only for stopped work with a branch, and only once", () => {
+  const { v, noteId } = withNote()
+  const note = v.notes.find((n) => n.id === noteId)!
+  const as = (patch: Partial<Note>): Note => ({ ...note, ...patch })
+
+  // Never run: nothing to land, and a "merge" would count as landed work.
+  assert.match(cannotDecide(note, "merge") ?? "", /not run yet/)
+  // Still running: merging now lands half of it.
+  for (const status of ["queued", "running", "blocked"] as const) {
+    assert.match(cannotDecide(as({ status, branch: "b" }), "merge") ?? "", /still running/)
+    assert.match(cannotDecide(as({ status, branch: "b" }), "revise") ?? "", /message/)
+  }
+  // Decided already.
+  assert.match(cannotDecide(as({ status: "done", outcome: "merged", branch: "b" }), "discard") ?? "", /already been merged/)
+  // A run that failed before it made a checkout has nothing to act on…
+  assert.match(cannotDecide(as({ status: "failed", branch: null }), "merge") ?? "", /no branch/)
+  // …but can still be sent back, which only starts another run.
+  assert.equal(cannotDecide(as({ status: "failed", branch: null }), "revise"), null)
+  assert.equal(cannotDecide(as({ status: "review", branch: "b" }), "merge"), null)
+  assert.equal(cannotDecide(as({ status: "failed", branch: "b" }), "discard"), null)
 })

@@ -311,11 +311,18 @@ function apply(view: BoardView, e: KandyEvent): BoardView {
     }
 
     case "review.decided": {
-      const revise = e.data.decision === "revise"
+      // Sending it back is not a status of its own: it is a run, and that
+      // run's own events say where the note is — queued, then running. This
+      // used to set `draft`, which, landing after the run had started,
+      // showed a working note as one nobody had run, with `r run` offered
+      // beside it to start a second agent in the same checkout.
+      if (e.data.decision === "revise") {
+        return patchNote(view, e.data.noteId, e.ts, (n) => ({ ...n, outcome: null }))
+      }
       return patchNote(view, e.data.noteId, e.ts, (n) => ({
         ...n,
-        status: revise ? "draft" : "done",
-        outcome: revise ? null : e.data.decision === "merge" ? "merged" : "discarded",
+        status: "done",
+        outcome: e.data.decision === "merge" ? "merged" : "discarded",
       }))
     }
 
@@ -353,6 +360,41 @@ function same(a: PermissionRule, b: PermissionRule): boolean {
  */
 export function promptsFor(view: BoardView, noteId: string): PermissionPrompt[] {
   return view.prompts.filter((p) => p.noteId === noteId)
+}
+
+/**
+ * Why a review decision cannot be made on this note now, or null when it can.
+ *
+ * One rule for the server, which refuses, and for every client, which should
+ * not offer what will be refused. A decision is for work that has stopped and
+ * is waiting on a person: `review`, or `failed` — a failed run can still have
+ * left something worth landing, or worth throwing away. Merge and discard
+ * also need a branch, since that is what they act on; sending back does not,
+ * because it only starts another run.
+ *
+ * Deciding twice was the bug this closes: a draft "merged" into done and was
+ * counted as landed work, and a running note could be merged while its agent
+ * kept writing.
+ */
+export function cannotDecide(note: Note, decision: "merge" | "discard" | "revise"): string | null {
+  switch (note.status) {
+    case "queued":
+    case "running":
+    case "blocked":
+      return decision === "revise"
+        ? "it is still running — send it a message instead"
+        : "it is still running — wait for it to finish, or cancel it"
+    case "draft":
+      return "it has not run yet, so there is nothing to review"
+    case "done":
+      return note.outcome ? `it has already been ${note.outcome}` : "it is already done"
+    case "review":
+    case "failed":
+      if (decision !== "revise" && !note.branch) {
+        return "its run made no branch, so there is nothing to merge or discard — run it again, or delete it"
+      }
+      return null
+  }
 }
 
 function asDiffStat(v: unknown): DiffStat | null {
