@@ -25,6 +25,7 @@ import {
   cmdList,
   cmdNew,
   cmdOpen,
+  cmdRun,
   adoptHere,
   boardHere,
   cmdSkillInstall,
@@ -32,7 +33,8 @@ import {
   cmdStatus,
 } from "./cli/commands.js"
 import { cmdLog } from "./cli/log.js"
-import { client, DEFAULT_PORT, ensureUp, hubFor } from "./cli/daemon.js"
+import { client, DEFAULT_PORT, ensureUp, hubFor, startWith } from "./cli/daemon.js"
+import { badValue, extraWords, isFlag, unknownAgent, unknownCommand } from "./cli/argv.js"
 
 const DEFAULT_SLOTS = 4
 
@@ -263,9 +265,6 @@ async function main(): Promise<void> {
   const dash = all.indexOf("--")
   const argv = dash === -1 ? all : all.slice(0, dash)
   const tail = dash === -1 ? [] : all.slice(dash + 1)
-  const port = intFlag(argv, "--port", DEFAULT_PORT)
-  const agent = strFlag(argv, "--agent") as AgentId | undefined
-  const noRun = argv.includes("--no-run")
   const VALUED = ["--port", "--slots", "--agent", "--skill", "--url", "--header", "--env", "--hub", "--token", "--https-port", "--repo", "--bind", "--role"]
   const BARE = ["--no-run", "--all", "-a", "--verbose", "-v", "--dry-run", "--force", "--json", "--tailscale", "--first-run", "--check"]
 
@@ -284,13 +283,15 @@ async function main(): Promise<void> {
     process.stdout.write(kandyVersion() + "\n")
     return
   }
-  const unknown = argv.find((a) => a.startsWith("-") && !KNOWN.includes(a))
+  // A quoted sentence that happens to start with a dash — `kandy "-x flag
+  // crashes"` — is a note, not a flag: flags have no spaces in them.
+  const unknown = argv.find((a) => isFlag(a) && !KNOWN.includes(a))
   if (unknown) {
     const guess = KNOWN.find((k) => k.replace(/^-+/, "") === unknown.replace(/^-+/, ""))
     process.stderr.write(
       berry(`  unknown flag ${unknown}`) + (guess ? dim(`  did you mean ${guess}?`) : "") + "\n",
     )
-    process.stderr.write(dim("  kandy -h for help\n"))
+    process.stderr.write(dim(guess ? "  kandy -h for help\n" : `  a note that starts with a dash? put -- before it: kandy -- "${unknown} …"\n`))
     process.exit(1)
   }
 
@@ -300,6 +301,35 @@ async function main(): Promise<void> {
   // `kandy -h`, and `kandy <command> -h` for that command's page.
   if (argv.includes("--help") || argv.includes("-h") || argv.includes("-help")) {
     process.exit(first && hasCommandHelp(first) ? printCommand(first) : await printHelp())
+  }
+
+  const refuse = (error: string, hint?: string): never => {
+    process.stderr.write(berry(`  ${error}`) + "\n" + (hint ? dim(`  ${hint}`) + "\n" : ""))
+    process.exit(1)
+  }
+
+  const bad = badValue(argv, VALUED)
+  if (bad) refuse(bad)
+  const port = intFlag(argv, "--port", DEFAULT_PORT)
+  const noRun = argv.includes("--no-run")
+  const agent = strFlag(argv, "--agent") as AgentId | undefined
+  if (agent) {
+    const { ADAPTERS } = await import("./agents/index.js")
+    const wrong = unknownAgent(agent, Object.keys(ADAPTERS))
+    if (wrong) refuse(wrong)
+  }
+  // Every command that may have to start the daemon starts it with these.
+  if (argv.includes("--slots") && first !== "serve" && first !== "runner") {
+    startWith({ slots: intFlag(argv, "--slots", DEFAULT_SLOTS) })
+  }
+
+  // Words after `--` are the note's, whatever they look like.
+  if (first === undefined && tail.length > 0) {
+    process.exit(await cmdNew(tail, { port, agent, run: !noRun }))
+  }
+  if (first) {
+    const extra = extraWords(first, [...rest.slice(1), ...tail])
+    if (extra) refuse(extra)
   }
 
   switch (first) {
@@ -371,14 +401,17 @@ async function main(): Promise<void> {
       })
     }
     case "new":
-      process.exit(await cmdNew(rest.slice(1), { port, agent, run: false }))
+      process.exit(await cmdNew([...rest.slice(1), ...tail], { port, agent, run: false }))
+      break
+    case "run":
+      process.exit(await cmdRun([...rest.slice(1), ...tail], { port, agent }))
       break
     case "ls":
     case "list":
       process.exit(await cmdList({ port, all: argv.includes("--all") || argv.includes("-a") }))
       break
     case "status":
-      process.exit(await cmdStatus({ port }))
+      process.exit(await cmdStatus({ port, json: argv.includes("--json") }))
       break
     case "stats":
       process.exit(await cmdStats({ port, json: argv.includes("--json") }))
@@ -444,8 +477,13 @@ async function main(): Promise<void> {
       break
     default: {
       // Anything else is the shorthand: `kandy "do the thing"` writes a note
-      // here and runs it. This is the path that should feel like nothing.
-      process.exit(await cmdNew(rest, { port, agent, run: !noRun }))
+      // here and runs it. This is the path that should feel like nothing —
+      // except for a single word, which is far more often a command misspelt
+      // than a task, and a misspelt command must not start a paid agent.
+      // After `--` it is the note's, as asked.
+      const unknownWord = tail.length === 0 ? unknownCommand(rest) : null
+      if (unknownWord) refuse(unknownWord.error, unknownWord.hint)
+      process.exit(await cmdNew([...rest, ...tail], { port, agent, run: !noRun }))
     }
   }
 }

@@ -15,7 +15,7 @@ export const INSTALL: Record<string, string> = {
 }
 
 export const SIGN_IN: Record<string, string> = {
-  claude: "claude, then /login",
+  claude: "claude (then /login)",
   codex: "codex login",
   cursor: "cursor-agent login",
   opencode: "opencode auth login",

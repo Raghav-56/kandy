@@ -6,12 +6,17 @@ import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { splitPrompt, type AgentId, type Board, type BoardView, type Note } from "@kandy/core"
 import { banner, berry, bold, dim, faint, heat, lemon, mint, sparkline, statusTag } from "./banner.js"
-import { client, DEFAULT_PORT, ensureUp, hubFor } from "./daemon.js"
+import { client, ensureUp, hubFor } from "./daemon.js"
 import type { Reclaimable } from "../gc.js"
 import { findReclaimable, findStrippable, strip, heldBack, humanBytes, reclaim } from "../gc.js"
 import { originOf } from "../worktree.js"
 import { STATE_DIR } from "../paths.js"
 import { preferredPolicy } from "./setup.js"
+import { failureOf } from "../tui/board.js"
+import { notInstalled, SIGN_IN } from "../agents/hints.js"
+
+/** "1 file", "2 files". */
+export const plural = (n: number, one: string, many = one + "s") => `${n} ${n === 1 ? one : many}`
 
 const exec = promisify(execFile)
 const out = (s = "") => process.stdout.write(s + "\n")
@@ -66,6 +71,14 @@ export async function cmdNew(
     out(berry("  say what you want done:") + dim(' kandy new "fix the login flash"'))
     return 1
   }
+  // Before anything is made: a note for an agent that cannot run here would
+  // be announced as running and then fail.
+  if (opts.agent && !(await agentCanRun(opts.agent, opts.run))) return 1
+  // A worktree branches from a commit, and there isn't one yet.
+  if (opts.run && (await noCommits())) {
+    out(berry("  this repo has no commits yet") + dim(" — make a first commit, then run it again"))
+    return 1
+  }
   if (!(await ensureUp(opts.port))) return fail()
 
   const here = (await boardHere(opts.port)) ?? (await adoptHere(opts.port))
@@ -92,7 +105,8 @@ export async function cmdNew(
    */
   const agent = opts.agent ?? (opts.run ? await defaultAgent(api, here.view) : undefined)
   if (opts.run && !agent) {
-    out(lemon("  no agent is signed in here") + dim(" — sign in to one (claude · codex login · cursor-agent login), then: kandy ls"))
+    out(lemon("  no agent is signed in here") + dim(" — saved as a draft"))
+    out(dim("  sign in to one (claude · codex login · cursor-agent login), then: ") + "kandy run")
   }
   if (agent) await api.assignNote(noteId, agent)
   if (opts.run && agent) await api.runNote(noteId, agent)
@@ -105,10 +119,92 @@ export async function cmdNew(
   return 0
 }
 
+/**
+ * `kandy run [words]` — run a note that is waiting here.
+ *
+ * With no words, the newest draft; with words, the one note whose id starts
+ * with them or whose title contains them. It is where "no agent is signed in,
+ * saved as a draft" leads: without it the only way on from a draft was the
+ * board.
+ */
+export async function cmdRun(args: string[], opts: { port: number; agent: AgentId | undefined }): Promise<number> {
+  if (opts.agent && !(await agentCanRun(opts.agent, true))) return 1
+  if (!(await ensureUp(opts.port))) return fail()
+  const here = await boardHere(opts.port)
+  if (!here) {
+    out(dim("  no board for this repo yet — ") + `kandy "…"` + dim(" writes a note and runs it"))
+    return 1
+  }
+
+  const pick = pickNote(here.view.notes, args.join(" "))
+  if (pick.kind === "none") {
+    out(dim(pick.query ? `  no note here matches "${pick.query}"` : "  no drafts here to run — ") + (pick.query ? "" : `kandy "…"`))
+    return 1
+  }
+  if (pick.kind === "many") {
+    out(lemon(`  ${pick.notes.length} notes match`) + dim(" — say which, by more of its title or its id:"))
+    for (const n of pick.notes.slice(0, 8)) out(`    ${faint(n.id.slice(0, 12))}  ${n.title}`)
+    return 1
+  }
+  const note = pick.note
+  if (note.status === "running" || note.status === "queued" || note.status === "blocked") {
+    out(dim(`  already running — ${note.title}`))
+    return 0
+  }
+  if (note.status === "review" || note.status === "done") {
+    out(dim(`  ${note.status === "review" ? "waiting for review" : "already done"} — ${note.title}`))
+    return 1
+  }
+
+  const api = client(opts.port)
+  const ready = await readyAgents()
+  const agent =
+    opts.agent ?? (note.agent && ready.includes(note.agent) ? note.agent : await defaultAgent(api, here.view))
+  if (!agent) {
+    out(lemon("  no agent is signed in here") + dim(" — sign in to one (claude · codex login · cursor-agent login), then run this again"))
+    return 1
+  }
+  if (await noCommits()) {
+    out(berry("  this repo has no commits yet") + dim(" — make a first commit, then run it again"))
+    return 1
+  }
+  if (note.agent !== agent) await api.assignNote(note.id, agent)
+  await api.runNote(note.id, agent)
+  out(`  ${mint("✓")} ${bold(note.title)}${dim(`  running with ${agent}`)}`)
+  out(dim(`    ${boardUrl(opts.port)}`))
+  return 0
+}
+
+/** Which note `kandy run` means: the newest draft, or the one that matches. */
+export function pickNote(
+  notes: readonly Note[],
+  query: string,
+): { kind: "one"; note: Note } | { kind: "many"; notes: Note[] } | { kind: "none"; query: string } {
+  const q = query.trim()
+  if (!q) {
+    const draft = notes.filter((n) => n.status === "draft").sort((a, b) => b.createdAt - a.createdAt)[0]
+    return draft ? { kind: "one", note: draft } : { kind: "none", query: "" }
+  }
+  const byId = notes.filter((n) => n.id.startsWith(q))
+  if (byId.length === 1) return { kind: "one", note: byId[0]! }
+  const lower = q.toLowerCase()
+  const exact = notes.filter((n) => n.title.toLowerCase() === lower)
+  if (exact.length === 1) return { kind: "one", note: exact[0]! }
+  // Finished work is not what anyone means by "run".
+  const byTitle = notes.filter((n) => n.status !== "done" && n.title.toLowerCase().includes(lower))
+  if (byTitle.length === 1) return { kind: "one", note: byTitle[0]! }
+  if (byTitle.length > 1) return { kind: "many", notes: byTitle }
+  return { kind: "none", query: q }
+}
+
 export async function cmdList(opts: { port: number; all: boolean }): Promise<number> {
   if (!(await ensureUp(opts.port))) return fail()
   const here = await boardHere(opts.port)
   if (!here) {
+    if (!(await insideRepo())) {
+      out(dim("  not a git repository — ") + "git init" + dim(" here, or cd into a repo"))
+      return 0
+    }
     out(dim("  no board for this repo yet — ") + `kandy new "…"` + dim(" will make one"))
     return 0
   }
@@ -137,16 +233,23 @@ export async function cmdList(opts: { port: number; all: boolean }): Promise<num
       run?.tokens ? faint(`${Math.round(run.tokens / 1000)}k tok`) : "",
       n.pr ? mint(`#${n.pr.number}`) : "",
     ].filter(Boolean)
-    out(`  ${statusTag(n.status).padEnd(22)} ${n.title}`)
+    const why = n.status === "failed" ? failureOf(run) : null
+    out(`  ${statusTag(n.status, why?.kind).padEnd(22)} ${n.title}`)
     if (bits.length) out(`  ${" ".repeat(13)} ${bits.join(dim(" · "))}`)
+    if (why?.kind === "interrupted") {
+      out(`  ${" ".repeat(13)} ${dim("kandy stopped while this ran — ")}kandy run ${n.id}${dim(" resumes it")}`)
+    } else if (why?.reason) {
+      out(`  ${" ".repeat(13)} ${dim(why.reason.length > 100 ? why.reason.slice(0, 99) + "…" : why.reason)}`)
+    }
   }
   out()
   return 0
 }
 
-export async function cmdStatus(opts: { port: number }): Promise<number> {
+export async function cmdStatus(opts: { port: number; json?: boolean }): Promise<number> {
   const hub = hubFor(opts.port)
   const up = await ensureUp(opts.port)
+  if (opts.json) return statusJson(opts.port, up)
   out(banner(hub ? (up ? hub.url : "hub unreachable") : up ? `running on :${opts.port}` : "not running"))
   if (!up) return 1
 
@@ -184,11 +287,81 @@ export async function cmdStatus(opts: { port: number }): Promise<number> {
   out(`  ${dim("agents")}`)
   for (const a of agents) {
     const state = !a.installed ? faint("not installed") : a.authed ? mint("ready") : lemon("signed out")
-    out(`    ${a.id.padEnd(10)} ${state} ${dim(a.version ?? "")}`)
+    // Signed out is one command from ready; say which.
+    const next = a.installed && !a.authed && SIGN_IN[a.id] ? dim(`— ${SIGN_IN[a.id]}`) : dim(a.version ?? "")
+    out(`    ${a.id.padEnd(10)} ${state} ${next}`)
   }
   out()
   out(`  ${dim("board")}  ${boardUrl(opts.port)}`)
   out()
+  return 0
+}
+
+/**
+ * `kandy status --json`: the same facts, in a shape a script can hold on to.
+ *
+ * Keys are only ever added. `daemon.up` false is still a document rather than
+ * prose on stderr, because a script's first question is usually that one.
+ */
+async function statusJson(port: number, up: boolean): Promise<number> {
+  const hub = hubFor(port)
+  const url = boardUrl(port)
+  if (!up) {
+    out(JSON.stringify({ daemon: { up: false, url, port }, hub: hub ? { url: hub.url } : null }, null, 2))
+    return 1
+  }
+  const api = client(port)
+  const [health, { boards }, { agents }] = await Promise.all([api.health(), api.boards(), api.agents()])
+  let running = 0
+  let queued = 0
+  const repos = []
+  for (const b of boards) {
+    const view = await api.view(b.id).catch(() => null)
+    const notes = view?.notes ?? []
+    running += notes.filter((n) => n.status === "running" || n.status === "blocked").length
+    queued += notes.filter((n) => n.status === "queued").length
+    repos.push({
+      id: b.id,
+      name: b.name,
+      path: b.repoPath,
+      notes: {
+        open: notes.filter((n) => n.status !== "done").length,
+        running: notes.filter((n) => n.status === "running" || n.status === "blocked").length,
+        review: notes.filter((n) => n.status === "review").length,
+      },
+    })
+  }
+  let team = null
+  if (hub) {
+    const [me, { runners }] = await Promise.all([api.me(), api.runners()])
+    team = {
+      url: hub.url,
+      email: me.email ?? null,
+      role: me.role ?? null,
+      admitted: me.admitted,
+      machinesOnline: runners.filter((r) => r.online).length,
+    }
+  }
+  out(
+    JSON.stringify(
+      {
+        daemon: { up: true, url, port, pid: health.pid, version: health.version, uptimeMs: health.uptime },
+        hub: team,
+        repos,
+        agents: agents.map((a) => ({
+          id: a.id,
+          state: !a.installed ? "not installed" : a.authed ? "ready" : "signed out",
+          installed: a.installed,
+          authed: a.authed,
+          version: a.version,
+          signIn: a.installed && !a.authed ? (SIGN_IN[a.id] ?? null) : null,
+        })),
+        runs: { running, queued },
+      },
+      null,
+      2,
+    ),
+  )
   return 0
 }
 
@@ -231,7 +404,7 @@ export async function cmdStats(opts: { port: number; json?: boolean }): Promise<
   out(`  ${bold(s.board.name)}`)
   out()
   out(
-    `  ${bold(String(s.notes.total))} notes` +
+    `  ${bold(String(s.notes.total))} ${s.notes.total === 1 ? "note" : "notes"}` +
       dim(" · ") +
       mint(`${s.notes.landed} landed`) +
       dim(" · ") +
@@ -240,7 +413,7 @@ export async function cmdStats(opts: { port: number; json?: boolean }): Promise<
   )
   out(
     `  ${bold(usd(s.spend.usd, s.spend.estimated))}` +
-      dim(` across ${s.runs.total} runs · ${s.spend.tokens.toLocaleString()} tokens`) +
+      dim(` across ${plural(s.runs.total, "run")} · ${s.spend.tokens.toLocaleString()} ${s.spend.tokens === 1 ? "token" : "tokens"}`) +
       (s.spend.unpricedRuns ? dim(` · ${s.spend.unpricedRuns} unpriced`) : ""),
   )
   out()
@@ -251,7 +424,7 @@ export async function cmdStats(opts: { port: number; json?: boolean }): Promise<
   }
   if (s.code.insertions + s.code.deletions > 0) {
     row("code written", `${mint("+" + s.code.insertions)} ${berry("-" + s.code.deletions)}`,
-      `${s.code.files} files`)
+      plural(s.code.files, "file"))
   }
   if (s.linesPerDollar) row("lines per dollar", s.linesPerDollar.toLocaleString())
   if (s.tokensPerLine) row("tokens per line", s.tokensPerLine.toLocaleString())
@@ -263,9 +436,9 @@ export async function cmdStats(opts: { port: number; json?: boolean }): Promise<
     row(
       "busiest hour",
       `${String(s.busiestHour.hour).padStart(2, "0")}:00`,
-      `${s.busiestHour.runs} runs`,
+      plural(s.busiestHour.runs, "run"),
     )
-  if (s.tools[0]) row("most used tool", s.tools[0].tool, `${s.tools[0].calls} calls`)
+  if (s.tools[0]) row("most used tool", s.tools[0].tool, plural(s.tools[0].calls, "call"))
 
   // The activity map: twelve weeks, a column per week, a row per weekday.
   if (s.daily.some((d) => d.runs > 0)) {
@@ -286,7 +459,7 @@ export async function cmdStats(opts: { port: number; json?: boolean }): Promise<
       const label = row === 1 ? "mon" : row === 3 ? "wed" : row === 5 ? "fri" : "   "
       out(`  ${faint(label)} ${line.join(" ")}`)
     }
-    out(`  ${faint("      12 weeks")}${dim(" · ")}${faint(`busiest day ${max} runs`)}`)
+    out(`  ${faint("      12 weeks")}${dim(" · ")}${faint(`busiest day ${plural(max, "run")}`)}`)
   }
 
   if (s.hours.some((h) => h > 0)) {
@@ -319,7 +492,7 @@ export async function cmdStats(opts: { port: number; json?: boolean }): Promise<
       out(
         `  ${bold(a.agent.padEnd(9))}` +
           `${a.landed} landed` +
-          dim(` · ${a.discarded} discarded · ${a.runs} runs · `) +
+          dim(` · ${a.discarded} discarded · ${plural(a.runs, "run")} · `) +
           usd(a.usd, a.estimated) +
           (a.medianMs !== null ? dim(` · median ${dur(a.medianMs)}`) : ""),
       )
@@ -528,8 +701,15 @@ export async function cmdOpen(opts: { port: number }): Promise<number> {
   if (!(await ensureUp(opts.port))) return fail()
   const url = boardUrl(opts.port)
   out(dim("  opening ") + url)
-  const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open"
-  await exec(cmd, [url]).catch(() => out(dim(`  open ${url}`)))
+  // `start` is built into cmd.exe rather than a program, so it is asked of
+  // cmd; its first quoted argument is a window title, hence the empty one.
+  const [cmd, args] =
+    process.platform === "darwin"
+      ? ["open", [url]]
+      : process.platform === "win32"
+        ? ["cmd", ["/c", "start", "", url]]
+        : ["xdg-open", [url]]
+  await exec(cmd, args, { windowsHide: true }).catch(() => out(dim(`  open ${url}`)))
   return 0
 }
 
@@ -541,11 +721,8 @@ function byUrgency(notes: Note[]): Note[] {
 }
 
 function fail(): number {
-  // On a team the hub was the target, and ensureUp has already said why it
-  // can't be reached; "start the daemon" would be the wrong advice.
-  if (hubFor()) return 1
-  out(berry("  could not reach the kandy daemon"))
-  out(dim(`  try: kandy serve --port ${DEFAULT_PORT}`))
+  // ensureUp has already said why: on a team, that the hub can't be reached;
+  // here, what the daemon said as it failed to start, and where its log is.
   return 1
 }
 
@@ -562,10 +739,55 @@ function boardUrl(port: number): string {
  * not have heard from this machine's runner yet.
  */
 async function defaultAgent(_api: ReturnType<typeof client>, view: BoardView): Promise<AgentId | undefined> {
-  const { detectAll } = await import("../agents/index.js")
-  const ready = (await detectAll()).filter((a) => a.installed && a.authed).map((a) => a.id)
+  const ready = await readyAgents()
   const last = [...view.runs].sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))[0]?.agent
   if (last && ready.includes(last)) return last
   const order: AgentId[] = ["claude", "codex", "cursor", "opencode", "aider"]
   return order.find((a) => ready.includes(a)) ?? ready[0]
+}
+
+/** The agents installed and signed in on this machine. */
+async function readyAgents(): Promise<AgentId[]> {
+  const { detectAll } = await import("../agents/index.js")
+  return (await detectAll()).filter((a) => a.installed && a.authed).map((a) => a.id)
+}
+
+/**
+ * Whether an agent named with --agent can run on this machine, said if not.
+ *
+ * A note that is only being written may name an agent that isn't here yet —
+ * that is a warning. One that is about to run cannot: it would be announced
+ * as running and fail a moment later.
+ */
+async function agentCanRun(agent: AgentId, run: boolean): Promise<boolean> {
+  const { adapter, detect } = await import("../agents/index.js")
+  const a = adapter(agent)
+  if (!a) return false
+  const info = await detect(a)
+  const problem = !info.installed
+    ? notInstalled(agent)
+    : !info.authed
+      ? `${agent} is signed out on this machine — sign in with ${SIGN_IN[agent] ?? `${agent}'s own login`}`
+      : null
+  if (!problem) return true
+  out((run ? berry : lemon)(`  ${problem}`) + (run ? dim(", then run it again") : ""))
+  return !run
+}
+
+/** Whether the current directory is inside a git repository. */
+async function insideRepo(): Promise<boolean> {
+  return exec("git", ["rev-parse", "--is-inside-work-tree"])
+    .then((r) => r.stdout.trim() === "true")
+    .catch(() => false)
+}
+
+/**
+ * A repository with no commit yet. A note's worktree branches from HEAD, and
+ * there is no HEAD — the run failed on a raw git error after being announced.
+ */
+async function noCommits(): Promise<boolean> {
+  if (!(await insideRepo())) return false
+  return exec("git", ["rev-parse", "--verify", "--quiet", "HEAD"])
+    .then(() => false)
+    .catch(() => true)
 }

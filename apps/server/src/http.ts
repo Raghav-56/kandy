@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import {
+  AGENTS,
   between,
   checkMcpServers,
   event,
@@ -924,6 +925,9 @@ async function noteAction(
     case "assign": {
       const b = await json<{ agent: AgentId }>(req)
       if (!b?.agent) return fail(res, 400, "bad_request", "agent required")
+      // A note assigned to a name no adapter answers to fails only when it runs.
+      if (!(AGENTS as readonly string[]).includes(b.agent))
+        return fail(res, 400, "bad_request", `no agent called "${b.agent}" — one of ${AGENTS.join(", ")}`)
       const e = emit(deps, event("note.assigned", { noteId, agent: b.agent }))
       return send(res, 200, { ok: true, seq: e.seq })
     }
@@ -1030,6 +1034,8 @@ async function noteAction(
       const b = await json<{ agent?: AgentId }>(req)
       const agent = b?.agent ?? note.agent
       if (!agent) return fail(res, 400, "bad_request", "note has no agent assigned")
+      if (!(AGENTS as readonly string[]).includes(agent))
+        return fail(res, 400, "bad_request", `no agent called "${agent}" — one of ${AGENTS.join(", ")}`)
       if (note.status === "running" || note.status === "queued" || note.status === "blocked")
         return fail(res, 409, "invalid_transition", `note is already ${note.status}`)
 

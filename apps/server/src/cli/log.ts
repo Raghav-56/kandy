@@ -1,7 +1,7 @@
 import type { ActivityFrame, KandyEvent, TranscriptFrame } from "@kandy/core"
 import { berry, bold, dim, faint, lemon, mint, sky } from "./banner.js"
 import { boardHere } from "./commands.js"
-import { client, DEFAULT_PORT, ensureUp, hubFor } from "./daemon.js"
+import { client, ensureUp } from "./daemon.js"
 
 const out = (s = "") => process.stdout.write(s + "\n")
 
@@ -35,8 +35,11 @@ function paint(type: string, label: string): string {
 }
 
 /** The part of an event that isn't its name: what actually changed. */
-function detailOf(e: KandyEvent): string {
+function detailOf(e: KandyEvent, columns: ReadonlyMap<string, string> = new Map()): string {
   switch (e.type) {
+    case "note.moved":
+      // Where to, by name: a column id says nothing to a person.
+      return columns.get(e.data.columnId) ?? ""
     case "board.created":
       return `${e.data.name} · ${e.data.repoPath}`
     case "column.created":
@@ -79,7 +82,7 @@ function detailOf(e: KandyEvent): string {
         .join(" · ")
     case "review.opened": {
       const s = e.data.stat
-      return `+${s.insertions} -${s.deletions} · ${s.files} files`
+      return `+${s.insertions} -${s.deletions} · ${s.files} ${s.files === 1 ? "file" : "files"}`
     }
     case "review.decided":
       return e.data.decision
@@ -96,12 +99,8 @@ function detailOf(e: KandyEvent): string {
  * first screen on history nobody asked for.
  */
 export async function cmdLog(opts: { port: number; verbose: boolean }): Promise<number> {
-  if (!(await ensureUp(opts.port))) {
-    if (hubFor(opts.port)) return 1
-    out(berry("  could not reach the kandy daemon"))
-    out(dim(`  try: kandy serve --port ${DEFAULT_PORT}`))
-    return 1
-  }
+  // ensureUp says why when it can't.
+  if (!(await ensureUp(opts.port))) return 1
 
   const api = client(opts.port)
   const here = await boardHere(opts.port)
@@ -116,6 +115,8 @@ export async function cmdLog(opts: { port: number; verbose: boolean }): Promise<
   // itself, so a note created while we watch is named on its very first line.
   const titles = new Map<string, string>()
   for (const n of view.notes) titles.set(n.id, n.title)
+  const columns = new Map<string, string>()
+  for (const c of view.columns) columns.set(c.id, c.name)
   const noteOfRun = new Map<string, string>()
   for (const r of view.runs) noteOfRun.set(r.id, r.noteId)
 
@@ -187,7 +188,8 @@ export async function cmdLog(opts: { port: number; verbose: boolean }): Promise<
       return
     }
 
-    line(e.ts, e.type, nameOf(noteId), detailOf(e))
+    if (e.type === "column.created") columns.set(e.data.columnId, e.data.name)
+    line(e.ts, e.type, nameOf(noteId), detailOf(e, columns))
 
     // Keep the deletion legible, then forget the note.
     if (e.type === "note.deleted") titles.delete(e.data.noteId)

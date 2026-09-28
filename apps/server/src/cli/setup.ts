@@ -71,6 +71,22 @@ export function setupMode(): Mode | null {
  * (joined a team, explained a hub) and should end there.
  */
 export async function runSetup(opts: { board?: boolean } = {}): Promise<boolean> {
+  /*
+   * Nobody to ask. The lists below would be printed with no one to answer
+   * them and the defaults taken silently — then the board opened into a pipe.
+   * Say what was chosen instead, and end there.
+   */
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    if (existsSync(FILE)) {
+      out(`  ${dim("no terminal to ask in — setup left as it was;")} ${bold("kandy setup")} ${dim("in a terminal to change it")}`)
+    } else {
+      remember("solo", "full")
+      out(
+        `  ${dim("no terminal to ask in — used the defaults: solo, full access;")} ${bold("kandy setup")} ${dim("in a terminal to change them")}`,
+      )
+    }
+    return false
+  }
   process.stdout.write(banner())
   out(`  ${bold("Welcome.")} ${faint("Each note is one job: an agent does it in its own git worktree,")}`)
   out(`  ${faint("and it comes back as a diff you review and merge.")}`)
