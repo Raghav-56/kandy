@@ -118,11 +118,14 @@ export async function cmdMcp(
       const refs = JSON.stringify(server).match(/\$\{[A-Za-z_][A-Za-z0-9_]*\}/g) ?? []
       if (refs.length) {
         out(dim(`  ${[...new Set(refs)].join(", ")} will be read on each machine that runs it, never stored`))
-      } else if (opts.headers.some((h) => /authorization|token|key/i.test(h))) {
-        // A literal secret on a board is a secret in the log, and in every
-        // teammate's copy of it once there is a hub. Said, not refused: it is
-        // their board.
-        out(lemon("  that looks like a literal secret — write it as ${NAME} so it stays on your machine"))
+      }
+      // A literal secret on a board is a secret in the log, and in every
+      // teammate's copy of it once there is a hub. Said, not refused: it is
+      // their board. Each value on its own — one ${NAME} doesn't vouch for a
+      // pasted token beside it.
+      const literal = literalSecrets(opts.url ? opts.headers : [], opts.url ? [] : opts.env)
+      if (literal.length) {
+        out(lemon(`  ${literal.join(", ")} looks like a literal secret — write it as \${NAME} so it stays on your machine`))
       }
       return 0
     }
@@ -158,6 +161,29 @@ export async function cmdMcp(
   }
   out(dim("\n  given to Claude, Codex, Cursor and opencode on every run, in each one's own format"))
   return 0
+}
+
+/**
+ * The names of headers (`K: V`) and env vars (`K=V`) that look like secrets
+ * and are written out in full rather than as `${NAME}`.
+ */
+export function literalSecrets(headers: string[], env: string[]): string[] {
+  const secretish = /authorization|token|key|secret|password|passwd|auth|credential|cookie/i
+  const found: string[] = []
+  for (const [list, sep] of [
+    [headers, ":"],
+    [env, "="],
+  ] as const) {
+    for (const item of list) {
+      const i = item.indexOf(sep)
+      if (i <= 0) continue
+      const name = item.slice(0, i).trim()
+      const value = item.slice(i + 1).trim()
+      if (!value || /\$\{[A-Za-z_][A-Za-z0-9_]*\}/.test(value)) continue
+      if (secretish.test(name) || /^bearer\s/i.test(value)) found.push(name)
+    }
+  }
+  return found
 }
 
 /** `["K: V", …]` → `{ headers: { K: "V" } }`, or nothing when there are none. */

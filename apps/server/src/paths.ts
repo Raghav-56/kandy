@@ -8,7 +8,11 @@ import path from "node:path"
  * matches what the agent CLIs we shell out to already do.
  */
 function xdg(envVar: string, fallback: string): string {
-  const dir = process.env[envVar] ?? path.join(homedir(), fallback)
+  // The spec says an empty or relative value is to be ignored. Taken as-is,
+  // XDG_STATE_HOME="" put the board in ./kandy of whatever directory kandy
+  // was started from — a different, empty board in every repo.
+  const set = process.env[envVar]
+  const dir = set && path.isAbsolute(set) ? set : path.join(homedir(), fallback)
   const full = path.join(dir, "kandy")
   mkdirSync(full, { recursive: true })
   return full
