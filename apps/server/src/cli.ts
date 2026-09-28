@@ -429,7 +429,7 @@ async function main(): Promise<void> {
       break
     case "update": {
       const { cmdUpdate } = await import("./cli/update.js")
-      process.exit(await cmdUpdate({ port, check: argv.includes("--check") }))
+      process.exit(await cmdUpdate({ port, check: argv.includes("--check"), force: argv.includes("--force") }))
       break
     }
     case "setup":
