@@ -498,18 +498,10 @@ export function App() {
     <FirstRun agents={agents} onChooseRepo={() => setNewBoard(true)} />
   )
 
-  const board = (
-    <main className="relative flex h-full w-full min-w-0 flex-col">
-      {/* Below md the sidebar is a sheet, and without this nothing on a
-          touch screen opened it — ⌘B was the only way to another board,
-          Settings or Usage. */}
-      <div className="border-hairline flex shrink-0 items-center gap-1 border-b px-1.5 py-0.5 md:hidden">
-        <SidebarTrigger className="size-11" aria-label="Open the sidebar" />
-        <span className="min-w-0 truncate text-ui font-medium">
-          {boards.find((b) => b.id === boardId)?.name ?? "kandy"}
-        </span>
-      </div>
-
+  /* What went wrong, said where it will be seen: on a narrow window the note
+     covers the board, so these go above the note as well. */
+  const alerts = (
+    <>
       {daemon.down && (
         <div role="alert" className="border-berry/30 bg-berry-bg shrink-0 border-b px-4 py-2.5 text-aux">
           <span className="text-berry font-medium">kandy isn't running.</span>
@@ -518,10 +510,6 @@ export function App() {
             this page reconnects by itself.
           </span>
         </div>
-      )}
-      <MachineBanner me={me} runners={runners} loaded={runnersLoaded} />
-      {page === "board" && view && noAgent && !readOnly && (
-        <NoAgentBanner agents={agents} onCheck={loadAgents} />
       )}
       {/* Unreachable is already said above, in a way that goes away on its own. */}
       {((error && !daemon.down) || notice) && (
@@ -534,6 +522,26 @@ export function App() {
         >
           {daemon.down ? notice : (error ?? notice)} <span className="ml-2 text-faint">dismiss</span>
         </button>
+      )}
+    </>
+  )
+
+  const board = (
+    <main className="relative flex h-full w-full min-w-0 flex-col">
+      {/* Below md the sidebar is a sheet, and without this nothing on a
+          touch screen opened it — ⌘B was the only way to another board,
+          Settings or Usage. */}
+      <div className="border-hairline flex shrink-0 items-center gap-1 border-b px-1.5 py-0.5 md:hidden">
+        <SidebarTrigger className="size-11" aria-label="Open the sidebar" />
+        <span className="min-w-0 truncate text-ui font-medium">
+          {boards.find((b) => b.id === boardId)?.name ?? "kandy"}
+        </span>
+      </div>
+
+      {alerts}
+      <MachineBanner me={me} runners={runners} loaded={runnersLoaded} />
+      {page === "board" && view && noAgent && !readOnly && (
+        <NoAgentBanner agents={agents} onCheck={loadAgents} />
       )}
       {noteMissing && (
         <div role="status" className="border-hairline bg-raised flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5 text-aux">
@@ -777,7 +785,10 @@ export function App() {
         <div className="relative flex min-w-0 flex-1">
           {board}
           {detail && (
-            <div className="absolute inset-0 z-30 flex">{detail}</div>
+            <div className="absolute inset-0 z-30 flex flex-col">
+              {alerts}
+              <div className="flex min-h-0 flex-1">{detail}</div>
+            </div>
           )}
         </div>
       ) : (
