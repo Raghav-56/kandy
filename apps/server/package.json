@@ -21,7 +21,7 @@
   "description": "A board for coding agents. Each note is one job, run in its own git worktree.",
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "keywords": [
     "ai",

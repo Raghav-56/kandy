@@ -2,17 +2,19 @@
 /**
  * The `kandy` command. It checks Node before anything else loads.
  *
- * kandy keeps its board in Node's built-in SQLite, which arrived in Node 22.
- * On an older Node the import fails while modules are still loading — before
- * any of kandy runs — with `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`, which
- * says nothing about what to do. So this file imports nothing, checks first,
- * and only then loads the real entry point.
+ * kandy keeps its board in Node's built-in SQLite, which works without a flag
+ * from Node 22.13. On an older Node — 20, or 22.0 to 22.12 — the import fails
+ * while modules are still loading, before any of kandy runs, with
+ * `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`, which says nothing about what to
+ * do. So this file imports nothing, checks first, and only then loads the
+ * real entry point.
  */
-const major = Number(process.versions.node.split(".")[0])
-if (major < 22) {
+const [major = 0, minor = 0] = process.versions.node.split(".").map(Number)
+if (major < 22 || (major === 22 && minor < 13)) {
   process.stderr.write(
-    `\n  kandy needs Node 22 or newer — this is Node ${process.versions.node}.\n` +
-      `  Install a newer Node (https://nodejs.org), then install kandy again.\n\n`,
+    `\n  kandy needs Node 22.13 or newer — this is Node ${process.versions.node}.\n` +
+      `  Update Node (https://nodejs.org, or nvm install 22), then install kandy again with it.\n` +
+      `  https://hiteshbandhu.github.io/kandy/guide/troubleshooting\n\n`,
   )
   process.exit(1)
 }
