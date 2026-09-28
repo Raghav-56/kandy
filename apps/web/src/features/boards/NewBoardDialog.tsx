@@ -45,9 +45,19 @@ export function NewBoardDialog({
   // at a directory, and checking it would flash "not a git repository" at
   // someone who is still typing.
   const path = /[/~]/.test(query) ? query.trim() : ""
+  /*
+   * A repository that cannot take a board yet — most often one with no
+   * commits, where there is nothing for a worktree to branch from and every
+   * run would fail. It read "on  at" with Create enabled. The daemon says why
+   * through `error`; an older one only leaves `head` empty.
+   */
+  const usable = !!check?.isRepo && !!check.head && !check.error
 
   useEffect(() => {
-    if (!path) return setCheck(null)
+    // The last answer was about the last path. Left up while the next one is
+    // checked, "not a git repository" sat under a valid path for a beat.
+    setCheck(null)
+    if (!path) return
     let stale = false
     // Debounced: every keystroke would otherwise be a git process.
     const t = setTimeout(() => {
@@ -71,7 +81,7 @@ export function NewBoardDialog({
   }
 
   async function create() {
-    if (!check?.isRepo || busy) return
+    if (!check || !usable || busy) return
     setBusy(true)
     setError(null)
     try {
@@ -116,7 +126,7 @@ export function NewBoardDialog({
 
           {/* Naming is a detail of a repo you've already chosen, so it waits
               until there is one. Blank means the folder name. */}
-          {check?.isRepo && (
+          {usable && (
             <label className="flex items-center gap-3">
               <span className="label shrink-0">Call it</span>
               <Input
@@ -131,7 +141,7 @@ export function NewBoardDialog({
           {/* What its notes may do. Full access by default: repo only
               refuses most commands, builds and tests included. Each board
               can change it later in its settings. */}
-          {check?.isRepo && (
+          {usable && (
             <div className="flex items-center gap-3">
               <span className="label shrink-0">Agents</span>
               <div className="flex gap-2">
@@ -161,7 +171,7 @@ export function NewBoardDialog({
           <Button
             variant="default"
             size="default"
-            disabled={!check?.isRepo || busy}
+            disabled={!usable || busy}
             onClick={() => void create()}
           >
             {busy ? "Creating…" : "Create board"}
@@ -194,6 +204,15 @@ function RepoStatus({
 
   if (!check.isRepo) {
     return <p className="text-meta text-berry">{check.error ?? "Not a git repository."}</p>
+  }
+
+  if (check.error || !check.head) {
+    return (
+      <p className="text-meta text-berry">
+        {check.error ??
+          "This repository has no commits yet — make a first commit, then add it. Every note branches from one."}
+      </p>
+    )
   }
 
   return (

@@ -186,6 +186,7 @@ export function SettingsPage({
           <span className="label">Setup command</span>
           <Input
             value={setup}
+            aria-label="Setup command"
             onChange={(e) => setSetup(e.target.value)}
             placeholder="pnpm install --prefer-offline"
             className="mt-1.5 font-mono text-aux"
@@ -195,6 +196,7 @@ export function SettingsPage({
           <span className="label">Carry in</span>
           <Input
             value={carry}
+            aria-label="Carry in"
             onChange={(e) => setCarry(e.target.value)}
             placeholder=".env, .turbo"
             className="mt-1.5 font-mono text-aux"
@@ -259,7 +261,13 @@ export function SettingsPage({
       </Section>
 
       <Section title="Repository" body="Where this board's work happens.">
-        <p className="bg-muted rounded-lg px-3 py-2 font-mono text-aux">{view.board.repoPath}</p>
+        {/* A path is one unbreakable word; on a phone it pushed the page sideways. */}
+        <p
+          className="bg-muted rounded-lg px-3 py-2 font-mono text-aux break-all"
+          title={view.board.repoPath}
+        >
+          {view.board.repoPath}
+        </p>
 
         <div className="border-berry/25 mt-5 rounded-xl border p-4">
           <p className="text-aux font-medium">Remove this repo from kandy</p>
