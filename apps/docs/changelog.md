@@ -1,5 +1,78 @@
 # Changelog
 
+## 0.2.0-alpha.8 — merges that land where they say, and teams that tell the truth
+
+September 2026. **Extremely experimental** — see [Status](/status). Install or
+update:
+
+```sh
+kandy update
+```
+
+Or, on 0.2.0-alpha.5 and older: `curl -fsSL https://hiteshbandhu.github.io/kandy/install.sh | sh`.
+
+### Your work is safer
+
+- **Merge lands only on the branch the note started from.** If your checkout is
+  on another branch, a detached HEAD, or partway through a merge, rebase or
+  cherry-pick, kandy refuses and says so — it never switches branches for you,
+  and never aborts a merge of yours.
+- **Merge and Discard never push.** A discarded note's branch stays on your
+  machine so the work can be recovered; a merged note's branch is removed, since
+  main has it.
+- **Merge and Discard only work on a stopped note with work on it** — not on a
+  draft, a running note, or one already decided.
+- **A failed merge says what went wrong first:** the conflicting files, or the
+  uncommitted files in the way, instead of "merge conflict" for everything.
+- **A missing agent no longer crashes kandy.** A note for an agent that isn't
+  installed fails with how to install it; the other running notes carry on.
+- **A misspelt command no longer starts an agent.** `kandy stauts` or
+  `kandy start` is refused with a guess at what you meant, and `--agent` is
+  checked before anything is written.
+- **Sending a note back with a comment shows it running,** and a second run
+  can't start beside it.
+→ [Reviewing](/guide/reviewing)
+
+### Teams
+
+- **A machine that goes away shows offline.** Giving or running a note on it is
+  refused at once; its runs are marked interrupted after 90 seconds, and can be
+  resumed.
+- **`kandy join` works before anyone has added you** — it saves the machine and
+  says who to ask — and a wrong token is refused at join instead of "You're in".
+- **A hub without Tailscale can be joined from another machine** with its token.
+- **Only opening the board or `kandy join` claims a new hub** — not a health
+  check or a script.
+- **A note handed to someone using the same agent is briefed** on the earlier
+  work.
+- **`kandy status` shows notes waiting for your yes,** with the access they'd
+  run with, and `kandy consent approve <email>` releases them.
+→ [Joining a team](/modes/join)
+
+### Everywhere else
+
+- **`kandy run`** runs the newest draft here, or the one that matches. Notes
+  stopped by `kandy stop` read *interrupted* and resume; cancelled runs read
+  *cancelled*.
+- **`kandy update` asks before interrupting running notes,** restarts your team
+  runner, and checks what it installed. `--check` exits 10 when there's a newer
+  release.
+- **The web board works on a phone:** a sidebar button, notes full width, and
+  errors shown above the note.
+- **The web board says when kandy isn't running,** and keeps what you typed.
+- **The composer picks your agent after a reload,** so ⌘↵ runs the note.
+- **Every run of a note stays in its stream** after a follow-up, and the diff
+  refreshes.
+- **Diffs show lines starting with `++` or `--`,** and paths with spaces.
+- **Merged and discarded notes look different.**
+- **`kandy skill` works in an installed kandy.**
+- **`kandy status --json` prints JSON.**
+- **kandy needs Node 22.13 or newer** and says so, instead of failing on
+  `node:sqlite`.
+- **On Windows,** agents installed with npm are found, and `kandy open` works.
+- **Docs:** notes start with full access unless you chose repo only; every flag
+  and environment variable is listed.
+
 ## 0.2.0-alpha.7 — free models, quiet agents, kandy update
 
 September 2026. **Extremely experimental** — see [Status](/status). Install or

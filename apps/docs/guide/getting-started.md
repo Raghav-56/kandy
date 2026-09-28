@@ -75,7 +75,7 @@ Check it:
 kandy --version
 ```
 ```
-0.2.0-alpha.7
+0.2.0-alpha.8
 ```
 
 To **update**, `kandy update` — or run the install command again. Either

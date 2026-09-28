@@ -100,7 +100,7 @@ is: `daemon.log` in kandy's state folder (`~/.local/state/kandy/` unless
 
 `kandy update` asks GitHub for the newest release and, if it's newer, stops
 the running kandy (and your team runner) and installs it — then says what
-changed from what: *0.2.0-alpha.5 → 0.2.0-alpha.7*. Stopping kandy interrupts
+changed from what: *0.2.0-alpha.7 → 0.2.0-alpha.8*. Stopping kandy interrupts
 the notes it's running, so when there are any it lists them and asks first; from
 a script, with no terminal to ask in, it stops there unless you pass `--force`.
 Interrupted notes can be resumed. After installing it starts your team runner
