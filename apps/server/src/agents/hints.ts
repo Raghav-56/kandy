@@ -22,6 +22,28 @@ export const SIGN_IN: Record<string, string> = {
   aider: "set your model provider's API key",
 }
 
+/**
+ * What to say when no agent here can take a note, and what to do about it.
+ *
+ * Installed but signed out is one command away, so those commands are named —
+ * only for the agents actually installed. With none installed "sign in" is the
+ * wrong instruction; opencode is offered first because it runs free models
+ * with no account, so it is the one path that needs nothing else.
+ */
+export function noAgent(agents: readonly { id: string; installed: boolean }[]): { head: string; next: string } {
+  const installed = agents.filter((a) => a.installed).map((a) => a.id)
+  if (installed.length) {
+    return {
+      head: "no agent is signed in here",
+      next: `sign in to one (${installed.map((id) => SIGN_IN[id] ?? id).join(" · ")})`,
+    }
+  }
+  return {
+    head: "no agent is installed here",
+    next: `opencode runs free models with no account: ${INSTALL["opencode"]} — or ${INSTALL["claude"]}`,
+  }
+}
+
 /** "aider isn't installed on this machine — install it: …" */
 export function notInstalled(agent: string): string {
   const how = INSTALL[agent]

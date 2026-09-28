@@ -13,7 +13,7 @@ import { originOf } from "../worktree.js"
 import { preferredPolicy } from "./setup.js"
 import { teamStatus } from "./join.js"
 import { failureOf } from "../tui/board.js"
-import { notInstalled, SIGN_IN } from "../agents/hints.js"
+import { noAgent, notInstalled, SIGN_IN } from "../agents/hints.js"
 
 /** "1 file", "2 files". */
 export const plural = (n: number, one: string, many = one + "s") => `${n} ${n === 1 ? one : many}`
@@ -105,8 +105,9 @@ export async function cmdNew(
    */
   const agent = opts.agent ?? (opts.run ? await defaultAgent(api, here.view) : undefined)
   if (opts.run && !agent) {
-    out(lemon("  no agent is signed in here") + dim(" — saved as a draft"))
-    out(dim("  sign in to one (claude · codex login · cursor-agent login), then: ") + "kandy run")
+    const why = noAgent((await api.agents()).agents)
+    out(lemon(`  ${why.head}`) + dim(" — saved as a draft"))
+    out(dim(`  ${why.next}, then: `) + "kandy run")
   }
   if (agent) await api.assignNote(noteId, agent)
   if (opts.run && agent) await api.runNote(noteId, agent)
@@ -161,7 +162,8 @@ export async function cmdRun(args: string[], opts: { port: number; agent: AgentI
   const agent =
     opts.agent ?? (note.agent && ready.includes(note.agent) ? note.agent : await defaultAgent(api, here.view))
   if (!agent) {
-    out(lemon("  no agent is signed in here") + dim(" — sign in to one (claude · codex login · cursor-agent login), then run this again"))
+    const why = noAgent((await api.agents()).agents)
+    out(lemon(`  ${why.head}`) + dim(` — ${why.next}, then run this again`))
     return 1
   }
   if (await noCommits()) {

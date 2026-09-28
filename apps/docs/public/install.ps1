@@ -49,18 +49,31 @@ const pids = []
 function Install-Kandy {
   # npm.cmd and kandy.cmd, not the .ps1 shims npm also writes: those are
   # scripts, and a machine that doesn't allow scripts refuses them.
+  # An old kandy on an old Node answers --version with its own complaint, not a
+  # version — so only something shaped like one counts.
   $old = $null
-  if (Get-Command kandy.cmd -ErrorAction SilentlyContinue) { try { $old = (kandy.cmd --version 2>$null | Out-String).Trim() } catch {} }
+  $present = [bool](Get-Command kandy.cmd -ErrorAction SilentlyContinue)
+  if ($present) {
+    try { $old = (kandy.cmd --version 2>$null | Out-String).Trim() } catch {}
+    if ($old -notmatch '^\d+\.\d+\.\d+') { $old = $null }
+  }
 
   Write-Host ""
-  if ($old) { Write-Host "  kandy $old is installed — updating to the newest release" } else { Write-Host "  installing kandy" }
+  if ($old) { Write-Host "  kandy $old is installed — updating to the newest release" }
+  elseif ($present) { Write-Host "  kandy is installed but doesn't run here — installing the newest release" }
+  else { Write-Host "  installing kandy" }
 
   if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Fail "kandy needs Node.js 22.13 or newer, and there's no node here." @("Get it from https://nodejs.org (or: winget install OpenJS.NodeJS.LTS), then run this again.")
   }
   $nodeV = (node -p "process.versions.node" | Out-String).Trim()
   if ([version]$nodeV -lt [version]"22.13.0") {
-    Fail "kandy needs Node.js 22.13 or newer; this is Node $nodeV." @("Update it from https://nodejs.org (or: winget upgrade OpenJS.NodeJS.LTS), then run this again.")
+    # winget's list can be years stale (it offered 18 as the newest LTS on one
+    # machine), so the installer from nodejs.org comes first.
+    Fail "kandy needs Node.js 22.13 or newer; this is Node $nodeV." @(
+      "Get the LTS installer from https://nodejs.org and run it, then open a new window and run this again.",
+      "(With winget: winget source update, then winget upgrade OpenJS.NodeJS.LTS.)"
+    )
   }
   if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
     Fail "npm is missing — it ships with Node.js." @("Reinstall Node from https://nodejs.org, then run this again.")
@@ -103,13 +116,20 @@ function Install-Kandy {
   Write-Host ""
 }
 
+# Fail has already said what went wrong and what to do; the throw only stops
+# the script. Caught here so it doesn't also print as a red PowerShell error
+# ("At line:19 char:3 …"), which reads like the installer crashed.
 try {
-  Install-Kandy
-} catch [System.Management.Automation.PSSecurityException] {
-  Fail "PowerShell refused to run a script: $($_.Exception.Message)" @("Allow scripts you've installed, then run this again:", "  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned")
-} catch {
-  if ($_.Exception.Message -match "running scripts is disabled|execution polic") {
+  try {
+    Install-Kandy
+  } catch [System.Management.Automation.PSSecurityException] {
     Fail "PowerShell refused to run a script: $($_.Exception.Message)" @("Allow scripts you've installed, then run this again:", "  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned")
+  } catch {
+    if ($_.Exception.Message -match "running scripts is disabled|execution polic") {
+      Fail "PowerShell refused to run a script: $($_.Exception.Message)" @("Allow scripts you've installed, then run this again:", "  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned")
+    }
+    throw
   }
-  throw
+} catch {
+  if ($_.Exception.Message -ne "kandy was not installed.") { throw }
 }

@@ -143,7 +143,9 @@ async function ensureJoined(hub: Joined): Promise<boolean> {
   } catch {
     process.stderr.write(
       berry(`  cannot reach ${hub.url}`) +
-        dim(/\.ts\.net(:\d+)?(\/|$)/i.test(hub.url.replace(/^https?:\/\//, "")) ? " — is Tailscale up? (tailscale status)\n" : " — is the hub running?\n") +
+        // Either end can be the one that's off: this machine's Tailscale, or
+        // the hub's machine — `tailscale status` shows both.
+        dim(/\.ts\.net(:\d+)?(\/|$)/i.test(hub.url.replace(/^https?:\/\//, "")) ? " — is Tailscale up here, and is the hub's machine on? (tailscale status)\n" : " — is the hub running?\n") +
         dim("  Your own board meanwhile: KANDY_LOCAL=1 kandy   ·   off the team for good: kandy leave\n"),
     )
     return false
