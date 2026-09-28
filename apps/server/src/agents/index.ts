@@ -8,6 +8,7 @@ import { claude } from "./claude.js"
 import { aider } from "./aider.js"
 import { cursor } from "./cursor.js"
 import { opencode } from "./opencode.js"
+import { resolveCommand } from "./command.js"
 
 const exec = promisify(execFile)
 
@@ -32,7 +33,12 @@ export async function detect(a: AgentAdapter): Promise<AgentInfo> {
   let installed = false
   let version: string | null = null
   try {
-    const { stdout } = await exec(a.bin, ["--version"], { timeout: 5000 })
+    const c = resolveCommand(a.bin, ["--version"])
+    const { stdout } = await exec(c.command, c.args, {
+      timeout: 5000,
+      windowsHide: true,
+      windowsVerbatimArguments: c.windowsVerbatimArguments ?? false,
+    })
     installed = true
     version = stdout.trim().split("\n")[0] ?? null
   } catch {

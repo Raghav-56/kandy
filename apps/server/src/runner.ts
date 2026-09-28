@@ -27,6 +27,8 @@ import { authFailures, clearAuthFailure, recordAuthFailure } from "./auth-failur
 import type { AskChannel } from "./agents/types.js"
 import { closeAskChannel, openAskChannel } from "./permission.js"
 import { adapter } from "./agents/index.js"
+import { resolveCommand } from "./agents/command.js"
+import { notInstalled } from "./agents/hints.js"
 import { adoptStaged, describe as describeAttachments } from "./attach.js"
 import { commitTrailers } from "./attribution.js"
 import { composeCommitMessage } from "./message.js"
@@ -366,6 +368,9 @@ export class Runner {
             error: message,
           }),
         )
+        // Failed before it ever ran: the card belongs with the failures, not
+        // in the lane for work in flight.
+        this.syncColumn(next.boardId, next.noteId)
       }
     }
   }
@@ -567,7 +572,8 @@ export class Runner {
       this.say(q.runId, "system", `MCP server ${d.name} was not given to ${agentId}: ${d.reason}`)
     }
 
-    const child = spawn(spec.command, spec.args, {
+    const cmd = resolveCommand(spec.command, spec.args)
+    const child = spawn(cmd.command, cmd.args, {
       cwd: worktree.path,
       // The child inherits the user's existing CLI credentials. We never read,
       // store, or forward a token ourselves.
@@ -577,7 +583,33 @@ export class Runner {
       env: { ...process.env, ...spec.env, PWD: worktree.path },
       // stdin stays open: it is how steering reaches agents that accept it.
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+      windowsVerbatimArguments: cmd.windowsVerbatimArguments ?? false,
     })
+
+    /*
+     * Listened for before anything else can happen, and before any await.
+     *
+     * A binary that isn't there makes spawn emit 'error' on the next tick, and
+     * an 'error' with no listener is thrown — it took the whole daemon down,
+     * and every other note's agent with it, because `aider` was not installed.
+     */
+    const failedToStart = new Promise<NodeJS.ErrnoException>((resolve) => child.once("error", resolve))
+    child.on("error", (err) => {
+      if (child.pid !== undefined) this.say(q.runId, "error", err.message)
+    })
+    // No pid means no process: nothing will ever exit, so fail the run here.
+    // pump() turns the throw into a failed run with this as its reason.
+    if (child.pid === undefined) {
+      const err = await failedToStart
+      closeAskChannel(ask)
+      await prepared?.undo().catch(() => {})
+      throw new Error(
+        err.code === "ENOENT"
+          ? notInstalled(agentId)
+          : `could not start ${agentId}: ${err.message}`,
+      )
+    }
 
     this.live.set(q.runId, {
       runId: q.runId,
@@ -638,10 +670,6 @@ export class Runner {
 
     this.syncColumn(q.boardId, q.noteId)
     this.consume(q.runId, child, (line) => a.parse(line, model ? { model } : {}), q.agent)
-
-    child.on("error", (err) => {
-      this.say(q.runId, "error", err.message)
-    })
 
     const heard = () => this.heard(q.runId)
     child.stdout?.on("data", heard)

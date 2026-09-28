@@ -1,8 +1,20 @@
 import { execFile, spawn } from "node:child_process"
 import { promisify } from "node:util"
 
+import { resolveCommand } from "./command.js"
+
 // execFile, not exec: no shell, and the args below are constants either way.
 const run_ = promisify(execFile)
+
+/** Ask a CLI for its list, found the way the runner finds it. */
+function ask_(bin: string, args: string[]) {
+  const c = resolveCommand(bin, args)
+  return run_(c.command, c.args, {
+    timeout: 15_000,
+    windowsHide: true,
+    windowsVerbatimArguments: c.windowsVerbatimArguments ?? false,
+  })
+}
 
 /**
  * The models an account may actually run, asked of the CLI that knows.
@@ -67,7 +79,12 @@ function askCodex(): Promise<string[]> {
       resolve(ids)
     }
 
-    const child = spawn("codex", ["app-server"], { stdio: ["pipe", "pipe", "ignore"] })
+    const c = resolveCommand("codex", ["app-server"])
+    const child = spawn(c.command, c.args, {
+      stdio: ["pipe", "pipe", "ignore"],
+      windowsHide: true,
+      windowsVerbatimArguments: c.windowsVerbatimArguments ?? false,
+    })
     child.on("error", () => finish([]))
 
     const send = (o: unknown) => child.stdin.write(JSON.stringify(o) + "\n")
@@ -109,13 +126,13 @@ const ASK: Record<string, Asker> = {
   codex: { ask: askCodex },
   opencode: {
     ask: async () => {
-      const { stdout } = await run_("opencode", ["models"], { timeout: 15_000 })
+      const { stdout } = await ask_("opencode", ["models"])
       return parseOpencodeModels(stdout)
     },
   },
   cursor: {
     ask: async () => {
-      const { stdout } = await run_("cursor-agent", ["models"], { timeout: 15_000 })
+      const { stdout } = await ask_("cursor-agent", ["models"])
       return parseCursorModels(stdout)
     },
   },

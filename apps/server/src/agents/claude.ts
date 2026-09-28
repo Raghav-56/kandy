@@ -1,6 +1,7 @@
 import { claudeMcpConfig } from "../capabilities/mcp.js"
 import { homedir } from "node:os"
 import { execFileSync } from "node:child_process"
+import { resolveCommand } from "./command.js"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import type { AgentAdapter, AgentEvent } from "./types.js"
@@ -287,7 +288,12 @@ function readClaudeAuth(): { expiresAt: number | null; plan: string | null; auth
 
 function askClaudeAuth(): { expiresAt: number | null; plan: string | null; authed?: boolean } | null {
   try {
-    const out = execFileSync("claude", ["auth", "status", "--json"], {
+    const c = resolveCommand("claude", ["auth", "status", "--json"])
+    const out = execFileSync(c.command, c.args, {
+      windowsHide: true,
+      // Honoured by execFileSync (it is spawnSync underneath) but missing
+      // from its types.
+      ...({ windowsVerbatimArguments: c.windowsVerbatimArguments ?? false } as object),
       encoding: "utf8",
       timeout: 8000,
       stdio: ["ignore", "pipe", "ignore"],
