@@ -1,13 +1,7 @@
 import { useMemo, useState } from "react"
 import { ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-type FileDiff = {
-  path: string
-  lines: string[]
-  added: number
-  removed: number
-}
+import { splitFiles } from "./parse"
 
 /**
  * A diff with a file list, not one long scroll.
@@ -69,15 +63,17 @@ export function DiffView({
               </button>
 
               {isOpen && (
-                <pre className="overflow-x-auto border-t border-hairline bg-[#0c0c0e] py-2 font-mono text-meta leading-[1.6]">
+                /* Theme tokens rather than fixed hexes: a hard-coded dark block
+                   in the light theme put pale @@ bands between black ones. */
+                <pre className="overflow-x-auto border-t border-hairline bg-bg py-2 font-mono text-meta leading-[1.6]">
                   {f.lines.map((l, i) => (
                     <div
                       key={i}
                       className={cn(
                         "px-3 whitespace-pre",
-                        l.startsWith("+") && "bg-[#0f1c0d] text-[#a5d68f]",
-                        l.startsWith("-") && "bg-[#1e0f0e] text-[#e0918a]",
-                        l.startsWith("@@") && "my-1 bg-raised text-sky",
+                        l.startsWith("+") && "bg-mint-bg text-mint",
+                        l.startsWith("-") && "bg-berry-bg text-berry",
+                        l.startsWith("@@") && "my-1 bg-sky-bg text-sky",
                         !/^[-+@]/.test(l) && "text-dim",
                       )}
                     >
@@ -92,27 +88,4 @@ export function DiffView({
       </div>
     </div>
   )
-}
-
-function splitFiles(diff: string): FileDiff[] {
-  const files: FileDiff[] = []
-  let current: FileDiff | null = null
-
-  for (const line of diff.split("\n")) {
-    if (line.startsWith("diff --git ")) {
-      // "diff --git a/x b/x" — the b-side is the path after a rename.
-      const path = line.split(" b/").pop() ?? line
-      current = { path, lines: [], added: 0, removed: 0 }
-      files.push(current)
-      continue
-    }
-    if (!current) continue
-    // Headers are noise once the filename is its own row.
-    if (/^(index |--- |\+\+\+ |new file |deleted file |similarity |rename )/.test(line)) continue
-
-    current.lines.push(line)
-    if (line.startsWith("+")) current.added++
-    else if (line.startsWith("-")) current.removed++
-  }
-  return files
 }
